@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isometric Survival Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #333;
+            font-family: Arial, sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #ui-layer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        
+        #hotbar {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        
+        .hotbar-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #666;
+            margin: 0 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            border-radius: 5px;
+        }
+        
+        .hotbar-slot.selected {
+            border-color: #fff;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        
+        .hotbar-slot img {
+            max-width: 80%;
+            max-height: 80%;
+        }
+        
+        .hotbar-slot .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 12px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 10px;
+        }
+        
+        .hotbar-key {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #444;
+            color: white;
+            padding: 0 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        #inventory {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 600px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #666;
+            border-radius: 10px;
+            padding: 20px;
+            color: white;
+        }
+        
+        #inventory.visible {
+            display: block;
+        }
+        
+        #inventory-title {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        #inventory-container {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .inventory-slot {
+            width: 80px;
+            height: 80px;
+            background-color: rgba(60, 60, 60, 0.5);
+            border: 1px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            border-radius: 5px;
+        }
+        
+        .inventory-slot img {
+            max-width: 80%;
+            max-height: 80%;
+        }
+        
+        .inventory-slot .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            font-size: 14px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 10px;
+        }
+        
+        #storage-container {
+            display: none;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 10px;
+        }
+        
+        #storage-container.visible {
+            display: grid;
+        }
+        
+        #storage-title {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            font-size: 24px;
+        }
+        
+        #storage-title.visible {
+            display: block;
+        }
+        
+        #crafting-menu {
+            display: none;
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            width: 300px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #666;
+            border-radius: 10px;
+            padding: 20px;
+            color: white;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        #crafting-menu.visible {
+            display: block;
+        }
+        
+        .crafting-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: rgba(60, 60, 60, 0.5);
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .crafting-item:hover {
+            background-color: rgba(80, 80, 80, 0.5);
+        }
+        
+        .crafting-item img {
+            width: 40px;
+            height: 40px;
+            margin-right: 10px;
+        }
+        
+        .crafting-info {
+            flex-grow: 1;
+        }
+        
+        .crafting-requirements {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+        
+        .crafting-requirements.not-met {
+            color: #ff6666;
+        }
+        
+        #stats {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        
+        .stat-bar {
+            width: 150px;
+            height: 15px;
+            background-color: #333;
+            border-radius: 3px;
+            margin-bottom: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .stat-fill {
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: width 0.3s;
+        }
+        
+        .health-fill {
+            background-color: #f44336;
+        }
+        
+        .hunger-fill {
+            background-color: #ff9800;
+        }
+        
+        .thirst-fill {
+            background-color: #2196f3;
+        }
+        
+        .stamina-fill {
+            background-color: #4caf50;
+        }
+        
+        .stat-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            color: white;
+            text-shadow: 0 0 2px black;
+        }
+        
+        #message-log {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            width: 300px;
+            max-height: 150px;
+            overflow-y: hidden;
+            color: white;
+            font-size: 14px;
+        }
+        
+        .log-message {
+            margin-bottom: 5px;
+            padding: 5px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 3px;
+            opacity: 1;
+            transition: opacity 1s;
+        }
+        
+        .log-message.fade {
+            opacity: 0;
+        }
+        
+        #minimap {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #222;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+        }
+        
+        #loading-progress {
+            width: 300px;
+            height: 20px;
+            background-color: #333;
+            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #loading-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #4caf50;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <h1>Isometric Survival Game</h1>
+        <p>Loading resources...</p>
+        <div id="loading-progress">
+            <div id="loading-bar"></div>
+        </div>
+    </div>
+    
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="stats">
+            <div class="stat-bar">
+                <div class="stat-fill health-fill" style="width: 100%;"></div>
+                <div class="stat-label">Health: 100/100</div>
+            </div>
+            <div class="stat-bar">
+                <div class="stat-fill hunger-fill" style="width: 100%;"></div>
+                <div class="stat-label">Hunger: 100/100</div>
+            </div>
+            <div class="stat-bar">
+                <div class="stat-fill thirst-fill" style="width: 100%;"></div>
+                <div class="stat-label">Thirst: 100/100</div>
+            </div>
+            <div class="stat-bar">
+                <div class="stat-fill stamina-fill" style="width: 100%;"></div>
+                <div class="stat-label">Stamina: 100/100</div>
+            </div>
+        </div>
+        
+        <div id="minimap">
+            <canvas id="minimap-canvas"></canvas>
+        </div>
+        
+        <div id="message-log"></div>
+        
+        <div id="ui-layer">
+            <div id="hotbar">
+                <div class="hotbar-slot selected" data-slot="0">
+                    <span class="hotbar-key">1</span>
+                </div>
+                <div class="hotbar-slot" data-slot="1">
+                    <span class="hotbar-key">2</span>
+                </div>
+                <div class="hotbar-slot" data-slot="2">
+                    <span class="hotbar-key">3</span>
+                </div>
+                <div class="hotbar-slot" data-slot="3">
+                    <span class="hotbar-key">4</span>
+                </div>
+                <div class="hotbar-slot" data-slot="4">
+                    <span class="hotbar-key">5</span>
+                </div>
+                <div class="hotbar-slot" data-slot="5">
+                    <span class="hotbar-key">6</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="inventory">
+            <h2 id="inventory-title">Inventory</h2>
+            <div id="inventory-container"></div>
+            
+            <h2 id="storage-title">Storage</h2>
+            <div id="storage-container"></div>
+        </div>
+        
+        <div id="crafting-menu">
+            <h2>Crafting</h2>
+            <div id="crafting-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // Game settings
+        const TILE_WIDTH = 64;
+        const TILE_HEIGHT = 32;
+        const WORLD_SIZE = 100;
+        const VIEWPORT_TILES_X = 15;
+        const VIEWPORT_TILES_Y = 15;
+        
+        // Game state
+        let gameStarted = false;
+        let player = {
+            x: WORLD_SIZE / 2,
+            y: WORLD_SIZE / 2,
+            speed: 4,
+            health: 100,
+            hunger: 100,
+            thirst: 100,
+            stamina: 100,
+            inventorySize: 32,
+            inventory: []
+        };
+        
+        let world = [];
+        let entities = [];
+        let lastTime = 0;
+        let keysPressed = {};
+        let selectedHotbarSlot = 0;
+        let inventoryOpen = false;
+        let interactingWithStorage = false;
+        let currentStorage = null;
+        let craftingMenuOpen = false;
+        let minimapData = [];
+        
+        // Resources for preloading
+        const resources = {
+            player: { src: '/api/placeholder/64/128', loaded: false },
+            grass: { src: '/api/placeholder/128/64', loaded: false },
+            tree: { src: '/api/placeholder/128/128', loaded: false },
+            rock: { src: '/api/placeholder/64/64', loaded: false },
+            metalOre: { src: '/api/placeholder/64/64', loaded: false },
+            wood: { src: '/api/placeholder/32/32', loaded: false },
+            stone: { src: '/api/placeholder/32/32', loaded: false },
+            metal: { src: '/api/placeholder/32/32', loaded: false },
+            axe: { src: '/api/placeholder/32/32', loaded: false },
+            knife: { src: '/api/placeholder/32/32', loaded: false },
+            barrel: { src: '/api/placeholder/64/64', loaded: false },
+            storageBox: { src: '/api/placeholder/64/64', loaded: false }
+        };
+        
+        // Item definitions
+        const items = {
+            wood: { name: 'Wood', stackable: true, maxStack: 50, image: 'wood' },
+            stone: { name: 'Stone', stackable: true, maxStack: 50, image: 'stone' },
+            metal: { name: 'Metal', stackable: true, maxStack: 30, image: 'metal' },
+            axe: { name: 'Axe', stackable: false, type: 'tool', damage: 10, durability: 100, image: 'axe' },
+            knife: { name: 'Knife', stackable: false, type: 'weapon', damage: 5, durability: 100, image: 'knife' },
+            storageBox: { name: 'Storage Box', stackable: true, maxStack: 5, type: 'placeable', image: 'storageBox' }
+        };
+        
+        // Crafting recipes
+        const craftingRecipes = [
+            {
+                name: 'Storage Box',
+                result: { item: 'storageBox', count: 1 },
+                requirements: [
+                    { item: 'wood', count: 20 },
+                    { item: 'stone', count: 5 }
+                ]
+            },
+            {
+                name: 'Axe',
+                result: { item: 'axe', count: 1 },
+                requirements: [
+                    { item: 'wood', count: 10 },
+                    { item: 'stone', count: 10 }
+                ]
+            },
+            {
+                name: 'Knife',
+                result: { item: 'knife', count: 1 },
+                requirements: [
+                    { item: 'wood', count: 5 },
+                    { item: 'metal', count: 5 }
+                ]
+            }
+        ];
+        
+        // Start loading resources
+        let loadedResources = 0;
+        let totalResources = Object.keys(resources).length;
+        
+        function loadResources() {
+            for (const key in resources) {
+                const img = new Image();
+                img.src = resources[key].src;
+                resources[key].image = img;
+                
+                img.onload = function() {
+                    resources[key].loaded = true;
+                    loadedResources++;
+                    
+                    // Update loading bar
+                    const progress = loadedResources / totalResources;
+                    document.getElementById('loading-bar').style.width = `${progress * 100}%`;
+                    
+                    if (loadedResources === totalResources) {
+                        setTimeout(initGame, 500);
+                    }
+                };
+            }
+        }
+        
+        function initGame() {
+            // Hide loading screen
+            document.getElementById('loading-screen').style.display = 'none';
+            
+            // Generate world
+            generateWorld();
+            
+            // Generate entities
+            generateEntities();
+            
+            // Set up initial inventory (starting items)
+            addItemToInventory('axe', 1);
+            addItemToInventory('knife', 1);
+            
+            // Update hotbar to show starting items
+            updateHotbar();
+            
+            // Set up event listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('click', handleClick);
+            
+            // Initialize UI
+            populateInventoryUI();
+            populateCraftingMenu();
+            
+            // Start game loop
+            gameStarted = true;
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function generateWorld() {
+            for (let y = 0; y < WORLD_SIZE; y++) {
+                world[y] = [];
+                minimapData[y] = [];
+                
+                for (let x = 0; x < WORLD_SIZE; x++) {
+                    // Default to grass
+                    const tile = { type: 'grass', x, y };
+                    world[y][x] = tile;
+                    minimapData[y][x] = 0; // 0 = grass
+                }
+            }
+        }
+        
+        function generateEntities() {
+            // Generate trees (10% of world)
+            for (let i = 0; i < WORLD_SIZE * WORLD_SIZE * 0.1; i++) {
+                const x = Math.floor(Math.random() * WORLD_SIZE);
+                const y = Math.floor(Math.random() * WORLD_SIZE);
+                
+                // Don't place near player start position
+                if (Math.abs(x - player.x) < 5 && Math.abs(y - player.y) < 5) {
+                    continue;
+                }
+                
+                entities.push({
+                    type: 'tree',
+                    x,
+                    y,
+                    health: 100,
+                    harvestable: true,
+                    harvestItem: 'wood',
+                    harvestCount: 10
+                });
+                
+                minimapData[y][x] = 1; // 1 = tree
+            }
+            
+            // Generate rocks (5% of world)
+            for (let i = 0; i < WORLD_SIZE * WORLD_SIZE * 0.05; i++) {
+                const x = Math.floor(Math.random() * WORLD_SIZE);
+                const y = Math.floor(Math.random() * WORLD_SIZE);
+                
+                // Don't place near player start position
+                if (Math.abs(x - player.x) < 5 && Math.abs(y - player.y) < 5) {
+                    continue;
+                }
+                
+                entities.push({
+                    type: 'rock',
+                    x,
+                    y,
+                    health: 100,
+                    harvestable: true,
+                    harvestItem: 'stone',
+                    harvestCount: 5
+                });
+                
+                minimapData[y][x] = 2; // 2 = rock
+            }
+            
+            // Generate metal ores (2% of world)
+            for (let i = 0; i < WORLD_SIZE * WORLD_SIZE * 0.02; i++) {
+                const x = Math.floor(Math.random() * WORLD_SIZE);
+                const y = Math.floor(Math.random() * WORLD_SIZE);
+                
+                // Don't place near player start position
+                if (Math.abs(x - player.x) < 5 && Math.abs(y - player.y) < 5) {
+                    continue;
+                }
+                
+                entities.push({
+                    type: 'metalOre',
+                    x,
+                    y,
+                    health: 150,
+                    harvestable: true,
+                    harvestItem: 'metal',
+                    harvestCount: 3
+                });
+                
+                minimapData[y][x] = 3; // 3 = metal ore
+            }
+            
+            // Generate barrels (1% of world)
+            for (let i = 0; i < WORLD_SIZE * WORLD_SIZE * 0.01; i++) {
+                const x = Math.floor(Math.random() * WORLD_SIZE);
+                const y = Math.floor(Math.random() * WORLD_SIZE);
+                
+                // Don't place near player start position
+                if (Math.abs(x - player.x) < 5 && Math.abs(y - player.y) < 5) {
+                    continue;
+                }
+                
+                entities.push({
+                    type: 'barrel',
+                    x,
+                    y,
+                    health: 50,
+                    interactable: true,
+                    loot: generateBarrelLoot()
+                });
+                
+                minimapData[y][x] = 4; // 4 = barrel
+            }
+        }
+        
+        function generateBarrelLoot() {
+            const lootItems = ['wood', 'stone', 'metal'];
+            const randomItem = lootItems[Math.floor(Math.random() * lootItems.length)];
+            const randomCount = Math.floor(Math.random() * 5) + 1;
+            
+            return {
+                item: randomItem,
+                count: randomCount
+            };
+        }
+        
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            update(deltaTime);
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update(deltaTime) {
+            if (!gameStarted) return;
+            
+            // Handle player movement if inventory is closed
+            if (!inventoryOpen) {
+                handlePlayerMovement(deltaTime);
+            }
+            
+            // Update player stats
+            updatePlayerStats(deltaTime);
+        }
+        
+        function handlePlayerMovement(deltaTime) {
+            const moveSpeed = player.speed * (deltaTime / 1000);
+            let dx = 0;
+            let dy = 0;
+            
+            if (keysPressed.ArrowUp || keysPressed.w) {
+                dy -= moveSpeed;
+            }
+            if (keysPressed.ArrowDown || keysPressed.s) {
+                dy += moveSpeed;
+            }
+            if (keysPressed.ArrowLeft || keysPressed.a) {
+                dx -= moveSpeed;
+            }
+            if (keysPressed.ArrowRight || keysPressed.d) {
+                dx += moveSpeed;
+            }
+            
+            // Normalize diagonal movement
+            if (dx !== 0 && dy !== 0) {
+                const length = Math.sqrt(dx * dx + dy * dy);
+                dx = dx / length * moveSpeed;
+                dy = dy / length * moveSpeed;
+            }
+            
+            // Update player position if valid
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            
+            // Check for collision with entities
+            let collision = false;
+            for (const entity of entities) {
+                if (Math.abs(entity.x - newX) < 1 && Math.abs(entity.y - newY) < 1) {
+                    collision = true;
+                    break;
+                }
+            }
+            
+            // Update position if no collision and within world bounds
+            if (!collision && newX >= 0 && newX < WORLD_SIZE && newY >= 0 && newY < WORLD_SIZE) {
+                player.x = newX;
+                player.y = newY;
+            }
+        }
+        
+        function updatePlayerStats(deltaTime) {
+            // Decrease hunger and thirst over time
+            player.hunger = Math.max(0, player.hunger - 0.001 * deltaTime);
+            player.thirst = Math.max(0, player.thirst - 0.002 * deltaTime);
+            
+            // Regenerate stamina when not running
+            if (!keysPressed.Shift) {
+                player.stamina = Math.min(100, player.stamina + 0.01 * deltaTime);
+            }
+            
+            // Update stat UI
+            document.querySelector('.health-fill').style.width = `${player.health}%`;
+            document.querySelector('.health-fill').parentElement.querySelector('.stat-label').textContent = `Health: ${Math.floor(player.health)}/100`;
+            
+            document.querySelector('.hunger-fill').style.width = `${player.hunger}%`;
+            document.querySelector('.hunger-fill').parentElement.querySelector('.stat-label').textContent = `Hunger: ${Math.floor(player.hunger)}/100`;
+            
+            document.querySelector('.thirst-fill').style.width = `${player.thirst}%`;
+            document.querySelector('.thirst-fill').parentElement.querySelector('.stat-label').textContent = `Thirst: ${Math.floor(player.thirst)}/100`;
+            
+            document.querySelector('.stamina-fill').style.width = `${player.stamina}%`;
+            document.querySelector('.stamina-fill').parentElement.querySelector('.stat-label').textContent = `Stamina: ${Math.floor(player.stamina)}/100`;
+        }
+        
+        function render() {
+            if (!gameStarted) return;
+            
+            const canvas = document.getElementById('game-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size to match window
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate visible range
+            const startX = Math.floor(player.x - VIEWPORT_TILES_X / 2);
+            const endX = Math.floor(player.x + VIEWPORT_TILES_X / 2);
+            const startY = Math.floor(player.y - VIEWPORT_TILES_Y / 2);
+            const endY = Math.floor(player.y + VIEWPORT_TILES_Y / 2);
+            
+            // Draw visible tiles (ground layer)
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    if (x >= 0 && x < WORLD_SIZE && y >= 0 && y < WORLD_SIZE) {
+                        const tile = world[y][x];
+                        const screenX = centerX + (x - player.x) * TILE_WIDTH / 2 - (y - player.y) * TILE_WIDTH / 2;
+                        const screenY = centerY + (x - player.x) * TILE_HEIGHT / 2 + (y - player.y) * TILE_HEIGHT / 2;
+                        
+                        // Draw tile
+                        ctx.drawImage(resources.grass.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT / 2);
+                    }
+                }
+            }
+            
+            // Collect and sort visible entities
+            const visibleEntities = [];
+            
+            for (const entity of entities) {
+                if (entity.x >= startX - 1 && entity.x <= endX + 1 && entity.y >= startY - 1 && entity.y <= endY + 1) {
+                    visibleEntities.push(entity);
+                }
+            }
+            
+            // Add player to the list
+            visibleEntities.push({ type: 'player', x: player.x, y: player.y });
+            
+            // Sort entities by y position for proper layering
+            visibleEntities.sort((a, b) => a.y - b.y);
+            
+            // Draw entities
+            for (const entity of visibleEntities) {
+                const screenX = centerX + (entity.x - player.x) * TILE_WIDTH / 2 - (entity.y - player.y) * TILE_WIDTH / 2;
+                const screenY = centerY + (entity.x - player.x) * TILE_HEIGHT / 2 + (entity.y - player.y) * TILE_HEIGHT / 2;
+                
+                // Draw entity based on type
+                switch (entity.type) {
+                    case 'player':
+                        ctx.drawImage(resources.player.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT);
+                        break;
+                    case 'tree':
+                        ctx.drawImage(resources.tree.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT * 2);
+                        break;
+                    case 'rock':
+                        ctx.drawImage(resources.rock.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT);
+                        break;
+                    case 'metalOre':
+                        ctx.drawImage(resources.metalOre.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT);
+                        break;
+                    case 'barrel':
+                        ctx.drawImage(resources.barrel.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT);
+                        break;
+                    case 'storageBox':
+                        ctx.drawImage(resources.storageBox.image, screenX - TILE_WIDTH / 2, screenY - TILE_HEIGHT);
+                        break;
+                }
+            }
+            
+            // Update minimap
+            updateMinimap();
+        }
+        
+        function updateMinimap() {
+            const minimap = document.getElementById('minimap-canvas');
+            const minimapCtx = minimap.getContext('2d');
+            
+            minimap.width = 150;
+            minimap.height = 150;
+            
+            // Clear minimap
+            minimapCtx.clearRect(0, 0, minimap.width, minimap.height);
+            
+            // Calculate visible range for minimap (wider than viewport)
+            const minimapSize = 30; // Show 30x30 area on minimap
+            const minimapStartX = Math.floor(player.x - minimapSize / 2);
+            const minimapEndX = Math.floor(player.x + minimapSize / 2);
+            const minimapStartY = Math.floor(player.y - minimapSize / 2);
+            const minimapEndY = Math.floor(player.y + minimapSize / 2);
+            
+            // Draw minimap tiles
+            const tileSize = minimap.width / minimapSize;
+            
+            for (let y = minimapStartY; y <= minimapEndY; y++) {
+                for (let x = minimapStartX; x <= minimapEndX; x++) {
+                    if (x >= 0 && x < WORLD_SIZE && y >= 0 && y < WORLD_SIZE) {
+                        const screenX = (x - minimapStartX) * tileSize;
+                        const screenY = (y - minimapStartY) * tileSize;
+                        
+                        // Draw based on minimap data
+                        if (minimapData[y] && minimapData[y][x] !== undefined) {
+                            switch (minimapData[y][x]) {
+                                case 0: // Grass
+                                    minimapCtx.fillStyle = '#7CFC00';
+                                    break;
+                                case 1: // Tree
+                                    minimapCtx.fillStyle = '#228B22';
+                                    break;
+                                case 2: // Rock
+                                    minimapCtx.fillStyle = '#777777';
+                                    break;
+                                case 3: // Metal ore
+                                    minimapCtx.fillStyle = '#B8860B';
+                                    break;
+                                case 4: // Barrel
+                                    minimapCtx.fillStyle = '#964B00';
+                                    break;
+                                case 5: // Storage box
+                                    minimapCtx.fillStyle = '#8B4513';
+                                    break;
+                                default:
+                                    minimapCtx.fillStyle = '#7CFC00';
+                            }
+                        } else {
+                            minimapCtx.fillStyle = '#7CFC00'; // Default grass
+                        }
+                        
+                        minimapCtx.fillRect(screenX, screenY, tileSize, tileSize);
+                    }
+                }
+            }
+            
+            // Draw player on minimap
+            const playerX = (player.x - minimapStartX) * tileSize;
+            const playerY = (player.y - minimapStartY) * tileSize;
+            
+            minimapCtx.fillStyle = 'white';
+            minimapCtx.beginPath();
+            minimapCtx.arc(playerX + tileSize / 2, playerY + tileSize / 2, tileSize, 0, Math.PI * 2);
+            minimapCtx.fill();
+        }
+        
+        function handleKeyDown(e) {
+            keysPressed[e.key] = true;
+            
+            // Toggle inventory with Tab key
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                toggleInventory();
+            }
+            
+            // Toggle crafting menu with C key
+            if (e.key === 'c' || e.key === 'C') {
+                toggleCraftingMenu();
+            }
+            
+            // Handle hotbar selection with number keys
+            if (e.key >= '1' && e.key <= '6') {
+                selectedHotbarSlot = parseInt(e.key) - 1;
+                updateHotbar();
+            }
+            
+            // Handle interaction with E key
+            if (e.key === 'e' || e.key === 'E') {
+                interactWithEntity();
+            }
+            
+            // Handle item placement with F key
+            if (e.key === 'f' || e.key === 'F') {
+                placeSelectedItem();
+            }
+        }
+        
+        function handleKeyUp(e) {
+            keysPressed[e.key] = false;
+        }
+        
+        function handleMouseMove(e) {
+            // Handle mouse movement for aiming if needed
+        }
+        
+        function handleClick(e) {
+            // Handle interactions based on where the click happened
+            if (inventoryOpen) {
+                // Handle inventory clicks
+                if (e.target.closest('.inventory-slot')) {
+                    const slot = e.target.closest('.inventory-slot');
+                    const index = parseInt(slot.dataset.index);
+                    
+                    if (interactingWithStorage) {
+                        transferItem(index);
+                    }
+                }
+                
+                if (e.target.closest('.crafting-item')) {
+                    const recipe = e.target.closest('.crafting-item').dataset.recipe;
+                    craftItem(parseInt(recipe));
+                }
+            } else {
+                // Handle world clicks for resource gathering
+                gatherResource();
+            }
+        }
+        
+        function toggleInventory() {
+            inventoryOpen = !inventoryOpen;
+            document.getElementById('inventory').classList.toggle('visible');
+            
+            if (inventoryOpen) {
+                // Update inventory UI when opening
+                populateInventoryUI();
+            }
+            
+            // Close storage view if inventory is closed
+            if (!inventoryOpen && interactingWithStorage) {
+                interactingWithStorage = false;
+                currentStorage = null;
+                document.getElementById('storage-container').classList.remove('visible');
+                document.getElementById('storage-title').classList.remove('visible');
+            }
+        }
+        
+        function toggleCraftingMenu() {
+            craftingMenuOpen = !craftingMenuOpen;
+            document.getElementById('crafting-menu').classList.toggle('visible');
+            
+            if (craftingMenuOpen) {
+                // Update crafting recipes when opening
+                populateCraftingMenu();
+            }
+        }
+        
+        function populateInventoryUI() {
+            const container = document.getElementById('inventory-container');
+            container.innerHTML = '';
+            
+            // Create inventory slots
+            for (let i = 0; i < player.inventorySize; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                slot.dataset.index = i;
+                
+                if (i < player.inventory.length && player.inventory[i]) {
+                    const item = player.inventory[i];
+                    const itemInfo = items[item.id];
+                    
+                    // Create item image
+                    const img = document.createElement('img');
+                    img.src = resources[itemInfo.image].image.src;
+                    slot.appendChild(img);
+                    
+                    // Add count if stackable
+                    if (itemInfo.stackable && item.count > 1) {
+                        const count = document.createElement('div');
+                        count.className = 'item-count';
+                        count.textContent = item.count;
+                        slot.appendChild(count);
+                    }
+                }
+                
+                container.appendChild(slot);
+            }
+        }
+        
+        function populateStorageUI(storage) {
+            const container = document.getElementById('storage-container');
+            container.innerHTML = '';
+            
+            // Create storage slots
+            for (let i = 0; i < storage.items.length; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                slot.dataset.index = i;
+                
+                if (storage.items[i]) {
+                    const item = storage.items[i];
+                    const itemInfo = items[item.id];
+                    
+                    // Create item image
+                    const img = document.createElement('img');
+                    img.src = resources[itemInfo.image].image.src;
+                    slot.appendChild(img);
+                    
+                    // Add count if stackable
+                    if (itemInfo.stackable && item.count > 1) {
+                        const count = document.createElement('div');
+                        count.className = 'item-count';
+                        count.textContent = item.count;
+                        slot.appendChild(count);
+                    }
+                }
+                
+                container.appendChild(slot);
+            }
+            
+            // Show storage container
+            document.getElementById('storage-container').classList.add('visible');
+            document.getElementById('storage-title').classList.add('visible');
+        }
+        
+        function populateCraftingMenu() {
+            const container = document.getElementById('crafting-list');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < craftingRecipes.length; i++) {
+                const recipe = craftingRecipes[i];
+                const canCraft = canCraftItem(recipe);
+                
+                const recipeElement = document.createElement('div');
+                recipeElement.className = 'crafting-item';
+                recipeElement.dataset.recipe = i;
+                
+                // Create item image
+                const img = document.createElement('img');
+                img.src = resources[items[recipe.result.item].image].image.src;
+                recipeElement.appendChild(img);
+                
+                // Create info container
+                const infoElement = document.createElement('div');
+                infoElement.className = 'crafting-info';
+                
+                // Add item name
+                const nameElement = document.createElement('div');
+                nameElement.textContent = recipe.name;
+                infoElement.appendChild(nameElement);
+                
+                // Add requirements
+                const reqElement = document.createElement('div');
+                reqElement.className = `crafting-requirements ${canCraft ? '' : 'not-met'}`;
+                
+                let reqText = 'Requires: ';
+                recipe.requirements.forEach((req, index) => {
+                    const hasItem = getItemCount(req.item) >= req.count;
+                    reqText += `${req.count} ${items[req.item].name}${hasItem ? '' : ' (missing)'}`;
+                    
+                    if (index < recipe.requirements.length - 1) {
+                        reqText += ', ';
+                    }
+                });
+                
+                reqElement.textContent = reqText;
+                infoElement.appendChild(reqElement);
+                
+                recipeElement.appendChild(infoElement);
+                container.appendChild(recipeElement);
+            }
+        }
+        
+        function updateHotbar() {
+            const hotbarSlots = document.querySelectorAll('#hotbar .hotbar-slot');
+            
+            // Clear all slots
+            hotbarSlots.forEach(slot => {
+                slot.innerHTML = '<span class="hotbar-key">' + (parseInt(slot.dataset.slot) + 1) + '</span>';
+                slot.classList.remove('selected');
+            });
+            
+            // Set selected slot
+            hotbarSlots[selectedHotbarSlot].classList.add('selected');
+            
+            // Update slots with items from inventory
+            for (let i = 0; i < 6; i++) {
+                if (i < player.inventory.length && player.inventory[i]) {
+                    const slot = hotbarSlots[i];
+                    const item = player.inventory[i];
+                    const itemInfo = items[item.id];
+                    
+                    // Create item image
+                    const img = document.createElement('img');
+                    img.src = resources[itemInfo.image].image.src;
+                    slot.appendChild(img);
+                    
+                    // Add count if stackable
+                    if (itemInfo.stackable && item.count > 1) {
+                        const count = document.createElement('div');
+                        count.className = 'item-count';
+                        count.textContent = item.count;
+                        slot.appendChild(count);
+                    }
+                }
+            }
+        }
+        
+        function addItemToInventory(itemId, count) {
+            const itemInfo = items[itemId];
+            
+            // Check if item is stackable
+            if (itemInfo.stackable) {
+                // Find existing stack
+                for (let i = 0; i < player.inventory.length; i++) {
+                    const slot = player.inventory[i];
+                    
+                    if (slot && slot.id === itemId && slot.count < itemInfo.maxStack) {
+                        // Add to existing stack
+                        const spaceInStack = itemInfo.maxStack - slot.count;
+                        const amountToAdd = Math.min(count, spaceInStack);
+                        
+                        slot.count += amountToAdd;
+                        count -= amountToAdd;
+                        
+                        // If all items were added, return
+                        if (count <= 0) {
+                            updateHotbar();
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            // If we still have items to add, find an empty slot
+            if (count > 0) {
+                for (let i = 0; i < player.inventorySize; i++) {
+                    if (!player.inventory[i]) {
+                        // Add to empty slot
+                        player.inventory[i] = {
+                            id: itemId,
+                            count: Math.min(count, itemInfo.maxStack)
+                        };
+                        
+                        count -= Math.min(count, itemInfo.maxStack);
+                        
+                        // If all items were added, return
+                        if (count <= 0) {
+                            updateHotbar();
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            // If we reach here, the inventory is full
+            addLogMessage("Inventory is full!");
+            return false;
+        }
+        
+        function removeItemFromInventory(itemId, count) {
+            let remainingToRemove = count;
+            
+            // Start removing from the end of the inventory
+            for (let i = player.inventory.length - 1; i >= 0; i--) {
+                const slot = player.inventory[i];
+                
+                if (slot && slot.id === itemId) {
+                    // If we have enough in this slot, just subtract
+                    if (slot.count > remainingToRemove) {
+                        slot.count -= remainingToRemove;
+                        remainingToRemove = 0;
+                    } else {
+                        // Otherwise, take what we can and clear the slot
+                        remainingToRemove -= slot.count;
+                        player.inventory[i] = null;
+                    }
+                    
+                    // Clean up empty slots
+                    player.inventory = player.inventory.filter(item => item !== null);
+                    
+                    // If we've removed enough, return
+                    if (remainingToRemove <= 0) {
+                        updateHotbar();
+                        return true;
+                    }
+                }
+            }
+            
+            // If we reach here, we couldn't remove all requested items
+            return false;
+        }
+        
+        function getItemCount(itemId) {
+            let count = 0;
+            
+            for (let i = 0; i < player.inventory.length; i++) {
+                const slot = player.inventory[i];
+                
+                if (slot && slot.id === itemId) {
+                    count += slot.count;
+                }
+            }
+            
+            return count;
+        }
+        
+        function interactWithEntity() {
+            // Check for nearby entities to interact with
+            const interactRange = 1.5;
+            let closestEntity = null;
+            let closestDistance = interactRange;
+            
+            for (let i = 0; i < entities.length; i++) {
+                const entity = entities[i];
+                const distance = Math.sqrt(Math.pow(entity.x - player.x, 2) + Math.pow(entity.y - player.y, 2));
+                
+                if (distance < closestDistance && (entity.interactable || entity.type === 'storageBox')) {
+                    closestEntity = entity;
+                    closestDistance = distance;
+                }
+            }
+            
+            if (closestEntity) {
+                if (closestEntity.type === 'barrel') {
+                    // Loot barrel
+                    addItemToInventory(closestEntity.loot.item, closestEntity.loot.count);
+                    addLogMessage(`Found ${closestEntity.loot.count} ${items[closestEntity.loot.item].name} in barrel`);
+                    
+                    // Remove barrel from world
+                    entities.splice(entities.indexOf(closestEntity), 1);
+                    
+                    // Update minimap
+                    minimapData[Math.floor(closestEntity.y)][Math.floor(closestEntity.x)] = 0;
+                } else if (closestEntity.type === 'storageBox') {
+                    // Open storage
+                    if (!inventoryOpen) {
+                        toggleInventory();
+                    }
+                    
+                    interactingWithStorage = true;
+                    currentStorage = closestEntity;
+                    populateStorageUI(closestEntity);
+                }
+            }
+        }
+        
+        function placeSelectedItem() {
+            // Get selected item from hotbar
+            if (selectedHotbarSlot >= player.inventory.length || !player.inventory[selectedHotbarSlot]) {
+                return;
+            }
+            
+            const item = player.inventory[selectedHotbarSlot];
+            const itemInfo = items[item.id];
+            
+            if (itemInfo.type === 'placeable') {
+                // Check if the space in front of the player is free
+                const placeX = Math.floor(player.x);
+                const placeY = Math.floor(player.y);
+                
+                let canPlace = true;
+                
+                // Check for existing entities
+                for (const entity of entities) {
+                    if (Math.abs(entity.x - placeX) < 0.5 && Math.abs(entity.y - placeY) < 0.5) {
+                        canPlace = false;
+                        break;
+                    }
+                }
+                
+                if (canPlace) {
+                    // Create the entity
+                    if (item.id === 'storageBox') {
+                        const storageBox = {
+                            type: 'storageBox',
+                            x: placeX,
+                            y: placeY,
+                            items: [],
+                            capacity: 12
+                        };
+                        
+                        entities.push(storageBox);
+                        minimapData[placeY][placeX] = 5; // Storage box on minimap
+                        
+                        // Remove item from inventory
+                        if (item.count > 1) {
+                            item.count--;
+                        } else {
+                            player.inventory[selectedHotbarSlot] = null;
+                            player.inventory = player.inventory.filter(item => item !== null);
+                        }
+                        
+                        addLogMessage("Placed Storage Box");
+                        updateHotbar();
+                    }
+                } else {
+                    addLogMessage("Cannot place item here");
+                }
+            }
+        }
+        
+        function gatherResource() {
+            if (inventoryOpen) return;
+            
+            // Get selected item from hotbar
+            const selectedItem = player.inventory[selectedHotbarSlot];
+            
+            if (!selectedItem) return;
+            
+            // Check for nearby resources to gather
+            const gatherRange = 2;
+            let closestEntity = null;
+            let closestDistance = gatherRange;
+            
+            for (let i = 0; i < entities.length; i++) {
+                const entity = entities[i];
+                
+                if (entity.harvestable) {
+                    const distance = Math.sqrt(Math.pow(entity.x - player.x, 2) + Math.pow(entity.y - player.y, 2));
+                    
+                    if (distance < closestDistance) {
+                        closestEntity = entity;
+                        closestDistance = distance;
+                    }
+                }
+            }
+            
+            if (closestEntity) {
+                // Check if we have the right tool
+                let canHarvest = false;
+                let damageMult = 1;
+                
+                if (closestEntity.type === 'tree' && selectedItem.id === 'axe') {
+                    canHarvest = true;
+                    damageMult = 2;
+                } else if (closestEntity.type === 'rock' && selectedItem.id === 'axe') {
+                    canHarvest = true;
+                } else if (closestEntity.type === 'metalOre' && selectedItem.id === 'axe') {
+                    canHarvest = true;
+                    damageMult = 0.5;
+                }
+                
+                if (canHarvest) {
+                    // Damage the resource
+                    closestEntity.health -= 10 * damageMult;
+                    
+                    // If resource is depleted, harvest it
+                    if (closestEntity.health <= 0) {
+                        // Add harvested items to inventory
+                        addItemToInventory(closestEntity.harvestItem, closestEntity.harvestCount);
+                        addLogMessage(`Harvested ${closestEntity.harvestCount} ${items[closestEntity.harvestItem].name}`);
+                        
+                        // If it's a tree, add animation for falling
+                        if (closestEntity.type === 'tree') {
+                            // Simple implementation - just remove the tree
+                            entities.splice(entities.indexOf(closestEntity), 1);
+                            
+                            // Update minimap
+                            minimapData[Math.floor(closestEntity.y)][Math.floor(closestEntity.x)] = 0;
+                        } else {
+                            // Remove other resources immediately
+                            entities.splice(entities.indexOf(closestEntity), 1);
+                            
+                            // Update minimap
+                            minimapData[Math.floor(closestEntity.y)][Math.floor(closestEntity.x)] = 0;
+                        }
+                    }
+                }
+            }
+        }
+        
+        function transferItem(index) {
+            if (!interactingWithStorage || !currentStorage) return;
+            
+            if (index < player.inventory.length && player.inventory[index]) {
+                // Transfer from inventory to storage
+                const item = player.inventory[index];
+                
+                // Check if storage has room
+                if (currentStorage.items.length < currentStorage.capacity) {
+                    currentStorage.items.push(item);
+                    player.inventory[index] = null;
+                    player.inventory = player.inventory.filter(item => item !== null);
+                    
+                    addLogMessage(`Stored ${item.count} ${items[item.id].name}`);
+                    
+                    // Update UI
+                    populateInventoryUI();
+                    populateStorageUI(currentStorage);
+                    updateHotbar();
+                } else {
+                    addLogMessage("Storage is full");
+                }
+            } else if (index >= player.inventory.length) {
+                // Transfer from storage to inventory
+                const storageIndex = index - player.inventory.length;
+                
+                if (storageIndex < currentStorage.items.length && currentStorage.items[storageIndex]) {
+                    const item = currentStorage.items[storageIndex];
+                    
+                    if (addItemToInventory(item.id, item.count)) {
+                        currentStorage.items.splice(storageIndex, 1);
+                        addLogMessage(`Took ${item.count} ${items[item.id].name}`);
+                        
+                        // Update UI
+                        populateInventoryUI();
+                        populateStorageUI(currentStorage);
+                        updateHotbar();
+                    }
+                }
+            }
+        }
+        
+        function canCraftItem(recipe) {
+            for (const req of recipe.requirements) {
+                if (getItemCount(req.item) < req.count) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        
+        function craftItem(recipeIndex) {
+            const recipe = craftingRecipes[recipeIndex];
+            
+            if (canCraftItem(recipe)) {
+                // Remove required materials
+                for (const req of recipe.requirements) {
+                    removeItemFromInventory(req.item, req.count);
+                }
+                
+                // Add crafted item
+                if (addItemToInventory(recipe.result.item, recipe.result.count)) {
+                    addLogMessage(`Crafted ${recipe.name}`);
+                    
+                    // Update UI
+                    populateInventoryUI();
+                    populateCraftingMenu();
+                }
+            } else {
+                addLogMessage("Missing materials for crafting");
+            }
+        }
+        
+        function addLogMessage(message) {
+            const log = document.getElementById('message-log');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'log-message';
+            messageElement.textContent = message;
+            
+            log.appendChild(messageElement);
+            
+            // Limit log size
+            while (log.children.length > 5) {
+                log.removeChild(log.firstChild);
+            }
+            
+            // Fade out message after 3 seconds
+            setTimeout(() => {
+                messageElement.classList.add('fade');
+                
+                // Remove message after fade animation
+                setTimeout(() => {
+                    if (messageElement.parentNode === log) {
+                        log.removeChild(messageElement);
+                    }
+                }, 1000);
+            }, 3000);
+        }
+        
+        // Start loading resources
+        loadResources();
+    </script>
+</body>
+</html>
