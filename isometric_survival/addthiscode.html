@@ -1,0 +1,488 @@
+// Enhanced animation loop with comprehensive error handling
+function enhancedAnimationLoop(currentTime) {
+    // Store animation frame ID to allow cancellation if needed
+    const animationFrameId = requestAnimationFrame(enhancedAnimationLoop);
+    
+    // Initialize error tracking if not already done
+    window.gameErrorStats = window.gameErrorStats || {
+        consecutiveErrors: 0,
+        totalErrors: 0,
+        lastErrorTime: 0,
+        recoveryAttempts: 0
+    };
+    
+    try {
+        // STEP 1: Calculate delta time (time since last frame)
+        let delta = 16.67; // Default to ~60fps
+        
+        if (window.lastAnimationTime) {
+            delta = currentTime - window.lastAnimationTime;
+            
+            // Sanity check for delta - cap at 100ms (10fps)
+            // This prevents huge jumps after tab switching or sleep
+            if (delta > 100) {
+                console.warn(`Large frame time detected: ${delta.toFixed(2)}ms, capping to 100ms`);
+                delta = 100;
+            } else if (delta <= 0) {
+                console.warn(`Invalid delta time: ${delta}ms, using default`);
+                delta = 16.67;
+            }
+        }
+        
+        window.lastAnimationTime = currentTime;
+        
+        // STEP 2: Verify required objects exist
+        if (!window.gameScene || !window.gameCamera || !window.gameRenderer) {
+            throw new Error("Critical game objects missing. Scene, camera, or renderer undefined.");
+        }
+        
+        // STEP 3: Update controls if available
+        try {
+            if (window.controls && typeof window.controls.update === 'function') {
+                window.controls.update();
+            }
+        } catch (controlsError) {
+            console.error("Controls update error:", controlsError);
+            // Non-critical, continue execution
+        }
+        
+        // STEP 4: Skip game logic if inventory is open
+        if (!state.ui.inventoryOpen) {
+            // STEP 4.1: Handle player movement
+            try {
+                updatePlayerMovement(delta);
+            } catch (movementError) {
+                console.error("Player movement error:", movementError);
+                // Try to recover player position if errored
+                recoverPlayerPosition();
+            }
+            
+            // STEP 4.2: Check for interactions with objects
+            try {
+                checkInteractions();
+            } catch (interactionError) {
+                console.error("Interaction error:", interactionError);
+                // Non-critical, continue execution
+            }
+            
+            // STEP 4.3: Update AI entities
+            try {
+                updateAI(delta);
+            } catch (aiError) {
+                console.error("AI update error:", aiError);
+                // Could be critical if it continues to fail
+                window.aiErrorCount = (window.aiErrorCount || 0) + 1;
+                
+                if (window.aiErrorCount > 5) {
+                    console.warn("Multiple AI errors detected, attempting recovery...");
+                    try {
+                        recoverEntitySystem();
+                        window.aiErrorCount = 0;
+                    } catch (recoveryError) {
+                        console.error("Entity system recovery failed:", recoveryError);
+                    }
+                }
+            }
+            
+            // STEP 4.4: Update day/night cycle
+            try {
+                updateDayNightCycle(delta);
+            } catch (environmentError) {
+                console.error("Environment update error:", environmentError);
+                // Non-critical, continue execution
+            }
+            
+            // STEP 4.5: Update player needs (hunger, thirst, etc.)
+            try {
+                updatePlayerNeeds(delta);
+            } catch (needsError) {
+                console.error("Player needs update error:", needsError);
+                // Non-critical, continue execution
+            }
+        }
+        
+        // STEP 5: Render the scene
+        try {
+            window.gameRenderer.render(window.gameScene, window.gameCamera);
+            
+            // If we got here, rendering was successful
+            // Reset consecutive error counter
+            window.gameErrorStats.consecutiveErrors = 0;
+        } catch (renderError) {
+            window.gameErrorStats.consecutiveErrors++;
+            window.gameErrorStats.totalErrors++;
+            window.gameErrorStats.lastErrorTime = Date.now();
+            
+            console.error(`Render error (${window.gameErrorStats.consecutiveErrors}):`, renderError);
+            
+            // If multiple render errors occur, attempt recovery
+            if (window.gameErrorStats.consecutiveErrors >= 3) {
+                console.warn("Multiple render errors detected, attempting renderer recovery...");
+                
+                if (window.gameErrorStats.recoveryAttempts < 3) {
+                    window.gameErrorStats.recoveryAttempts++;
+                    try {
+                        // Cancel current animation loop
+                        cancelAnimationFrame(animationFrameId);
+                        
+                        // Attempt to reconstruct renderer
+                        recoverRenderer();
+                        
+                        // Restart animation loop with delay
+                        setTimeout(() => {
+                            window.lastAnimationTime = 0;
+                            requestAnimationFrame(enhancedAnimationLoop);
+                        }, 1000);
+                        
+                        // Exit current loop
+                        return;
+                    } catch (recoveryError) {
+                        console.error("Renderer recovery failed:", recoveryError);
+                        showMessage("Graphics error. Try reloading the page.");
+                    }
+                } else {
+                    console.error("Too many recovery attempts, suggesting reload");
+                    showFatalErrorMessage("The game encountered persistent rendering errors. Please reload the page.");
+                    
+                    // Stop animation to prevent further errors
+                    cancelAnimationFrame(animationFrameId);
+                    return;
+                }
+            }
+        }
+        
+        // Performance monitoring
+        if (window.gamePerformanceMonitoring) {
+            updatePerformanceStats(delta);
+        }
+        
+    } catch (criticalError) {
+        // Handle any uncaught errors in the main loop
+        console.error("Critical animation loop error:", criticalError);
+        window.gameErrorStats.consecutiveErrors++;
+        window.gameErrorStats.totalErrors++;
+        
+        // If too many consecutive errors, show error message
+        if (window.gameErrorStats.consecutiveErrors > 10) {
+            showFatalErrorMessage("Too many errors occurred. Please reload the page.");
+            cancelAnimationFrame(animationFrameId);
+            return;
+        }
+    }
+}
+
+// Helper functions for error recovery
+
+// Recovery function for player position
+function recoverPlayerPosition() {
+    try {
+        if (window.player) {
+            // Reset to a safe position if current position is invalid
+            if (isNaN(window.player.position.x) || 
+                isNaN(window.player.position.y) || 
+                isNaN(window.player.position.z) ||
+                Math.abs(window.player.position.x) > 1000 ||
+                Math.abs(window.player.position.y) > 1000 ||
+                Math.abs(window.player.position.z) > 1000) {
+                
+                console.warn("Detected invalid player position, resetting");
+                window.player.position.set(0, 1, 0);
+            }
+        }
+    } catch (e) {
+        console.error("Player position recovery failed:", e);
+    }
+}
+
+// Recovery function for renderer
+function recoverRenderer() {
+    try {
+        // Remove old renderer
+        if (window.gameRenderer && window.gameRenderer.domElement) {
+            window.gameRenderer.domElement.remove();
+        }
+        
+        // Create new renderer
+        window.gameRenderer = new THREE.WebGLRenderer({ antialias: true });
+        window.gameRenderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(window.gameRenderer.domElement);
+        
+        // Update controls to use new renderer
+        if (window.controls && window.gameCamera) {
+            window.controls.dispose();
+            window.controls = new THREE.OrbitControls(window.gameCamera, window.gameRenderer.domElement);
+            window.controls.enableDamping = true;
+            window.controls.dampingFactor = 0.05;
+            window.controls.screenSpacePanning = false;
+            window.controls.minDistance = 10;
+            window.controls.maxDistance = 50;
+            window.controls.maxPolarAngle = Math.PI / 2.5;
+        }
+        
+        console.log("Renderer successfully recovered");
+        showMessage("Graphics system recovered");
+        
+        return true;
+    } catch (e) {
+        console.error("Renderer recovery attempt failed:", e);
+        return false;
+    }
+}
+
+// Recovery function for entity system
+function recoverEntitySystem() {
+    try {
+        // Find and fix problematic entities
+        const problemEntities = [];
+        
+        state.world.entities.forEach((entity, index) => {
+            // Check if entity is valid
+            if (!entity || !entity.isObject3D) {
+                problemEntities.push(index);
+                return;
+            }
+            
+            // Check if position is valid
+            if (isNaN(entity.position.x) || 
+                isNaN(entity.position.y) || 
+                isNaN(entity.position.z) ||
+                Math.abs(entity.position.x) > 1000 ||
+                Math.abs(entity.position.y) > 1000 ||
+                Math.abs(entity.position.z) > 1000) {
+                
+                problemEntities.push(index);
+                return;
+            }
+            
+            // Check if entity has invalid properties
+            if (entity.userData && 
+                (isNaN(entity.userData.health) || 
+                 entity.userData.health < 0 || 
+                 entity.userData.health > 1000000)) {
+                
+                // Fix health rather than removing
+                entity.userData.health = 100;
+            }
+        });
+        
+        // Remove problematic entities (in reverse order to avoid index issues)
+        for (let i = problemEntities.length - 1; i >= 0; i--) {
+            const index = problemEntities[i];
+            const entity = state.world.entities[index];
+            
+            if (entity && entity.isObject3D) {
+                window.gameScene.remove(entity);
+            }
+            
+            state.world.entities.splice(index, 1);
+        }
+        
+        console.log(`Removed ${problemEntities.length} problematic entities`);
+        
+        // Attempt to add some entities back if too many were removed
+        if (problemEntities.length > 5 && state.world.entities.length < 10) {
+            console.log("Regenerating some entities after recovery");
+            
+            // Add a few trees and rocks to repopulate
+            for (let i = 0; i < 5; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                spawnEntity('tree', x, z);
+            }
+            
+            for (let i = 0; i < 3; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                spawnEntity('rock', x, z);
+            }
+        }
+        
+        return true;
+    } catch (e) {
+        console.error("Entity system recovery failed:", e);
+        return false;
+    }
+}
+
+// Display fatal error message
+function showFatalErrorMessage(message) {
+    // Create error overlay
+    const errorOverlay = document.createElement('div');
+    errorOverlay.style.position = 'fixed';
+    errorOverlay.style.top = '0';
+    errorOverlay.style.left = '0';
+    errorOverlay.style.width = '100%';
+    errorOverlay.style.height = '100%';
+    errorOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    errorOverlay.style.color = 'white';
+    errorOverlay.style.display = 'flex';
+    errorOverlay.style.flexDirection = 'column';
+    errorOverlay.style.alignItems = 'center';
+    errorOverlay.style.justifyContent = 'center';
+    errorOverlay.style.zIndex = '1000';
+    
+    // Create error message
+    const errorMessage = document.createElement('h2');
+    errorMessage.textContent = message;
+    errorOverlay.appendChild(errorMessage);
+    
+    // Create reload button
+    const reloadButton = document.createElement('button');
+    reloadButton.textContent = 'Reload Game';
+    reloadButton.style.marginTop = '20px';
+    reloadButton.style.padding = '10px 20px';
+    reloadButton.style.backgroundColor = '#4CAF50';
+    reloadButton.style.border = 'none';
+    reloadButton.style.borderRadius = '5px';
+    reloadButton.style.color = 'white';
+    reloadButton.style.cursor = 'pointer';
+    
+    reloadButton.onclick = function() {
+        window.location.reload();
+    };
+    
+    errorOverlay.appendChild(reloadButton);
+    
+    // Add to document
+    document.body.appendChild(errorOverlay);
+}
+
+// Optional: Performance monitoring
+function updatePerformanceStats(delta) {
+    window.gamePerformanceData = window.gamePerformanceData || {
+        frameRates: [],
+        averageFPS: 60,
+        minFPS: 60,
+        maxFPS: 60,
+        lastUpdate: 0
+    };
+    
+    // Calculate current FPS
+    const currentFPS = 1000 / delta;
+    
+    // Store in rolling buffer (last 60 frames)
+    window.gamePerformanceData.frameRates.push(currentFPS);
+    if (window.gamePerformanceData.frameRates.length > 60) {
+        window.gamePerformanceData.frameRates.shift();
+    }
+    
+    // Update stats every second
+    if (Date.now() - window.gamePerformanceData.lastUpdate > 1000) {
+        const fps = window.gamePerformanceData.frameRates;
+        window.gamePerformanceData.averageFPS = fps.reduce((a, b) => a + b, 0) / fps.length;
+        window.gamePerformanceData.minFPS = Math.min(...fps);
+        window.gamePerformanceData.maxFPS = Math.max(...fps);
+        window.gamePerformanceData.lastUpdate = Date.now();
+        
+        // Check for performance issues
+        if (window.gamePerformanceData.averageFPS < 30) {
+            console.warn("Performance warning: Low FPS detected", window.gamePerformanceData);
+            
+            // Could suggest performance optimizations here
+            if (!window.lowPerformanceWarningShown) {
+                showMessage("Performance warning: Consider reducing graphics settings");
+                window.lowPerformanceWarningShown = true;
+                
+                // Reset warning after 30 seconds
+                setTimeout(() => {
+                    window.lowPerformanceWarningShown = false;
+                }, 30000);
+            }
+        }
+    }
+}
+
+// Enhanced player movement function with validation
+function updatePlayerMovement(delta) {
+    const moveVector = new THREE.Vector3(0, 0, 0);
+    
+    // Validate keysPressed object
+    if (!keysPressed || typeof keysPressed !== 'object') {
+        console.error("Invalid keysPressed object");
+        keysPressed = {};
+        return;
+    }
+    
+    // Get movement direction
+    if (keysPressed['w']) moveVector.z -= 1;
+    if (keysPressed['s']) moveVector.z += 1;
+    if (keysPressed['a']) moveVector.x -= 1;
+    if (keysPressed['d']) moveVector.x += 1;
+    
+    // If no movement, exit early
+    if (moveVector.length() === 0) return;
+    
+    // Normalize movement vector for consistent speed in all directions
+    moveVector.normalize();
+    
+    // Get camera direction for relative movement
+    if (!window.gameCamera) {
+        console.error("Missing camera for player movement");
+        return;
+    }
+    
+    const cameraDirection = new THREE.Vector3();
+    try {
+        window.gameCamera.getWorldDirection(cameraDirection);
+    } catch (e) {
+        console.error("Error getting camera direction:", e);
+        return;
+    }
+    
+    // Ensure we only move horizontally
+    cameraDirection.y = 0;
+    
+    // Validate direction vector
+    if (isNaN(cameraDirection.x) || isNaN(cameraDirection.z) || 
+        cameraDirection.length() === 0) {
+        console.warn("Invalid camera direction, using default");
+        cameraDirection.set(0, 0, -1);
+    }
+    
+    cameraDirection.normalize();
+    
+    // Calculate camera right vector for strafing
+    const cameraRight = new THREE.Vector3();
+    cameraRight.crossVectors(new THREE.Vector3(0, 1, 0), cameraDirection);
+    
+    // Calculate final movement
+    const movement = new THREE.Vector3();
+    movement.addScaledVector(cameraDirection, -moveVector.z);
+    movement.addScaledVector(cameraRight, moveVector.x);
+    
+    // Get movement speed with validation
+    const moveSpeed = typeof state.player.moveSpeed === 'number' ? 
+                       state.player.moveSpeed : 0.15;
+    
+    // Validate delta to prevent extreme movements
+    const safeDelta = Math.min(Math.max(delta, 1), 100);
+    
+    // Apply movement to player with bounds checking
+    const newX = window.player.position.x + movement.x * moveSpeed * safeDelta;
+    const newZ = window.player.position.z + movement.z * moveSpeed * safeDelta;
+    
+    // Boundary check to keep player in world
+    if (newX > -50 && newX < 50) {
+        window.player.position.x = newX;
+    }
+    
+    if (newZ > -50 && newZ < 50) {
+        window.player.position.z = newZ;
+    }
+    
+    // Rotate player to face movement direction
+    try {
+        window.player.rotation.y = Math.atan2(movement.x, movement.z);
+    } catch (e) {
+        console.error("Error rotating player:", e);
+    }
+    
+    // Update camera target to follow player
+    if (window.controls && typeof window.controls.target === 'object') {
+        try {
+            window.controls.target.copy(window.player.position);
+        } catch (e) {
+            console.error("Error updating camera target:", e);
+        }
+    }
+}
