@@ -1,0 +1,470 @@
+// Enhanced entity creation system with Three.js validation
+
+/**
+ * Creates and spawns a game entity with comprehensive error checking
+ * @param {string} type - The type of entity to spawn from entityTypes
+ * @param {number} x - The x position in the world
+ * @param {number} z - The z position in the world
+ * @returns {THREE.Object3D|null} - The created entity or null if creation failed
+ */
+function spawnEntity(type, x, z) {
+    // Parameter validation
+    if (typeof type !== 'string' || type.trim() === '') {
+        console.error(`Invalid entity type: ${type}`);
+        return null;
+    }
+    
+    if (isNaN(x) || isNaN(z)) {
+        console.error(`Invalid coordinates for entity: x=${x}, z=${z}`);
+        return null;
+    }
+    
+    // Check if THREE is available
+    if (typeof THREE === 'undefined') {
+        console.error('THREE.js not available for entity creation');
+        return null;
+    }
+    
+    // Check if entity type exists in definitions
+    if (!entityTypes[type]) {
+        console.error(`Unknown entity type: ${type}`);
+        return null;
+    }
+    
+    let entity = null;
+    
+    try {
+        switch (type) {
+            case 'tree':
+                entity = createTreeEntity();
+                break;
+                
+            case 'rock':
+                entity = createRockEntity();
+                break;
+                
+            case 'metal_node':
+                entity = createMetalNodeEntity();
+                break;
+                
+            case 'animal_deer':
+                entity = createDeerEntity();
+                break;
+                
+            case 'animal_wolf':
+                entity = createWolfEntity();
+                break;
+                
+            case 'barrel':
+                entity = createBarrelEntity();
+                break;
+                
+            default:
+                console.error(`Entity type ${type} has no creation implementation`);
+                return null;
+        }
+        
+        // If entity creation failed, return null
+        if (!entity || !entity.isObject3D) {
+            console.error(`Failed to create valid entity of type ${type}`);
+            return null;
+        }
+        
+        // Set position with validation
+        entity.position.set(
+            Number.isFinite(x) ? x : 0,
+            type === 'tree' ? 2.5 : 0,  // Default y position for each type
+            Number.isFinite(z) ? z : 0
+        );
+        
+        // Set common properties with validation
+        entity.userData = {
+            type: type,
+            health: Number.isFinite(entityTypes[type].health) ? entityTypes[type].health : 100,
+            interactable: true,
+            requiresTool: entityTypes[type].requiresTool || null
+        };
+        
+        // Apply additional type-specific properties
+        applyEntityTypeProperties(entity, type);
+        
+        // Ensure rendering properties
+        entity.castShadow = true;
+        entity.receiveShadow = true;
+        
+        // Add to scene safely
+        if (scene && typeof scene.add === 'function') {
+            scene.add(entity);
+            
+            // Add to entity list for game logic
+            if (Array.isArray(state.world.entities)) {
+                state.world.entities.push(entity);
+            } else {
+                console.error('World entities array is invalid');
+                state.world.entities = [entity];
+            }
+        } else {
+            console.error('Scene is invalid, cannot add entity');
+            return entity; // Still return the entity even if we couldn't add it to the scene
+        }
+        
+        return entity;
+    } catch (e) {
+        console.error(`Error spawning entity of type ${type}:`, e);
+        // Try to clean up partially created entity
+        if (entity && entity.isObject3D && scene && typeof scene.remove === 'function') {
+            scene.remove(entity);
+        }
+        return null;
+    }
+}
+
+/**
+ * Creates a tree entity with trunk and leaves
+ * @returns {THREE.Object3D|null} - The tree entity or null if creation failed
+ */
+function createTreeEntity() {
+    try {
+        // Create trunk
+        const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+        if (!trunkGeometry) throw new Error('Failed to create trunk geometry');
+        
+        const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        if (!trunkMaterial) throw new Error('Failed to create trunk material');
+        
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        if (!trunk || !trunk.isObject3D) throw new Error('Failed to create trunk mesh');
+        
+        // Create leaves
+        const leavesGeometry = new THREE.ConeGeometry(2, 4, 8);
+        if (!leavesGeometry) throw new Error('Failed to create leaves geometry');
+        
+        const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x2ECC71 });
+        if (!leavesMaterial) throw new Error('Failed to create leaves material');
+        
+        const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+        if (!leaves || !leaves.isObject3D) throw new Error('Failed to create leaves mesh');
+        
+        leaves.position.y = 3;
+        trunk.add(leaves);
+        
+        return trunk;
+    } catch (e) {
+        console.error('Error creating tree entity:', e);
+        return null;
+    }
+}
+
+/**
+ * Creates a rock entity
+ * @returns {THREE.Object3D|null} - The rock entity or null if creation failed
+ */
+function createRockEntity() {
+    try {
+        const geometry = new THREE.DodecahedronGeometry(1.5, 0);
+        if (!geometry) throw new Error('Failed to create rock geometry');
+        
+        const material = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
+        if (!material) throw new Error('Failed to create rock material');
+        
+        const rock = new THREE.Mesh(geometry, material);
+        if (!rock || !rock.isObject3D) throw new Error('Failed to create rock mesh');
+        
+        return rock;
+    } catch (e) {
+        console.error('Error creating rock entity:', e);
+        return null;
+    }
+}
+
+/**
+ * Creates a metal node entity
+ * @returns {THREE.Object3D|null} - The metal node entity or null if creation failed
+ */
+function createMetalNodeEntity() {
+    try {
+        const geometry = new THREE.DodecahedronGeometry(1.2, 1);
+        if (!geometry) throw new Error('Failed to create metal node geometry');
+        
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0xa67f59, 
+            metalness: 0.5 
+        });
+        if (!material) throw new Error('Failed to create metal node material');
+        
+        const node = new THREE.Mesh(geometry, material);
+        if (!node || !node.isObject3D) throw new Error('Failed to create metal node mesh');
+        
+        return node;
+    } catch (e) {
+        console.error('Error creating metal node entity:', e);
+        return null;
+    }
+}
+
+/**
+ * Creates a deer entity with body parts
+ * @returns {THREE.Object3D|null} - The deer entity or null if creation failed
+ */
+function createDeerEntity() {
+    try {
+        const body = new THREE.Group();
+        
+        // Create body
+        const bodyGeometry = new THREE.CapsuleGeometry(0.6, 1.5, 4, 8);
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xAD8A56 });
+        const bodyMesh = createValidatedMesh(bodyGeometry, bodyMaterial);
+        
+        if (!bodyMesh) throw new Error('Failed to create deer body');
+        
+        bodyMesh.position.y = 1;
+        bodyMesh.rotation.z = Math.PI / 2;
+        body.add(bodyMesh);
+        
+        // Create head
+        const headGeometry = new THREE.ConeGeometry(0.3, 0.8, 8);
+        const headMaterial = new THREE.MeshStandardMaterial({ color: 0xAD8A56 });
+        const headMesh = createValidatedMesh(headGeometry, headMaterial);
+        
+        if (!headMesh) throw new Error('Failed to create deer head');
+        
+        headMesh.position.set(1.2, 1.2, 0);
+        headMesh.rotation.z = -Math.PI / 2;
+        body.add(headMesh);
+        
+        // Create legs
+        const legGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+        const legMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        
+        const createLeg = (x, z, angleX) => {
+            const leg = createValidatedMesh(legGeometry, legMaterial);
+            if (!leg) return null;
+            
+            leg.position.set(x, 0, z);
+            leg.rotation.x = angleX;
+            return leg;
+        };
+        
+        const leg1 = createLeg(0.5, 0.4, Math.PI / 12);
+        const leg2 = createLeg(0.5, -0.4, -Math.PI / 12);
+        const leg3 = createLeg(-0.5, 0.4, Math.PI / 12);
+        const leg4 = createLeg(-0.5, -0.4, -Math.PI / 12);
+        
+        if (leg1) body.add(leg1);
+        if (leg2) body.add(leg2);
+        if (leg3) body.add(leg3);
+        if (leg4) body.add(leg4);
+        
+        return body;
+    } catch (e) {
+        console.error('Error creating deer entity:', e);
+        return null;
+    }
+}
+
+/**
+ * Creates a wolf entity with body parts
+ * @returns {THREE.Object3D|null} - The wolf entity or null if creation failed
+ */
+function createWolfEntity() {
+    try {
+        const wolfBody = new THREE.Group();
+        
+        // Body
+        const wolfBodyGeometry = new THREE.CapsuleGeometry(0.5, 1.2, 4, 8);
+        const wolfBodyMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+        const wolfBodyMesh = createValidatedMesh(wolfBodyGeometry, wolfBodyMaterial);
+        
+        if (!wolfBodyMesh) throw new Error('Failed to create wolf body');
+        
+        wolfBodyMesh.position.y = 0.8;
+        wolfBodyMesh.rotation.z = Math.PI / 2;
+        wolfBody.add(wolfBodyMesh);
+        
+        // Head
+        const wolfHeadGeometry = new THREE.ConeGeometry(0.3, 0.7, 8);
+        const wolfHeadMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+        const wolfHeadMesh = createValidatedMesh(wolfHeadGeometry, wolfHeadMaterial);
+        
+        if (!wolfHeadMesh) throw new Error('Failed to create wolf head');
+        
+        wolfHeadMesh.position.set(1, 1, 0);
+        wolfHeadMesh.rotation.z = -Math.PI / 2;
+        wolfBody.add(wolfHeadMesh);
+        
+        // Legs
+        const wolfLegGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.2, 8);
+        const wolfLegMaterial = new THREE.MeshStandardMaterial({ color: 0x606060 });
+        
+        const createWolfLeg = (x, z) => {
+            const leg = createValidatedMesh(wolfLegGeometry, wolfLegMaterial);
+            if (!leg) return null;
+            
+            leg.position.set(x, 0, z);
+            return leg;
+        };
+        
+        const wolfLeg1 = createWolfLeg(0.4, 0.3);
+        const wolfLeg2 = createWolfLeg(0.4, -0.3);
+        const wolfLeg3 = createWolfLeg(-0.4, 0.3);
+        const wolfLeg4 = createWolfLeg(-0.4, -0.3);
+        
+        if (wolfLeg1) wolfBody.add(wolfLeg1);
+        if (wolfLeg2) wolfBody.add(wolfLeg2);
+        if (wolfLeg3) wolfBody.add(wolfLeg3);
+        if (wolfLeg4) wolfBody.add(wolfLeg4);
+        
+        return wolfBody;
+    } catch (e) {
+        console.error('Error creating wolf entity:', e);
+        return null;
+    }
+}
+
+/**
+ * Creates a barrel entity
+ * @returns {THREE.Object3D|null} - The barrel entity or null if creation failed
+ */
+function createBarrelEntity() {
+    try {
+        const barrelGeometry = new THREE.CylinderGeometry(0.7, 0.7, 1.2, 12);
+        if (!barrelGeometry) throw new Error('Failed to create barrel geometry');
+        
+        const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x8B572A });
+        if (!barrelMaterial) throw new Error('Failed to create barrel material');
+        
+        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        if (!barrel || !barrel.isObject3D) throw new Error('Failed to create barrel mesh');
+        
+        return barrel;
+    } catch (e) {
+        console.error('Error creating barrel entity:', e);
+        return null;
+    }
+}
+
+/**
+ * Applies additional properties based on entity type
+ * @param {THREE.Object3D} entity - The entity to apply properties to
+ * @param {string} type - The entity type
+ */
+function applyEntityTypeProperties(entity, type) {
+    if (!entity || !type) return;
+    
+    try {
+        switch (type) {
+            case 'animal_deer':
+                entity.userData.name = 'Deer';
+                entity.userData.speed = entityTypes[type].speed || 5;
+                entity.userData.hostility = 'passive';
+                
+                // Add AI behavior for deer
+                entity.aiState = {
+                    state: 'idle',
+                    targetPosition: null,
+                    idleTime: 0,
+                    maxIdleTime: Math.random() * 5000 + 3000
+                };
+                break;
+                
+            case 'animal_wolf':
+                entity.userData.name = 'Wolf';
+                entity.userData.speed = entityTypes[type].speed || 7;
+                entity.userData.hostility = 'aggressive';
+                entity.userData.detectionRange = entityTypes[type].detectionRange || 15;
+                entity.userData.attackDamage = entityTypes[type].attackDamage || 15;
+                
+                // Add AI behavior for wolf
+                entity.aiState = {
+                    state: 'idle',
+                    targetPosition: null,
+                    idleTime: 0,
+                    maxIdleTime: Math.random() * 3000 + 2000,
+                    lastAttackTime: 0,
+                    attackCooldown: 2000
+                };
+                break;
+                
+            case 'barrel':
+                entity.userData.lootTable = entityTypes[type].lootTable || [];
+                break;
+        }
+    } catch (e) {
+        console.error(`Error applying properties to ${type} entity:`, e);
+    }
+}
+
+/**
+ * Helper function to create a validated mesh
+ * @param {THREE.BufferGeometry} geometry - The geometry for the mesh
+ * @param {THREE.Material} material - The material for the mesh
+ * @returns {THREE.Mesh|null} - The created mesh or null if invalid
+ */
+function createValidatedMesh(geometry, material) {
+    if (!geometry || !material) {
+        console.error('Invalid geometry or material provided to createValidatedMesh');
+        return null;
+    }
+    
+    try {
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        if (!mesh || !mesh.isObject3D) {
+            throw new Error('Created object is not a valid mesh');
+        }
+        
+        return mesh;
+    } catch (e) {
+        console.error('Error creating mesh:', e);
+        return null;
+    }
+}
+
+/**
+ * Helper function to validate Vector3 coordinates
+ * @param {THREE.Vector3} vector - The vector to validate
+ * @returns {boolean} - Whether the vector is valid
+ */
+function isValidVector3(vector) {
+    return vector && 
+           vector.isVector3 && 
+           Number.isFinite(vector.x) && 
+           Number.isFinite(vector.y) && 
+           Number.isFinite(vector.z);
+}
+
+/**
+ * Helper function to validate a bounding box
+ * @param {THREE.Box3} box - The bounding box to validate
+ * @returns {boolean} - Whether the box is valid
+ */
+function isValidBoundingBox(box) {
+    return box && 
+           box.isBox3 && 
+           isValidVector3(box.min) && 
+           isValidVector3(box.max);
+}
+
+/**
+ * Gets a safe bounding box for an entity
+ * @param {THREE.Object3D} entity - The entity to get bounds for
+ * @returns {THREE.Box3|null} - The bounding box or null if invalid
+ */
+function getSafeBoundingBox(entity) {
+    if (!entity || !entity.isObject3D) {
+        return null;
+    }
+    
+    try {
+        const box = new THREE.Box3().setFromObject(entity);
+        
+        if (!isValidBoundingBox(box)) {
+            throw new Error('Invalid bounding box');
+        }
+        
+        return box;
+    } catch (e) {
+        console.error('Error getting bounding box:', e);
+        return null;
+    }
+}
