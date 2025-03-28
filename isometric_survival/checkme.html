@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open-World Survival Game</title>
+    <!-- Include your original CSS here -->
+    <style>
+        /* Your existing CSS styles */
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        
+        /* Add loading styles */
+        #loading { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: #000; 
+            color: white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            z-index: 1000;
+        }
+        #error {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            color: red;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+            flex-direction: column;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Add loading indicators -->
+    <div id="loading">Loading 3D engine...</div>
+    <div id="error">
+        <h2>Failed to load 3D engine</h2>
+        <p>Please check your internet connection or try a different browser.</p>
+        <button onclick="location.reload()">Try Again</button>
+    </div>
+    
+    <!-- Your existing HTML elements -->
+    <div id="stats-panel">
+        <!-- ... existing content ... -->
+    </div>
+    
+    <!-- Include the loading code -->
+    <script>
+        // Global variables to hold our dependencies
+        let THREE;
+        let OrbitControls;
+        let loadingComplete = false;
+        let loadingFailed = false;
+        let loadingTimeout;
+        
+        // Set a timeout to detect if loading is taking too long
+        loadingTimeout = setTimeout(() => {
+            if (!loadingComplete && !loadingFailed) {
+                loadingFailed = true;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'flex';
+                console.error('Loading timed out. Something went wrong.');
+            }
+        }, 10000); // 10 seconds timeout
+        
+        // Function to load scripts in sequence with proper error handling
+        function loadScript(url, callback) {
+            console.log(`Loading: ${url}`);
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = url;
+            script.onload = callback;
+            script.onerror = function() {
+                console.error(`Failed to load: ${url}`);
+                const nextUrl = this.getAttribute('data-fallback');
+                if (nextUrl) {
+                    console.log(`Trying fallback: ${nextUrl}`);
+                    loadScript(nextUrl, callback);
+                } else {
+                    loadingFailed = true;
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').style.display = 'flex';
+                }
+            };
+            
+            // Add fallback URL if provided
+            if (arguments.length > 2 && arguments[2]) {
+                script.setAttribute('data-fallback', arguments[2]);
+            }
+            
+            document.head.appendChild(script);
+        }
+        
+        // First load Three.js, then load OrbitControls, then initialize the game
+        function startLoading() {
+            // First try to load Three.js
+            loadScript(
+                'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js', 
+                function() {
+                    // Now THREE is available globally
+                    if (window.THREE) {
+                        THREE = window.THREE;
+                        console.log('Three.js loaded successfully');
+                        
+                        // Now load OrbitControls (which depends on THREE)
+                        loadScript(
+                            'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js',
+                            function() {
+                                // OrbitControls should now be available
+                                if (window.THREE.OrbitControls) {
+                                    OrbitControls = window.THREE.OrbitControls;
+                                    console.log('OrbitControls loaded successfully');
+                                    
+                                    // Loading complete, start the game
+                                    loadingComplete = true;
+                                    clearTimeout(loadingTimeout);
+                                    document.getElementById('loading').style.display = 'none';
+                                    initGame();
+                                } else {
+                                    console.error('OrbitControls not defined after loading');
+                                    // Try to start without OrbitControls
+                                    loadingComplete = true;
+                                    clearTimeout(loadingTimeout);
+                                    document.getElementById('loading').style.display = 'none';
+                                    initGame();
+                                }
+                            },
+                            'https://cdnjs.cloudflare.com/ajax/libs/three.js/132/examples/js/controls/OrbitControls.js'
+                        );
+                    } else {
+                        console.error('THREE not defined after loading');
+                        loadingFailed = true;
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('error').style.display = 'flex';
+                    }
+                },
+                'https://cdnjs.cloudflare.com/ajax/libs/three.js/132/three.min.js'
+            );
+        }
+        
+        // Start loading process
+        window.addEventListener('DOMContentLoaded', startLoading);
+        
+        // Function to initialize your game once libraries are loaded
+        function initGame() {
+            console.log('Initializing game');
+            
+            try {
+                // IMPORTANT: Move your entire game code here
+                // Replace all occurrences of "THREE" with the global variable
+                // Replace all occurrences of "OrbitControls" with the global class
+                
+                // --- Game state ---
+                const state = {
+                    player: {
+                        health: 100,
+                        hunger: 100,
+                        thirst: 100,
+                        position: new THREE.Vector3(0, 1, 0)
+                    },
+                    // ... rest of your state object ...
+                };
+                
+                // All your original game code goes here, but using the global THREE and OrbitControls
+                
+            } catch (error) {
+                console.error('Error initializing game:', error);
+                document.getElementById('error').style.display = 'flex';
+                document.getElementById('error').innerHTML += `<p>Error details: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
