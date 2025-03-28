@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open-World Survival Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #ui-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+        .quick-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            border-radius: 5px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .slot-key {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        .slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 5px;
+            font-size: 14px;
+        }
+        .slot-icon {
+            width: 40px;
+            height: 40px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        #inventory-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 400px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #555;
+            border-radius: 10px;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            color: white;
+        }
+        #inventory-slots {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+        }
+        .inventory-slot {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid #555;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        #stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 10px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .stat-bar {
+            width: 150px;
+            height: 15px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #555;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .stat-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .health-fill { background-color: #e74c3c; }
+        .hunger-fill { background-color: #f39c12; }
+        .thirst-fill { background-color: #3498db; }
+        #interaction-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -70px);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        #message-log {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .message {
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            animation: fadeOut 5s forwards;
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="stats-panel">
+        <div>Health</div>
+        <div class="stat-bar"><div class="stat-fill health-fill" style="width: 100%;"></div></div>
+        <div>Hunger</div>
+        <div class="stat-bar"><div class="stat-fill hunger-fill" style="width: 100%;"></div></div>
+        <div>Thirst</div>
+        <div class="stat-bar"><div class="stat-fill thirst-fill" style="width: 100%;"></div></div>
+    </div>
+
+    <div id="ui-container">
+        <div class="quick-slot" id="slot-1"><span class="slot-key">1</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-2"><span class="slot-key">2</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-3"><span class="slot-key">3</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-4"><span class="slot-key">4</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-5"><span class="slot-key">5</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+        <div class="quick-slot" id="slot-6"><span class="slot-key">6</span><div class="slot-icon"></div><span class="slot-count"></span></div>
+    </div>
+
+    <div id="inventory-panel">
+        <h2>Inventory</h2>
+        <div id="inventory-slots"></div>
+    </div>
+
+    <div id="interaction-text"></div>
+    <div id="message-log"></div>
+
+    <script type="module">
+        let THREE, OrbitControls;
+
+        const threeJSURLs = [
+            'https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/three.module.js',
+            'https://unpkg.com/three@0.132.2/build/three.module.js',
+            './lib/three.module.js' // Local fallback
+        ];
+
+        const orbitControlsURLs = [
+            'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/controls/OrbitControls.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/examples/jsm/controls/OrbitControls.min.js',
+            'https://unpkg.com/three@0.132.2/examples/jsm/controls/OrbitControls.js',
+            './lib/OrbitControls.js' // Local fallback
+        ];
+
+        async function loadThreeJS() {
+            for (let i = 0; i < threeJSURLs.length; i++) {
+                try {
+                    THREE = await import(threeJSURLs[i]);
+                    OrbitControls = (await import(orbitControlsURLs[i])).OrbitControls;
+                    if (THREE && THREE.Scene && OrbitControls) {
+                        console.log(`Successfully loaded Three.js from ${threeJSURLs[i]}`);
+                        return true;
+                    }
+                    throw new Error(`Loaded but invalid Three.js module from ${threeJSURLs[i]}`);
+                } catch (error) {
+                    console.error(`Failed to load Three.js from ${threeJSURLs[i]}:`, error);
+                    if (i === threeJSURLs.length - 1) {
+                        document.body.innerHTML = `
+                            <div style="color: white; padding: 20px; text-align: center;">
+                                <h1>Failed to Load Three.js</h1>
+                                <p>Unable to load Three.js from all sources, including local fallback. Please:</p>
+                                <ul style="list-style: none;">
+                                    <li>✓ Check your internet connection</li>
+                                    <li>✓ Ensure you're running this through a local server (not file://)</li>
+                                    <li>✓ Verify 'lib/three.module.js' and 'lib/OrbitControls.js' exist in your project folder</li>
+                                    <li>✓ Check browser console for detailed errors</li>
+                                </ul>
+                                <p>Error details: ${error.message}</p>
+                            </div>`;
+                        throw new Error('All Three.js sources failed, including local fallback');
+                    }
+                }
+            }
+        }
+
+        async function initializeGame() {
+            try {
+                await loadThreeJS();
+
+                // Game state
+                const state = {
+                    player: {
+                        health: 100,
+                        hunger: 100,
+                        thirst: 100,
+                        position: new THREE.Vector3(0, 0, 0)
+                    },
+                    inventory: {
+                        items: [],
+                        maxSlots: 32,
+                        selectedSlot: 0
+                    },
+                    world: {
+                        time: 0,
+                        entities: []
+                    },
+                    ui: {
+                        inventoryOpen: false
+                    }
+                };
+
+                const itemDatabase = {
+                    'wood': { name: 'Wood', icon: 'wood-icon', stackable: true, maxStack: 50, type: 'resource' },
+                    'stone': { name: 'Stone', icon: 'stone-icon', stackable: true, maxStack: 50, type: 'resource' },
+                    'metal_ore': { name: 'Metal Ore', icon: 'metal-ore-icon', stackable: true, maxStack: 20, type: 'resource' },
+                    'meat': { name: 'Raw Meat', icon: 'meat-icon', stackable: true, maxStack: 10, type: 'food', hungerRestore: 20, useFunction: eatFood },
+                    'axe': { name: 'Axe', icon: 'axe-icon', stackable: false, type: 'tool', durability: 100, damage: 15, useFunction: chopTree },
+                    'knife': { name: 'Knife', icon: 'knife-icon', stackable: false, type: 'weapon', durability: 100, damage: 10, useFunction: attack },
+                    'pickaxe': { name: 'Pickaxe', icon: 'pickaxe-icon', stackable: false, type: 'tool', durability: 100, useFunction: mineResource },
+                    'storage_box': { name: 'Storage Box', icon: 'storage-box-icon', stackable: true, maxStack: 5, type: 'placeable', useFunction: placeStorageBox }
+                };
+
+                const craftingRecipes = [
+                    { id: 'pickaxe', requires: [{ id: 'wood', count: 5 }, { id: 'stone', count: 3 }], result: { id: 'pickaxe', count: 1 } },
+                    { id: 'storage_box', requires: [{ id: 'wood', count: 10 }], result: { id: 'storage_box', count: 1 } }
+                ];
+
+                const entityTypes = {
+                    'tree': { model: 'tree', resources: [{ id: 'wood', count: [5, 10] }], health: 100, respawnTime: 300 },
+                    'rock': { model: 'rock', resources: [{ id: 'stone', count: [3, 8] }], health: 150, respawnTime: 400 },
+                    'metal_node': { model: 'metal_node', resources: [{ id: 'stone', count: [2, 5] }, { id: 'metal_ore', count: [2, 4] }], health: 200, respawnTime: 500 },
+                    'animal_deer': { model: 'deer', resources: [{ id: 'meat', count: [2, 4] }], health: 50, speed: 5, hostility: 'passive', respawnTime: 350 },
+                    'animal_wolf': { model: 'wolf', resources: [{ id: 'meat', count: [1, 3] }], health: 70, speed: 7, hostility: 'aggressive', detectionRange: 15, attackDamage: 15, respawnTime: 400 },
+                    'barrel': { model: 'barrel', lootTable: [{ id: 'wood', chance: 0.6, count: [1, 5] }, { id: 'stone', chance: 0.4, count: [1, 3] }, { id: 'metal_ore', chance: 0.2, count: [1, 2] }], health: 30, respawnTime: 600 }
+                };
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                let renderer;
+                try {
+                    renderer = new THREE.WebGLRenderer({ antialias: true });
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    if (!renderer.capabilities.isWebGL2 && !renderer.capabilities.isWebGL) throw new Error('WebGL not supported');
+                    document.body.appendChild(renderer.domElement);
+                } catch (error) {
+                    console.error('Renderer setup failed:', error);
+                    document.body.innerHTML = '<h1>Error: WebGL not supported by your browser</h1>';
+                    return;
+                }
+
+                camera.position.set(20, 20, 20);
+                camera.lookAt(0, 0, 0);
+
+                let controls;
+                try {
+                    controls = new OrbitControls(camera, renderer.domElement);
+                    controls.enableDamping = true;
+                    controls.dampingFactor = 0.05;
+                    controls.screenSpacePanning = false;
+                    controls.minDistance = 10;
+                    controls.maxDistance = 50;
+                    controls.maxPolarAngle = Math.PI / 2.5;
+                } catch (error) {
+                    console.error('Failed to initialize OrbitControls:', error);
+                }
+
+                let ambientLight, directionalLight, ground, player;
+                try {
+                    ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                    scene.add(ambientLight);
+
+                    directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(10, 20, 15);
+                    directionalLight.castShadow = true;
+                    scene.add(directionalLight);
+
+                    const groundGeometry = new THREE.PlaneGeometry(100, 100);
+                    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x3d9e41 });
+                    ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                    ground.rotation.x = -Math.PI / 2;
+                    ground.receiveShadow = true;
+                    scene.add(ground);
+
+                    const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+                    const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x2980b9 });
+                    player = new THREE.Mesh(playerGeometry, playerMaterial);
+                    player.position.y = 1;
+                    player.castShadow = true;
+                    player.receiveShadow = true;
+                    scene.add(player);
+                } catch (error) {
+                    console.error('Scene setup failed:', error);
+                    showMessage('Error setting up game scene');
+                }
+
+                const moveSpeed = 0.15;
+                const keysPressed = {};
+
+                document.addEventListener('keydown', (event) => {
+                    keysPressed[event.key.toLowerCase()] = true;
+                    if ('123456'.includes(event.key)) {
+                        state.inventory.selectedSlot = parseInt(event.key) - 1;
+                        updateQuickSlots();
+                    }
+                    if (event.key === 'Tab') {
+                        event.preventDefault();
+                        toggleInventory();
+                    }
+                });
+
+                document.addEventListener('keyup', (event) => {
+                    keysPressed[event.key.toLowerCase()] = false;
+                });
+
+                function addItemToInventory(item) {
+                    try {
+                        if (item.stackable) {
+                            const existingItemIndex = state.inventory.items.findIndex(i => i.id === item.id);
+                            if (existingItemIndex !== -1) {
+                                const existingItem = state.inventory.items[existingItemIndex];
+                                existingItem.count = (existingItem.count || 1) + (item.count || 1);
+                                updateInventoryUI();
+                                updateQuickSlots();
+                                return true;
+                            }
+                        }
+                        if (state.inventory.items.length < state.inventory.maxSlots) {
+                            state.inventory.items.push({ ...item, count: item.count || 1 });
+                            updateInventoryUI();
+                            updateQuickSlots();
+                            return true;
+                        }
+                        showMessage("Inventory is full!");
+                        return false;
+                    } catch (error) {
+                        console.error('Error adding item:', error);
+                        return false;
+                    }
+                }
+
+                function showMessage(text) {
+                    try {
+                        const messageLog = document.getElementById('message-log');
+                        if (!messageLog) return;
+                        const messageElement = document.createElement('div');
+                        messageElement.className = 'message';
+                        messageElement.textContent = text;
+                        messageLog.prepend(messageElement);
+                        setTimeout(() => messageElement.remove(), 5000);
+                    } catch (error) {
+                        console.error('Error showing message:', error);
+                    }
+                }
+
+                function toggleInventory() {
+                    try {
+                        state.ui.inventoryOpen = !state.ui.inventoryOpen;
+                        const inventoryPanel = document.getElementById('inventory-panel');
+                        if (inventoryPanel) inventoryPanel.style.display = state.ui.inventoryOpen ? 'flex' : 'none';
+                        if (controls) controls.enabled = !state.ui.inventoryOpen;
+                    } catch (error) {
+                        console.error('Error toggling inventory:', error);
+                    }
+                }
+
+                function updateInventoryUI() {
+                    try {
+                        const inventorySlots = document.getElementById('inventory-slots');
+                        if (!inventorySlots) return;
+                        inventorySlots.innerHTML = '';
+                        for (let i = 0; i < state.inventory.maxSlots; i++) {
+                            const slot = document.createElement('div');
+                            slot.className = 'inventory-slot';
+                            if (i < state.inventory.items.length) {
+                                const item = state.inventory.items[i];
+                                const icon = document.createElement('div');
+                                icon.className = 'slot-icon';
+                                icon.style.backgroundImage = `url('assets/${item.icon}.png')`;
+                                if (item.stackable && item.count > 1) {
+                                    const count = document.createElement('span');
+                                    count.className = 'slot-count';
+                                    count.textContent = item.count;
+                                    slot.appendChild(count);
+                                }
+                                slot.title = item.name;
+                                slot.appendChild(icon);
+                                slot.setAttribute('draggable', 'true');
+                                slot.dataset.itemIndex = i;
+                            }
+                            inventorySlots.appendChild(slot);
+                        }
+                    } catch (error) {
+                        console.error('Error updating inventory UI:', error);
+                    }
+                }
+
+                function updateQuickSlots() {
+                    try {
+                        for (let i = 1; i <= 6; i++) {
+                            const slotElement = document.getElementById(`slot-${i}`);
+                            if (!slotElement) continue;
+                            const slotIndex = i - 1;
+                            const iconElement = slotElement.querySelector('.slot-icon');
+                            const countElement = slotElement.querySelector('.slot-count');
+                            if (!iconElement || !countElement) continue;
+                            iconElement.style.backgroundImage = '';
+                            countElement.textContent = '';
+                            if (slotIndex < state.inventory.items.length) {
+                                const item = state.inventory.items[slotIndex];
+                                iconElement.style.backgroundImage = `url('assets/${item.icon}.png')`;
+                                if (item.stackable && item.count > 1) countElement.textContent = item.count;
+                            }
+                            slotElement.style.borderColor = slotIndex === state.inventory.selectedSlot ? '#f1c40f' : '#fff';
+                        }
+                    } catch (error) {
+                        console.error('Error updating quick slots:', error);
+                    }
+                }
+
+                function chopTree(tree) {
+                    try {
+                        if (tree.health <= 0) {
+                            animateTreeFalling(tree);
+                            const woodAmount = Math.floor(Math.random() * 6) + 5;
+                            addItemToInventory({ ...itemDatabase['wood'], count: woodAmount });
+                            showMessage(`+${woodAmount} Wood`);
+                            setTimeout(() => {
+                                scene.remove(tree);
+                                setTimeout(() => spawnEntity('tree', tree.position.x, tree.position.z), entityTypes['tree'].respawnTime * 1000);
+                            }, 2000);
+                        } else {
+                            tree.health -= 20;
+                            showHitEffect(tree.position);
+                        }
+                    } catch (error) {
+                        console.error('Error chopping tree:', error);
+                    }
+                }
+
+                function mineResource(resource) {
+                    try {
+                        if (resource.health <= 0) {
+                            const entityData = entityTypes[resource.type];
+                            entityData.resources.forEach(resourceData => {
+                                const amount = Math.floor(Math.random() * (resourceData.count[1] - resourceData.count[0] + 1)) + resourceData.count[0];
+                                addItemToInventory({ ...itemDatabase[resourceData.id], count: amount });
+                                showMessage(`+${amount} ${itemDatabase[resourceData.id].name}`);
+                            });
+                            scene.remove(resource);
+                            setTimeout(() => spawnEntity(resource.type, resource.position.x, resource.position.z), entityData.respawnTime * 1000);
+                        } else {
+                            resource.health -= 15;
+                            showHitEffect(resource.position);
+                        }
+                    } catch (error) {
+                        console.error('Error mining resource:', error);
+                    }
+                }
+
+                function attack(target) {
+                    try {
+                        const entityData = entityTypes[target.type];
+                        if (target.health <= 0) {
+                            entityData.resources.forEach(resourceData => {
+                                const amount = Math.floor(Math.random() * (resourceData.count[1] - resourceData.count[0] + 1)) + resourceData.count[0];
+                                addItemToInventory({ ...itemDatabase[resourceData.id], count: amount });
+                                showMessage(`+${amount} ${itemDatabase[resourceData.id].name}`);
+                            });
+                            scene.remove(target);
+                            setTimeout(() => spawnEntity(target.type, Math.random() * 80 - 40, Math.random() * 80 - 40), entityData.respawnTime * 1000);
+                        } else {
+                            target.health -= 25;
+                            showHitEffect(target.position);
+                            if (entityData.hostility === 'aggressive') {
+                                state.player.health -= entityData.attackDamage;
+                                updateStatusBars();
+                                showMessage(`${target.name} attacked you!`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error attacking:', error);
+                    }
+                }
+
+                function eatFood(food) {
+                    try {
+                        const item = state.inventory.items[state.inventory.selectedSlot];
+                        state.player.hunger = Math.min(100, state.player.hunger + food.hungerRestore);
+                        item.count--;
+                        if (item.count <= 0) state.inventory.items.splice(state.inventory.selectedSlot, 1);
+                        updateStatusBars();
+                        updateInventoryUI();
+                        updateQuickSlots();
+                        showMessage(`Ate ${food.name}, +${food.hungerRestore} hunger`);
+                    } catch (error) {
+                        console.error('Error eating food:', error);
+                    }
+                }
+
+                function placeStorageBox() {
+                    try {
+                        const item = state.inventory.items[state.inventory.selectedSlot];
+                        const direction = new THREE.Vector3();
+                        camera.getWorldDirection(direction);
+                        const boxPosition = new THREE.Vector3().copy(player.position).add(direction.multiplyScalar(3));
+                        boxPosition.y = 0.5;
+                        createStorageBox(boxPosition);
+                        item.count--;
+                        if (item.count <= 0) state.inventory.items.splice(state.inventory.selectedSlot, 1);
+                        updateInventoryUI();
+                        updateQuickSlots();
+                        showMessage("Placed storage box");
+                    } catch (error) {
+                        console.error('Error placing storage box:', error);
+                    }
+                }
+
+                function createStorageBox(position) {
+                    try {
+                        const boxGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
+                        const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                        const box = new THREE.Mesh(boxGeometry, boxMaterial);
+                        box.position.copy(position);
+                        box.castShadow = true;
+                        box.receiveShadow = true;
+                        box.userData = { type: 'storage_box', interactable: true, storage: [] };
+                        scene.add(box);
+                        state.world.entities.push(box);
+                    } catch (error) {
+                        console.error('Error creating storage box:', error);
+                    }
+                }
+
+                function animateTreeFalling(tree) {
+                    try {
+                        const fallDirection = new THREE.Vector3().subVectors(tree.position, player.position).normalize();
+                        const fallAnimation = setInterval(() => {
+                            tree.rotation.x += 0.05 * fallDirection.z;
+                            tree.rotation.z += 0.05 * fallDirection.x;
+                            if (tree.rotation.x > Math.PI / 2 || tree.rotation.z > Math.PI / 2) clearInterval(fallAnimation);
+                        }, 50);
+                    } catch (error) {
+                        console.error('Error animating tree falling:', error);
+                    }
+                }
+
+                function showHitEffect(position) {
+                    try {
+                        const particleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                        for (let i = 0; i < 5; i++) {
+                            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                            particle.position.copy(position);
+                            particle.position.y += 1;
+                            scene.add(particle);
+                            const direction = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2, Math.random() * 2 - 1).normalize();
+                            const speed = Math.random() * 0.1 + 0.05;
+                            const lifespan = Math.random() * 500 + 500;
+                            let elapsed = 0;
+                            const animateParticle = setInterval(() => {
+                                particle.position.add(direction.clone().multiplyScalar(speed));
+                                particle.scale.multiplyScalar(0.95);
+                                elapsed += 16;
+                                if (elapsed >= lifespan) {
+                                    clearInterval(animateParticle);
+                                    scene.remove(particle);
+                                }
+                            }, 16);
+                        }
+                    } catch (error) {
+                        console.error('Error showing hit effect:', error);
+                    }
+                }
+
+                function updateStatusBars() {
+                    try {
+                        document.querySelector('.health-fill').style.width = `${state.player.health}%`;
+                        document.querySelector('.hunger-fill').style.width = `${state.player.hunger}%`;
+                        document.querySelector('.thirst-fill').style.width = `${state.player.thirst}%`;
+                    } catch (error) {
+                        console.error('Error updating status bars:', error);
+                    }
+                }
+
+                function spawnEntity(type, x, z) {
+                    try {
+                        let entity;
+                        switch (type) {
+                            case 'tree':
+                                const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 8);
+                                const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                                entity = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                                const leavesGeometry = new THREE.ConeGeometry(2, 4, 8);
+                                const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x2ECC71 });
+                                const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+                                leaves.position.y = 3;
+                                entity.add(leaves);
+                                entity.position.set(x, 2.5, z);
+                                entity.userData = { type: 'tree', health: entityTypes['tree'].health, interactable: true, requiresTool: 'axe' };
+                                break;
+                            case 'rock':
+                                entity = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5, 0), new THREE.MeshStandardMaterial({ color: 0x7f8c8d }));
+                                entity.position.set(x, 0.8, z);
+                                entity.userData = { type: 'rock', health: entityTypes['rock'].health, interactable: true, requiresTool: 'pickaxe' };
+                                break;
+                            case 'metal_node':
+                                entity = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2, 1), new THREE.MeshStandardMaterial({ color: 0xa67f59, metalness: 0.5 }));
+                                entity.position.set(x, 0.8, z);
+                                entity.userData = { type: 'metal_node', health: entityTypes['metal_node'].health, interactable: true, requiresTool: 'pickaxe' };
+                                break;
+                            case 'animal_deer':
+                                const deer = new THREE.Group();
+                                const deerBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.6, 1.5, 4, 8), new THREE.MeshStandardMaterial({ color: 0xAD8A56 }));
+                                deerBody.position.y = 1;
+                                deerBody.rotation.z = Math.PI / 2;
+                                deer.add(deerBody);
+                                const deerHead = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0xAD8A56 }));
+                                deerHead.position.set(1.2, 1.2, 0);
+                                deerHead.rotation.z = -Math.PI / 2;
+                                deer.add(deerHead);
+                                const legGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+                                const legMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                                [[0.5, 0, 0.4, Math.PI / 12], [0.5, 0, -0.4, -Math.PI / 12], [-0.5, 0, 0.4, Math.PI / 12], [-0.5, 0, -0.4, -Math.PI / 12]].forEach(([px, py, pz, rx]) => {
+                                    const leg = new THREE.Mesh(legGeometry, legMaterial);
+                                    leg.position.set(px, py, pz);
+                                    leg.rotation.x = rx;
+                                    deer.add(leg);
+                                });
+                                entity = deer;
+                                entity.position.set(x, 0, z);
+                                entity.userData = { type: 'animal_deer', name: 'Deer', health: entityTypes['animal_deer'].health, interactable: true, speed: entityTypes['animal_deer'].speed, hostility: 'passive', requiresTool: 'knife' };
+                                entity.aiState = { state: 'idle', targetPosition: null, idleTime: 0, maxIdleTime: Math.random() * 5000 + 3000 };
+                                break;
+                            case 'animal_wolf':
+                                const wolf = new THREE.Group();
+                                const wolfBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.2, 4, 8), new THREE.MeshStandardMaterial({ color: 0x808080 }));
+                                wolfBody.position.y = 0.8;
+                                wolfBody.rotation.z = Math.PI / 2;
+                                wolf.add(wolfBody);
+                                const wolfHead = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 8), new THREE.MeshStandardMaterial({ color: 0x808080 }));
+                                wolfHead.position.set(1, 1, 0);
+                                wolfHead.rotation.z = -Math.PI / 2;
+                                wolf.add(wolfHead);
+                                const wolfLegGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1.2, 8);
+                                const wolfLegMaterial = new THREE.MeshStandardMaterial({ color: 0x606060 });
+                                [[0.4, 0, 0.3], [0.4, 0, -0.3], [-0.4, 0, 0.3], [-0.4, 0, -0.3]].forEach(([px, py, pz]) => {
+                                    const leg = new THREE.Mesh(wolfLegGeometry, wolfLegMaterial);
+                                    leg.position.set(px, py, pz);
+                                    wolf.add(leg);
+                                });
+                                entity = wolf;
+                                entity.position.set(x, 0, z);
+                                entity.userData = { type: 'animal_wolf', name: 'Wolf', health: entityTypes['animal_wolf'].health, interactable: true, speed: entityTypes['animal_wolf'].speed, hostility: 'aggressive', detectionRange: entityTypes['animal_wolf'].detectionRange, attackDamage: entityTypes['animal_wolf'].attackDamage, requiresTool: 'knife' };
+                                entity.aiState = { state: 'idle', targetPosition: null, idleTime: 0, maxIdleTime: Math.random() * 3000 + 2000, lastAttackTime: 0, attackCooldown: 2000 };
+                                break;
+                            case 'barrel':
+                                entity = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 12), new THREE.MeshStandardMaterial({ color: 0x8B572A }));
+                                entity.position.set(x, 0.6, z);
+                                entity.userData = { type: 'barrel', health: entityTypes['barrel'].health, interactable: true, lootTable: entityTypes['barrel'].lootTable };
+                                break;
+                        }
+                        if (entity) {
+                            entity.castShadow = true;
+                            entity.receiveShadow = true;
+                            scene.add(entity);
+                            state.world.entities.push(entity);
+                        }
+                        return entity;
+                    } catch (error) {
+                        console.error('Error spawning entity:', error);
+                        return null;
+                    }
+                }
+
+                function searchBarrel(barrel) {
+                    try {
+                        const loot = [];
+                        barrel.userData.lootTable.forEach(item => {
+                            if (Math.random() <= item.chance) {
+                                const amount = Math.floor(Math.random() * (item.count[1] - item.count[0] + 1)) + item.count[0];
+                                loot.push({ ...itemDatabase[item.id], count: amount });
+                            }
+                        });
+                        loot.forEach(item => {
+                            addItemToInventory(item);
+                            showMessage(`Found ${item.count} ${item.name}`);
+                        });
+                        if (loot.length === 0) showMessage("Barrel is empty");
+                        scene.remove(barrel);
+                        const index = state.world.entities.indexOf(barrel);
+                        if (index !== -1) state.world.entities.splice(index, 1);
+                        setTimeout(() => spawnEntity('barrel', Math.random() * 80 - 40, Math.random() * 80 - 40), entityTypes['barrel'].respawnTime * 1000);
+                    } catch (error) {
+                        console.error('Error searching barrel:', error);
+                    }
+                }
+
+                function generateWorld() {
+                    try {
+                        for (let i = 0; i < 30; i++) spawnEntity('tree', Math.random() * 80 - 40, Math.random() * 80 - 40);
+                        for (let i = 0; i < 20; i++) spawnEntity('rock', Math.random() * 80 - 40, Math.random() * 80 - 40);
+                        for (let i = 0; i < 10; i++) spawnEntity('metal_node', Math.random() * 80 - 40, Math.random() * 80 - 40);
+                        for (let i = 0; i < 5; i++) spawnEntity('animal_deer', Math.random() * 60 - 30, Math.random() * 60 - 30);
+                        for (let i = 0; i < 3; i++) spawnEntity('animal_wolf', Math.random() * 80 - 40, Math.random() * 80 - 40);
+                        for (let i = 0; i < 8; i++) spawnEntity('barrel', Math.random() * 70 - 35, Math.random() * 70 - 35);
+                    } catch (error) {
+                        console.error('Error generating world:', error);
+                    }
+                }
+
+                function setupInventory() {
+                    try {
+                        const inventorySlots = document.getElementById('inventory-slots');
+                        if (!inventorySlots) return;
+                        for (let i = 0; i < state.inventory.maxSlots; i++) {
+                            const slot = document.createElement('div');
+                            slot.className = 'inventory-slot';
+                            inventorySlots.appendChild(slot);
+                        }
+                    } catch (error) {
+                        console.error('Error setting up inventory:', error);
+                    }
+                }
+
+                function initializePlayerItems() {
+                    try {
+                        addItemToInventory({ id: 'axe', name: 'Axe', icon: 'axe-icon', stackable: false, type: 'tool', durability: 100, damage: 15, useFunction: chopTree });
+                        addItemToInventory({ id: 'knife', name: 'Knife', icon: 'knife-icon', stackable: false, type: 'weapon', durability: 100, damage: 10, useFunction: attack });
+                    } catch (error) {
+                        console.error('Error initializing player items:', error);
+                    }
+                }
+
+                function checkInteractions() {
+                    try {
+                        const raycaster = new THREE.Raycaster();
+                        const direction = new THREE.Vector3();
+                        camera.getWorldDirection(direction);
+                        raycaster.set(player.position, direction);
+                        const intersects = raycaster.intersectObjects(state.world.entities);
+                        const interactionText = document.getElementById('interaction-text');
+                        if (intersects.length > 0 && intersects[0].distance < 5) {
+                            const target = intersects[0].object;
+                            if (target.userData && target.userData.interactable) {
+                                interactionText.style.display = 'block';
+                                if (target.userData.type === 'tree') interactionText.textContent = 'Press E to chop tree';
+                                else if (target.userData.type === 'rock' || target.userData.type === 'metal_node') interactionText.textContent = 'Press E to mine';
+                                else if (target.userData.type === 'barrel') interactionText.textContent = 'Press E to search';
+                                else if (target.userData.type === 'storage_box') interactionText.textContent = 'Press E to open';
+                                else if (target.userData.type.startsWith('animal')) interactionText.textContent = 'Press E to attack';
+                                if (keysPressed['e']) {
+                                    interactWithObject(target);
+                                    keysPressed['e'] = false;
+                                }
+                                return;
+                            }
+                        }
+                        interactionText.style.display = 'none';
+                    } catch (error) {
+                        console.error('Error checking interactions:', error);
+                    }
+                }
+
+                function interactWithObject(target) {
+                    try {
+                        const selectedItem = state.inventory.items[state.inventory.selectedSlot];
+                        if (target.userData.requiresTool && (!selectedItem || selectedItem.id !== target.userData.requiresTool)) {
+                            showMessage(`You need a ${target.userData.requiresTool} to interact with this`);
+                            return;
+                        }
+                        if (target.userData.type === 'tree' && selectedItem && selectedItem.id === 'axe') chopTree(target);
+                        else if ((target.userData.type === 'rock' || target.userData.type === 'metal_node') && selectedItem && selectedItem.id === 'pickaxe') mineResource(target);
+                        else if (target.userData.type.startsWith('animal') && selectedItem && (selectedItem.id === 'knife' || selectedItem.type === 'weapon')) attack(target);
+                        else if (target.userData.type === 'barrel') searchBarrel(target);
+                        else if (target.userData.type === 'storage_box') openStorageBox(target);
+                    } catch (error) {
+                        console.error('Error interacting with object:', error);
+                    }
+                }
+
+                function openStorageBox(box) {
+                    try {
+                        showMessage("Storage boxes will be implemented soon!");
+                    } catch (error) {
+                        console.error('Error opening storage box:', error);
+                    }
+                }
+
+                function updateAI(delta) {
+                    try {
+                        state.world.entities.forEach(entity => {
+                            if (!entity.aiState) return;
+                            switch (entity.aiState.state) {
+                                case 'idle':
+                                    entity.aiState.idleTime += delta;
+                                    if (entity.aiState.idleTime > entity.aiState.maxIdleTime) {
+                                        entity.aiState.state = 'wander';
+                                        entity.aiState.idleTime = 0;
+                                        const angle = Math.random() * Math.PI * 2;
+                                        const distance = Math.random() * 10 + 5;
+                                        entity.aiState.targetPosition = new THREE.Vector3(entity.position.x + Math.cos(angle) * distance, 0, entity.position.z + Math.sin(angle) * distance);
+                                    }
+                                    if (entity.userData.hostility === 'aggressive' && entity.position.distanceTo(player.position) < entity.userData.detectionRange) entity.aiState.state = 'chase';
+                                    break;
+                                case 'wander':
+                                    if (entity.aiState.targetPosition) {
+                                        const direction = new THREE.Vector3().subVectors(entity.aiState.targetPosition, entity.position).normalize();
+                                        entity.position.x += direction.x * entity.userData.speed * delta * 0.001;
+                                        entity.position.z += direction.z * entity.userData.speed * delta * 0.001;
+                                        entity.rotation.y = Math.atan2(direction.x, direction.z);
+                                        if (entity.position.distanceTo(entity.aiState.targetPosition) < 1) {
+                                            entity.aiState.state = 'idle';
+                                            entity.aiState.idleTime = 0;
+                                            entity.aiState.maxIdleTime = Math.random() * 5000 + 2000;
+                                        }
+                                    } else entity.aiState.state = 'idle';
+                                    if (entity.userData.hostility === 'passive' && entity.position.distanceTo(player.position) < 5) entity.aiState.state = 'flee';
+                                    if (entity.userData.hostility === 'aggressive' && entity.position.distanceTo(player.position) < entity.userData.detectionRange) entity.aiState.state = 'chase';
+                                    break;
+                                case 'flee':
+                                    const fleeDirection = new THREE.Vector3().subVectors(entity.position, player.position).normalize();
+                                    entity.position.x += fleeDirection.x * entity.userData.speed * 1.5 * delta * 0.001;
+                                    entity.position.z += fleeDirection.z * entity.userData.speed * 1.5 * delta * 0.001;
+                                    entity.rotation.y = Math.atan2(fleeDirection.x, fleeDirection.z);
+                                    if (entity.position.distanceTo(player.position) > 15) {
+                                        entity.aiState.state = 'idle';
+                                        entity.aiState.idleTime = 0;
+                                    }
+                                    break;
+                                case 'chase':
+                                    if (entity.userData.hostility !== 'aggressive') {
+                                        entity.aiState.state = 'idle';
+                                        break;
+                                    }
+                                    const chaseDirection = new THREE.Vector3().subVectors(player.position, entity.position).normalize();
+                                    entity.position.x += chaseDirection.x * entity.userData.speed * delta * 0.001;
+                                    entity.position.z += chaseDirection.z * entity.userData.speed * delta * 0.001;
+                                    entity.rotation.y = Math.atan2(chaseDirection.x, chaseDirection.z);
+                                    const attackDistance = entity.position.distanceTo(player.position);
+                                    if (attackDistance < 2) {
+                                        const now = Date.now();
+                                        if (now - entity.aiState.lastAttackTime > entity.aiState.attackCooldown) {
+                                            state.player.health -= entity.userData.attackDamage;
+                                            updateStatusBars();
+                                            showMessage(`${entity.userData.name} attacked you for ${entity.userData.attackDamage} damage!`);
+                                            entity.aiState.lastAttackTime = now;
+                                        }
+                                    }
+                                    if (attackDistance > entity.userData.detectionRange * 1.5) {
+                                        entity.aiState.state = 'idle';
+                                        entity.aiState.idleTime = 0;
+                                    }
+                                    break;
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Error updating AI:', error);
+                    }
+                }
+
+                function updateDayNightCycle(delta) {
+                    try {
+                        state.world.time += delta * 0.00005;
+                        if (state.world.time > 1) state.world.time -= 1;
+                        const intensity = Math.sin(state.world.time * Math.PI) * 0.5 + 0.3;
+                        if (ambientLight) ambientLight.intensity = intensity;
+                        const sunAngle = state.world.time * Math.PI * 2;
+                        if (directionalLight) {
+                            directionalLight.position.x = Math.cos(sunAngle) * 20;
+                            directionalLight.position.y = Math.sin(sunAngle) * 20;
+                            directionalLight.intensity = Math.max(0, Math.sin(state.world.time * Math.PI) * 0.8 + 0.2);
+                        }
+                        const skyHue = state.world.time < 0.5 ? 0.6 : 0.1;
+                        const skyLightness = Math.sin(state.world.time * Math.PI) * 0.3 + 0.3;
+                        scene.background = new THREE.Color().setHSL(skyHue, 0.7, skyLightness);
+                    } catch (error) {
+                        console.error('Error updating day/night cycle:', error);
+                    }
+                }
+
+                function updatePlayerNeeds(delta) {
+                    try {
+                        state.player.hunger -= delta * 0.001;
+                        state.player.thirst -= delta * 0.0015;
+                        state.player.hunger = Math.max(0, state.player.hunger);
+                        state.player.thirst = Math.max(0, state.player.thirst);
+                        if (state.player.hunger < 10 || state.player.thirst < 10) state.player.health -= delta * 0.003;
+                        state.player.health = Math.max(0, state.player.health);
+                        if (state.player.health <= 0) {
+                            showMessage("You died!");
+                            player.position.set(0, 1, 0);
+                            state.player.health = 100;
+                            state.player.hunger = 80;
+                            state.player.thirst = 80;
+                            if (state.inventory.items.length > 0) {
+                                state.inventory.items = state.inventory.items.filter(item => item.id === 'axe' || item.id === 'knife');
+                                updateInventoryUI();
+                                updateQuickSlots();
+                                showMessage("You lost some items!");
+                            }
+                        }
+                        updateStatusBars();
+                    } catch (error) {
+                        console.error('Error updating player needs:', error);
+                    }
+                }
+
+                let lastTime = 0;
+                function animate(currentTime) {
+                    try {
+                        requestAnimationFrame(animate);
+                        const delta = currentTime - lastTime;
+                        lastTime = currentTime;
+                        if (controls) controls.update();
+                        if (!state.ui.inventoryOpen) {
+                            const moveVector = new THREE.Vector3(0, 0, 0);
+                            if (keysPressed['w']) moveVector.z -= 1;
+                            if (keysPressed['s']) moveVector.z += 1;
+                            if (keysPressed['a']) moveVector.x -= 1;
+                            if (keysPressed['d']) moveVector.x += 1;
+                            if (moveVector.length() > 0) {
+                                moveVector.normalize();
+                                const cameraDirection = new THREE.Vector3();
+                                camera.getWorldDirection(cameraDirection);
+                                cameraDirection.y = 0;
+                                cameraDirection.normalize();
+                                const cameraRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), cameraDirection);
+                                const movement = new THREE.Vector3().addScaledVector(cameraDirection, -moveVector.z).addScaledVector(cameraRight, moveVector.x);
+                                player.position.x += movement.x * moveSpeed * delta;
+                                player.position.z += movement.z * moveSpeed * delta;
+                                player.rotation.y = Math.atan2(movement.x, movement.z);
+                                if (controls) controls.target.copy(player.position);
+                            }
+                            checkInteractions();
+                            updateAI(delta);
+                            updateDayNightCycle(delta);
+                            updatePlayerNeeds(delta);
+                        }
+                        renderer.render(scene, camera);
+                    } catch (error) {
+                        console.error('Animation loop error:', error);
+                        showMessage('Game encountered an error');
+                        return;
+                    }
+                }
+
+                window.addEventListener('resize', () => {
+                    try {
+                        camera.aspect = window.innerWidth / window.innerHeight;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(window.innerWidth, window.innerHeight);
+                    } catch (error) {
+                        console.error('Resize error:', error);
+                    }
+                });
+
+                function initGame() {
+                    try {
+                        setupInventory();
+                        initializePlayerItems();
+                        generateWorld();
+                        updateInventoryUI();
+                        updateQuickSlots();
+                        showMessage("Welcome to Survival Game!");
+                        animate(0);
+                    } catch (error) {
+                        console.error('Game initialization failed:', error);
+                        showMessage('Failed to start game');
+                    }
+                }
+
+                initGame();
+            } catch (error) {
+                console.error('Game startup failed:', error);
+                document.body.innerHTML += `<h1>Failed to start game: ${error.message}</h1>`;
+            }
+        }
+
+        initializeGame();
+    </script>
+</body>
+</html>
