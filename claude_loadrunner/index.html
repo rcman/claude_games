@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lode Runner HTML5 Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px; /* COLS * TILE_SIZE */
+            height: 600px; /* ROWS * TILE_SIZE */
+        }
+
+        canvas {
+            display: block;
+            background-color: #000;
+        }
+
+        #info-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            font-size: 16px;
+            z-index: 10;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="info-panel">Level: <span id="level">1</span> | Gold: <span id="gold">0</span>/<span id="total-gold">0</span> | Lives: <span id="lives">3</span></div>
+        <div id="controls">Controls: Arrow Keys to move | Z to dig left | X to dig right</div>
+    </div>
+
+    <script>
+        // Game constants
+        const TILE_SIZE = 40;
+        const COLS = 20;
+        const ROWS = 15;
+        const PLAYER_SPEED = 3; // Slightly slower for better control
+        const ENEMY_SPEED = 1.5; // Slightly slower
+        const DIG_TIME = 180; // Frames before a hole fills (3 seconds at 60fps)
+        const ENEMY_ESCAPE_TIME = 120; // Frames for enemy to climb out (2 seconds)
+
+        // Tile types
+        const EMPTY = 0;
+        const BRICK = 1;
+        const LADDER = 2;
+        const ROPE = 3;
+        const GOLD = 4;
+        const PLAYER = 5; // Used only for initial placement
+        const ENEMY = 6; // Used only for initial placement
+        const HOLE = 7;
+        const FAKE_BRICK = 8; // Can fall through these
+
+        // Game state
+        let canvas, ctx;
+        let player = {
+            x: 0,
+            y: 0,
+            width: TILE_SIZE - 10, // Slightly smaller for easier movement
+            height: TILE_SIZE - 10,
+            dx: 0, // Use dx, dy for velocity
+            dy: 0,
+            isClimbing: false,
+            isOnRope: false,
+            isFalling: false,
+            isDigging: false,
+            digCooldown: 0,
+            goldCollected: 0,
+            lives: 3,
+            respawnX: 0, // Remember start position
+            respawnY: 0
+        };
+
+        let enemies = [];
+        let holes = [];
+        let totalGold = 0;
+        let level = 1;
+        let currentLevel = [];
+        let isGameOver = false;
+        let gameWon = false;
+
+        // Keyboard state
+        const keys = {};
+
+        // Game initialization
+        window.onload = function() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            // Listen for keyboard events
+            window.addEventListener('keydown', function(e) {
+                keys[e.key] = true;
+                // Prevent default arrow key scrolling
+                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                    e.preventDefault();
+                }
+                // Handle restart
+                 if (isGameOver && (e.key === 'r' || e.key === 'R')) {
+                    restartGame();
+                }
+            });
+
+            window.addEventListener('keyup', function(e) {
+                keys[e.key] = false;
+            });
+
+            // Start the game
+            loadLevel(level);
+            gameLoop();
+        };
+
+        // Game loop
+        function gameLoop() {
+            update();
+            render();
+            if (!isGameOver) {
+                 requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Update game state
+        function update() {
+            if (isGameOver) return;
+
+            // Update player state (gravity, climbing, etc.)
+            updatePlayerState();
+
+            // Process player input
+            handlePlayerInput();
+
+            // Move the player
+            movePlayer();
+
+            // Update enemies
+            updateEnemies();
+
+            // Update holes
+            updateHoles();
+
+            // Check for level completion only if not all gold collected
+             if (player.goldCollected < totalGold && getTile(Math.floor((player.x + player.width / 2) / TILE_SIZE), 0) === LADDER) {
+                 // Check if player reached top ladder with all gold
+                 // This condition seems misplaced, level complete check should be separate
+             } else {
+                 checkLevelComplete();
+             }
+
+             // Check for enemy collision
+             checkEnemyCollision(); // Do this *after* moving player and enemies
+
+             // Decrease dig cooldown
+             if (player.digCooldown > 0) {
+                 player.digCooldown--;
+             }
+        }
+
+        // Get tile at specific world coordinates
+        function getTileAt(x, y) {
+            const col = Math.floor(x / TILE_SIZE);
+            const row = Math.floor(y / TILE_SIZE);
+            return getTile(col, row);
+        }
+
+        // Update player state based on environment
+        function updatePlayerState() {
+            const centerX = player.x + player.width / 2;
+            const feetY = player.y + player.height;
+            const headY = player.y;
+
+            const currentCol = Math.floor(centerX / TILE_SIZE);
+            const currentRow = Math.floor((player.y + player.height / 2) / TILE_SIZE); // Check middle of player
+            const footRow = Math.floor(feetY / TILE_SIZE); // Row player's feet are in
+            const tileBelowFoot = getTile(currentCol, footRow); // Tile directly below center feet
+            const tileAtFeet = getTile(currentCol, Math.floor((feetY - 1) / TILE_SIZE)); // Tile feet are slightly overlapping
+
+            const tileLeftFoot = getTile(Math.floor(player.x / TILE_SIZE), footRow);
+            const tileRightFoot = getTile(Math.floor((player.x + player.width -1) / TILE_SIZE), footRow);
+
+
+            // --- Determine Climbing State ---
+            const tileAtCenter = getTile(currentCol, currentRow);
+            const canClimb = (tileAtCenter === LADDER || tileAtFeet === LADDER);
+            player.isClimbing = canClimb;
+
+            // --- Determine Rope State ---
+            // Must be near the vertical center of the tile to grab rope
+            const isOnRopeTile = (tileAtCenter === ROPE || (tileAtFeet === ROPE && Math.abs((player.y + player.height / 2) - (currentRow * TILE_SIZE + TILE_SIZE / 2)) < TILE_SIZE / 2));
+            player.isOnRope = isOnRopeTile && !player.isFalling; // Don't grab rope if falling past it
+
+            // --- Apply Gravity ---
+            player.isFalling = false;
+            if (!player.isClimbing && !player.isOnRope) {
+                // Check for solid ground slightly below the player's feet
+                 const isGroundBelow = (tileBelowFoot === BRICK || tileBelowFoot === LADDER || tileBelowFoot === FAKE_BRICK ||
+                                     tileLeftFoot === BRICK || tileLeftFoot === LADDER || tileLeftFoot === FAKE_BRICK ||
+                                     tileRightFoot === BRICK || tileRightFoot === LADDER || tileRightFoot === FAKE_BRICK);
+
+                 // Check if feet are *just* above the ground tile (allow standing on edges)
+                 const isOnGround = isGroundBelow && feetY >= footRow * TILE_SIZE && feetY < footRow * TILE_SIZE + PLAYER_SPEED * 1.5;
+
+
+                if (!isOnGround) {
+                    player.dy = PLAYER_SPEED * 1.5; // Apply gravity (faster than normal move)
+                    player.isFalling = true;
+                } else {
+                    // Snap to ground if standing on it
+                    player.y = footRow * TILE_SIZE - player.height;
+                    player.dy = 0;
+                    player.isFalling = false;
+                }
+            } else {
+                // No gravity if climbing or on rope
+                player.dy = 0;
+                 if (player.isOnRope) {
+                     // Snap vertically to rope center while moving horizontally
+                     player.y = currentRow * TILE_SIZE + (TILE_SIZE - player.height)/2;
+                 }
+            }
+        }
+
+        // Handle player keyboard input
+        function handlePlayerInput() {
+            // Reset horizontal speed unless falling
+            if (!player.isFalling) {
+               player.dx = 0;
+            }
+             // Vertical speed is handled by gravity/climbing logic primarily
+             // Only set dy based on input if climbing
+            if (!player.isClimbing && !player.isOnRope && !player.isFalling) {
+                player.dy = 0; // Reset vertical speed if on ground
+            }
+
+            // --- Movement ---
+            if (keys['ArrowLeft']) {
+                player.dx = -PLAYER_SPEED;
+            } else if (keys['ArrowRight']) {
+                player.dx = PLAYER_SPEED;
+            } else {
+                 if (!player.isFalling) player.dx = 0; // Stop horizontal movement if no key pressed and not falling
+            }
+
+            if (player.isClimbing) {
+                 player.dx = 0; // No horizontal movement on ladders usually
+                if (keys['ArrowUp']) {
+                    player.dy = -PLAYER_SPEED;
+                    // Prevent moving up into solid block
+                     const tileAbove = getTileAt(player.x + player.width / 2, player.y - 1);
+                     if (tileAbove === BRICK || tileAbove === FAKE_BRICK) player.dy = 0;
+
+                } else if (keys['ArrowDown']) {
+                    player.dy = PLAYER_SPEED;
+                } else {
+                    player.dy = 0; // Stop vertical movement on ladder
+                }
+            } else if (player.isOnRope) {
+                 // Allow up/down movement only if there's a ladder at the rope position
+                 const tileAtCenter = getTileAt(player.x + player.width/2, player.y + player.height/2);
+                 if (tileAtCenter === LADDER) {
+                     if (keys['ArrowUp']) {
+                         player.dy = -PLAYER_SPEED;
+                         player.isOnRope = false; // Transition off rope onto ladder
+                         player.isClimbing = true;
+                     } else if (keys['ArrowDown']) {
+                         player.dy = PLAYER_SPEED;
+                         player.isOnRope = false; // Transition off rope onto ladder
+                         player.isClimbing = true;
+                     } else {
+                          player.dy = 0; // Stop vertical if on rope+ladder but not moving V
+                     }
+                 } else {
+                     player.dy = 0; // No vertical move on rope without ladder
+                 }
+
+            } else if (keys['ArrowUp'] || keys['ArrowDown']) {
+                 // Allow starting climb only if standing near a ladder base or top
+                 const feetY = player.y + player.height;
+                 const headY = player.y;
+                 const centerX = player.x + player.width / 2;
+                 const tileBelow = getTileAt(centerX, feetY + 5); // Check slightly below feet
+                 const tileAbove = getTileAt(centerX, headY - 5); // Check slightly above head
+                 const tileAtHead = getTileAt(centerX, headY);
+                 const tileAtFeet = getTileAt(centerX, feetY-1); // Tile feet are in
+
+                 if (keys['ArrowUp'] && (tileAtFeet === LADDER || tileAtHead === LADDER)) {
+                      player.isClimbing = true;
+                      player.dy = -PLAYER_SPEED;
+                      player.dx = 0; // Center on ladder
+                      player.x = Math.floor(centerX / TILE_SIZE) * TILE_SIZE + (TILE_SIZE - player.width) / 2;
+                 } else if (keys['ArrowDown'] && tileBelow === LADDER && (tileAtFeet === EMPTY || tileAtFeet === ROPE)) {
+                      player.isClimbing = true;
+                      player.dy = PLAYER_SPEED;
+                       player.dx = 0; // Center on ladder
+                       player.x = Math.floor(centerX / TILE_SIZE) * TILE_SIZE + (TILE_SIZE - player.width) / 2;
+                 }
+
+            }
+
+
+            // --- Digging ---
+             const canDig = !player.isFalling && !player.isClimbing && player.digCooldown === 0;
+             if (canDig) {
+                 const Pcol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+                 const Prow = Math.floor((player.y + player.height) / TILE_SIZE); // Row below feet
+
+                 // Need solid ground directly beneath player to dig adjacent tiles
+                 const standingTile = getTile(Pcol, Prow);
+                 const isSolidGround = (standingTile === BRICK || standingTile === FAKE_BRICK);
+
+                 if (isSolidGround) {
+                     // Dig left
+                     if (keys['z'] || keys['Z']) {
+                         const digCol = Pcol - 1;
+                         const digRow = Prow;
+                         const targetTile = getTile(digCol, digRow);
+                         if (targetTile === BRICK) { // Can only dig BRICK, not FAKE_BRICK
+                             setTile(digCol, digRow, HOLE);
+                             holes.push({ x: digCol, y: digRow, timer: DIG_TIME });
+                             player.digCooldown = 30; // Prevent rapid digging (0.5 sec)
+                             keys['z'] = keys['Z'] = false; // Consume key press
+                         }
+                     }
+                     // Dig right
+                     else if (keys['x'] || keys['X']) {
+                         const digCol = Pcol + 1;
+                         const digRow = Prow;
+                          const targetTile = getTile(digCol, digRow);
+                         if (targetTile === BRICK) { // Can only dig BRICK
+                             setTile(digCol, digRow, HOLE);
+                             holes.push({ x: digCol, y: digRow, timer: DIG_TIME });
+                             player.digCooldown = 30; // Prevent rapid digging
+                             keys['x'] = keys['X'] = false; // Consume key press
+                         }
+                     }
+                 }
+             }
+        }
+
+         // Check collision between player and a specific tile type
+        function checkTileCollision(newX, newY, tileType) {
+            const corners = [
+                { x: newX, y: newY },                                // Top-left
+                { x: newX + player.width, y: newY },                // Top-right
+                { x: newX, y: newY + player.height },               // Bottom-left
+                { x: newX + player.width, y: newY + player.height } // Bottom-right
+            ];
+
+            for (const corner of corners) {
+                const col = Math.floor(corner.x / TILE_SIZE);
+                const row = Math.floor(corner.y / TILE_SIZE);
+                if (getTile(col, row) === tileType) {
+                    return { collided: true, col: col, row: row };
+                }
+            }
+            return { collided: false };
+        }
+
+
+        // Move the player and handle collisions
+        function movePlayer() {
+            let targetX = player.x + player.dx;
+            let targetY = player.y + player.dy;
+
+            // --- Collision Detection & Resolution ---
+
+            // Create bounding box for the next position
+             const nextPlayerRect = {
+                x: targetX,
+                y: targetY,
+                width: player.width,
+                height: player.height
+            };
+
+             // Check collision tiles (BRICK and FAKE_BRICK)
+            const collisionTiles = [BRICK, FAKE_BRICK];
+
+            // Check horizontal movement
+            if (player.dx !== 0) {
+                 let collisionX = false;
+                 // Check corners in the direction of movement
+                 const checkY1 = targetY;
+                 const checkY2 = targetY + player.height - 1; // -1 to avoid snagging on floor when moving horizontally
+                 const checkX = (player.dx > 0) ? targetX + player.width : targetX;
+
+                 const tile1 = getTileAt(checkX, checkY1);
+                 const tile2 = getTileAt(checkX, checkY2);
+
+                 if (collisionTiles.includes(tile1) || collisionTiles.includes(tile2)) {
+                      collisionX = true;
+                      // Adjust position to be adjacent to the wall
+                      if (player.dx > 0) {
+                          targetX = Math.floor(checkX / TILE_SIZE) * TILE_SIZE - player.width - 0.01; // Epsilon to prevent sticking
+                      } else {
+                           targetX = Math.ceil(checkX / TILE_SIZE) * TILE_SIZE;
+                      }
+                      player.dx = 0; // Stop horizontal movement
+                 }
+            }
+
+            // Check vertical movement
+             if (player.dy !== 0) {
+                let collisionY = false;
+                 // Check corners in the direction of movement
+                const checkX1 = targetX; // Use potentially adjusted X
+                const checkX2 = targetX + player.width;
+                const checkY = (player.dy > 0) ? targetY + player.height : targetY;
+
+                const tile1 = getTileAt(checkX1, checkY);
+                const tile2 = getTileAt(checkX2, checkY);
+
+                 // Allow moving down through ladders/ropes, but collide upwards
+                 const isMovingDownThroughPassable = player.dy > 0 && (tile1 === LADDER || tile1 === ROPE || tile2 === LADDER || tile2 === ROPE);
+                  // Allow moving up through ropes (but not ladders unless climbing state is active)
+                 const isMovingUpThroughRope = player.dy < 0 && (tile1 === ROPE || tile2 === ROPE);
+
+
+                if (collisionTiles.includes(tile1) || collisionTiles.includes(tile2)) {
+                     if (!isMovingDownThroughPassable && !isMovingUpThroughRope) {
+                         collisionY = true;
+                          // Adjust position to be adjacent to the floor/ceiling
+                         if (player.dy > 0) {
+                             targetY = Math.floor(checkY / TILE_SIZE) * TILE_SIZE - player.height - 0.01; // Epsilon
+                             player.isFalling = false; // Hit the ground
+                         } else {
+                             targetY = Math.ceil(checkY / TILE_SIZE) * TILE_SIZE;
+                         }
+                         player.dy = 0; // Stop vertical movement
+                     }
+                }
+            }
+
+             // --- Update Position ---
+            player.x = targetX;
+            player.y = targetY;
+
+
+            // Keep player within canvas bounds (redundant if level has borders, but safe)
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+            player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+
+            // --- Check for Gold Collection ---
+            const playerCenterCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+            const playerCenterRow = Math.floor((player.y + player.height / 2) / TILE_SIZE);
+
+            if (getTile(playerCenterCol, playerCenterRow) === GOLD) {
+                setTile(playerCenterCol, playerCenterRow, EMPTY);
+                player.goldCollected++;
+                updateInfoPanel();
+            }
+
+        }
+
+        // Update enemy positions and state
+        function updateEnemies() {
+            enemies.forEach((enemy, index) => {
+                const enemyCenterX = enemy.x + (TILE_SIZE - 10) / 2;
+                const enemyFeetY = enemy.y + (TILE_SIZE - 10);
+                const enemyCol = Math.floor(enemyCenterX / TILE_SIZE);
+                const enemyRow = Math.floor((enemy.y + (TILE_SIZE-10)/2) / TILE_SIZE);
+                const enemyFootRow = Math.floor(enemyFeetY / TILE_SIZE);
+
+                const tileAtEnemy = getTile(enemyCol, enemyRow);
+                const tileBelowEnemy = getTile(enemyCol, enemyFootRow);
+
+                // --- Check if trapped in a hole ---
+                if (tileAtEnemy === HOLE || tileBelowEnemy === HOLE) {
+                     if (!enemy.inHole) {
+                         enemy.inHole = true;
+                         enemy.holeTimer = ENEMY_ESCAPE_TIME;
+                         // Snap enemy into the hole position
+                         enemy.y = (tileAtEnemy === HOLE ? enemyRow : enemyFootRow) * TILE_SIZE + 5; // Align visually in hole
+                         enemy.x = enemyCol * TILE_SIZE + 5;
+                     }
+                }
+
+                if (enemy.inHole) {
+                    enemy.holeTimer--;
+                    if (enemy.holeTimer <= 0) {
+                        // Try to climb out
+                        // Check if hole still exists (might have been filled by player walking over)
+                        const holeTile = getTile(enemyCol, Math.floor(enemy.y / TILE_SIZE));
+                        if (holeTile === HOLE) {
+                           // TODO: Implement climb out logic - for now, just free them
+                            enemy.inHole = false;
+                            // Move enemy up slightly to get out of hole tile
+                            enemy.y -= TILE_SIZE / 2;
+                        } else {
+                             // Hole was filled while enemy was inside - enemy might be stuck or dead
+                             // For simplicity, let's just mark them as not in hole anymore
+                             enemy.inHole = false;
+                        }
+
+                    }
+                    // No movement while in hole and timer is active
+                    return;
+                }
+
+                // --- Enemy Movement AI (Simple) ---
+                let dx = 0;
+                let dy = 0;
+                const canUseLadder = (tileAtEnemy === LADDER || tileBelowEnemy === LADDER);
+                const isOnRopeTile = (tileAtEnemy === ROPE);
+
+                // Basic gravity
+                const groundBelow = getTile(enemyCol, enemyFootRow + 1); // Check tile below feet row
+                 const isFalling = !canUseLadder && !isOnRopeTile && groundBelow !== BRICK && groundBelow !== FAKE_BRICK && groundBelow !== LADDER;
+
+
+                if (isFalling) {
+                    dy = ENEMY_SPEED * 1.5;
+                } else {
+                     // If not falling, decide direction based on player position
+                     const targetCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+                     const targetRow = Math.floor((player.y + player.height / 2) / TILE_SIZE);
+
+                     // Prefer ladders/ropes if available and useful
+                     let moveVertical = false;
+                     if (canUseLadder) {
+                         if (targetRow < enemyRow && getTile(enemyCol, enemyRow - 1) === LADDER) { // Player above, ladder continues up
+                             dy = -ENEMY_SPEED;
+                             moveVertical = true;
+                         } else if (targetRow > enemyRow && tileBelowEnemy === LADDER) { // Player below, ladder continues down
+                             dy = ENEMY_SPEED;
+                             moveVertical = true;
+                         }
+                     }
+
+                     // Horizontal movement (only if not moving vertically on ladder)
+                     if (!moveVertical) {
+                          if (targetCol < enemyCol && canMove(enemy, -1, 0)) {
+                             dx = -ENEMY_SPEED;
+                         } else if (targetCol > enemyCol && canMove(enemy, 1, 0)) {
+                             dx = ENEMY_SPEED;
+                         }
+
+                         // If horizontal movement is blocked, and on a ladder, maybe go vertical anyway
+                         if (dx === 0 && canUseLadder) {
+                              if (targetRow < enemyRow && getTile(enemyCol, enemyRow - 1) === LADDER) dy = -ENEMY_SPEED;
+                              else if (targetRow > enemyRow && tileBelowEnemy === LADDER) dy = ENEMY_SPEED;
+                         }
+                     }
+
+                      // Snap to rope if on one
+                     if (isOnRopeTile) {
+                         enemy.y = enemyRow * TILE_SIZE + (TILE_SIZE - (TILE_SIZE-10))/2; // Center on rope
+                         dy = 0; // No vertical movement unless transitioning to ladder
+                          // Force horizontal movement on rope
+                         if (targetCol < enemyCol && canMove(enemy, -1, 0)) dx = -ENEMY_SPEED;
+                         else if (targetCol > enemyCol && canMove(enemy, 1, 0)) dx = ENEMY_SPEED;
+                         else dx = 0; // Stop if blocked on rope
+                     }
+                 }
+
+                // Apply movement and check collisions (simplified enemy collision)
+                let nextX = enemy.x + dx;
+                let nextY = enemy.y + dy;
+
+                 // Basic Wall Collision (less precise than player)
+                const nextCol = Math.floor((nextX + (TILE_SIZE-10)/2) / TILE_SIZE);
+                const nextRow = Math.floor((nextY + (TILE_SIZE-10)/2) / TILE_SIZE);
+                const nextTile = getTile(nextCol, nextRow);
+                 const nextTileBelow = getTile(nextCol, nextRow + 1);
+
+
+                if (dx !== 0 && (nextTile === BRICK || nextTile === FAKE_BRICK)) {
+                    nextX = enemy.x; // Don't move horizontally
+                }
+                 if (dy !== 0 && (nextTile === BRICK || nextTile === FAKE_BRICK)) {
+                     // Allow falling through passable tiles
+                      if (!(dy > 0 && (nextTile === LADDER || nextTile === ROPE || nextTile === EMPTY || nextTile === HOLE))) {
+                          nextY = enemy.y; // Don't move vertically
+                      }
+                 }
+
+
+                enemy.x = nextX;
+                enemy.y = nextY;
+
+                 // Keep enemy within bounds
+                 enemy.x = Math.max(0, Math.min(canvas.width - (TILE_SIZE-10), enemy.x));
+                 enemy.y = Math.max(0, Math.min(canvas.height - (TILE_SIZE-10), enemy.y));
+            });
+        }
+
+        // Helper function to check if enemy can move horizontally
+        function canMove(enemy, dirX, dirY) {
+             const checkX = enemy.x + (TILE_SIZE - 10) / 2 + dirX * TILE_SIZE; // Check one tile ahead
+             const checkY = enemy.y + (TILE_SIZE - 10) / 2 + dirY * TILE_SIZE;
+             const tile = getTileAt(checkX, checkY);
+             const tileBelow = getTileAt(checkX, checkY + TILE_SIZE / 2 + 1); // Check ground below destination
+
+             // Cannot move into solid walls
+             if (tile === BRICK || tile === FAKE_BRICK) return false;
+
+             // If moving horizontally, require ground or rope/ladder beneath, unless falling
+             if (dirY === 0 && !(tileBelow === BRICK || tileBelow === FAKE_BRICK || tileBelow === LADDER || tile === ROPE || tile === LADDER)) {
+                  // Exception: allow moving off a ledge to fall
+                  const currentTileBelow = getTileAt(enemy.x + (TILE_SIZE - 10) / 2, enemy.y + TILE_SIZE);
+                  if (currentTileBelow === BRICK || currentTileBelow === LADDER || currentTileBelow === FAKE_BRICK) {
+                      return true; // Allow walking off edge
+                  }
+                  return false;
+             }
+
+             return true;
+        }
+
+
+        // Update holes (fill them after some time)
+        function updateHoles() {
+            for (let i = holes.length - 1; i >= 0; i--) {
+                holes[i].timer--;
+
+                if (holes[i].timer <= 0) {
+                    const holeX = holes[i].x;
+                    const holeY = holes[i].y;
+                    setTile(holeX, holeY, BRICK); // Refill hole
+
+                    // Check if an enemy is inside when it refills
+                    enemies.forEach((enemy, enemyIndex) => {
+                        const enemyCol = Math.floor((enemy.x + (TILE_SIZE - 10) / 2) / TILE_SIZE);
+                        const enemyRow = Math.floor((enemy.y + (TILE_SIZE - 10) / 2) / TILE_SIZE);
+                        if (enemyCol === holeX && enemyRow === holeY) {
+                            // Enemy is caught! For simplicity, remove the enemy.
+                            // A more complex game might kill/respawn them.
+                            console.log("Enemy caught in refilling hole!");
+                            enemies.splice(enemyIndex, 1);
+                            // Note: This might cause issues if iterating enemies elsewhere.
+                            // A safer approach is to mark enemy for removal and clean up later.
+                            // Or, simply let the enemy get pushed out (current behavior if not explicitly handled)
+                        }
+                    });
+
+                    // Check if player is inside when it refills
+                     const playerCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+                     const playerRow = Math.floor((player.y + player.height / 2) / TILE_SIZE);
+                      if (playerCol === holeX && playerRow === holeY) {
+                          // Player is caught!
+                          playerDied();
+                      }
+
+
+                    holes.splice(i, 1); // Remove hole from list
+                }
+            }
+        }
+
+        // Check for enemy collision
+        function checkEnemyCollision() {
+            if (isGameOver) return; // No collision checks if game over
+
+            const playerRect = {
+                x: player.x + 2, // Slightly smaller hitbox
+                y: player.y + 2,
+                width: player.width - 4,
+                height: player.height - 4
+            };
+
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+
+                // Skip if enemy is safely in a hole (timer running)
+                if (enemy.inHole && enemy.holeTimer > 0) continue;
+
+                const enemyRect = {
+                    x: enemy.x + 2,
+                    y: enemy.y + 2,
+                    width: (TILE_SIZE - 10) - 4,
+                    height: (TILE_SIZE - 10) - 4
+                };
+
+                if (rectsIntersect(playerRect, enemyRect)) {
+                    playerDied();
+                    break; // Only die once per frame
+                }
+            }
+        }
+
+        // Check if level is complete (all gold collected AND player reaches a top ladder)
+        function checkLevelComplete() {
+             if (player.goldCollected >= totalGold) {
+                 // Check if player is at the top of the screen on a ladder
+                 const playerCol = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+                  // Need to be *in* the top row (row 0) and on a ladder
+                 if (player.y < TILE_SIZE && getTile(playerCol, 0) === LADDER) {
+                     level++;
+                     if (level > 5) { // Assuming 5 levels total
+                         showMessage("Congratulations! You beat the game!");
+                         gameWon = true;
+                         isGameOver = true;
+                          // Stop game loop here explicitly if needed
+                          // cancelAnimationFrame(gameLoop); // Might be needed depending on browser
+                     } else {
+                         showMessage(`Level ${level -1} Complete! Loading Level ${level}...`, 1500); // Show message briefly
+                         setTimeout(() => loadLevel(level), 1500); // Load next level after delay
+                     }
+                 }
+             }
+        }
+
+        // Render game
+        function render() {
+            // Clear the canvas
+            ctx.fillStyle = '#000'; // Ensure background is black
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the level
+            drawLevel();
+
+            // Draw holes (visual representation)
+             ctx.fillStyle = '#222'; // Dark grey for holes
+            holes.forEach(hole => {
+                // Optionally draw shrinking effect based on timer
+                const fillAmount = (hole.timer / DIG_TIME); // 1 = full, 0 = empty (about to refill)
+                 ctx.fillStyle = `rgba(50, 50, 50, ${1 - fillAmount})`; // Fade in brick color? Or just hole color
+                 ctx.fillRect(hole.x * TILE_SIZE, hole.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                 // Simple hole graphic
+                 ctx.strokeStyle = '#555';
+                 ctx.lineWidth = 2;
+                 ctx.strokeRect(hole.x * TILE_SIZE + 2, hole.y * TILE_SIZE + TILE_SIZE - 5, TILE_SIZE - 4, 3);
+
+            });
+
+
+            // Draw gold (already handled by drawLevel, but could be drawn separately if animated)
+
+            // Draw enemies
+            ctx.fillStyle = '#FF0000'; // Red
+            enemies.forEach(enemy => {
+                 ctx.fillRect(enemy.x, enemy.y, TILE_SIZE - 10, TILE_SIZE - 10);
+            });
+
+             // Draw the player
+            ctx.fillStyle = '#00FF00'; // Green
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+
+            // Draw game over or win message if needed
+            if (isGameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '40px Arial';
+                ctx.textAlign = 'center';
+                 if (gameWon) {
+                      ctx.fillText('You Win!', canvas.width / 2, canvas.height / 2 - 20);
+                 } else {
+                     ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 20);
+                 }
+
+                ctx.font = '20px Arial';
+                ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 20);
+            }
+        }
+
+        // Draw the current level tiles
+        function drawLevel() {
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const tile = currentLevel[row][col];
+                    const x = col * TILE_SIZE;
+                    const y = row * TILE_SIZE;
+
+                    switch (tile) {
+                        case BRICK:
+                            ctx.fillStyle = '#8B4513'; // Brown
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                             // Add brick texture/border
+                             ctx.strokeStyle = '#5a2d0c';
+                             ctx.lineWidth = 1;
+                             ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+                            break;
+                        case LADDER:
+                             // Draw background first if ladder is over empty space
+                            // ctx.fillStyle = '#000';
+                           // ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+                            ctx.fillStyle = '#CCCCCC'; // Light grey for ladders
+                            const rungSpacing = 8;
+                            const railWidth = 6;
+                            // Rails
+                            ctx.fillRect(x + railWidth / 2, y, railWidth, TILE_SIZE);
+                            ctx.fillRect(x + TILE_SIZE - railWidth * 1.5, y, railWidth, TILE_SIZE);
+                            // Rungs
+                            for (let ry = rungSpacing / 2; ry < TILE_SIZE; ry += rungSpacing) {
+                                ctx.fillRect(x + railWidth / 2, y + ry, TILE_SIZE - railWidth, 3);
+                            }
+                            break;
+                        case ROPE:
+                            // Draw background first if rope is over empty space
+                            // ctx.fillStyle = '#000';
+                            // ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+                            ctx.strokeStyle = '#FFFF00'; // Yellow
+                            ctx.lineWidth = 4;
+                            ctx.beginPath();
+                            ctx.moveTo(x, y + TILE_SIZE / 2);
+                            ctx.lineTo(x + TILE_SIZE, y + TILE_SIZE / 2);
+                            ctx.stroke();
+                            break;
+                        case GOLD:
+                             // Draw background first
+                            // ctx.fillStyle = '#000';
+                            // ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+                            ctx.fillStyle = '#FFD700'; // Gold
+                            ctx.beginPath();
+                            ctx.arc(x + TILE_SIZE / 2, y + TILE_SIZE / 2, TILE_SIZE / 3, 0, Math.PI * 2);
+                            ctx.fill();
+                             // Add a shine effect
+                             ctx.fillStyle = '#FFFFE0'; // Lighter yellow
+                             ctx.beginPath();
+                             ctx.arc(x + TILE_SIZE / 2 - 3, y + TILE_SIZE / 2 - 3, TILE_SIZE / 8, 0, Math.PI * 2);
+                             ctx.fill();
+                            break;
+                        case HOLE:
+                             // Holes are drawn separately with timer effect
+                             // Draw the underlying empty space maybe?
+                             ctx.fillStyle = '#111'; // Very dark grey instead of pure black
+                             ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            break;
+                        case FAKE_BRICK: // Visually distinct from normal brick
+                            ctx.fillStyle = '#a0522d'; // Sienna (slightly different brown)
+                            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                            // Add pattern to distinguish
+                            ctx.strokeStyle = '#cd853f'; // Peru (lighter brown)
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(x + 5, y + 5); ctx.lineTo(x + TILE_SIZE - 5, y + TILE_SIZE - 5);
+                            ctx.moveTo(x + TILE_SIZE - 5, y + 5); ctx.lineTo(x + 5, y + TILE_SIZE - 5);
+                            ctx.stroke();
+                            break;
+                         // case EMPTY: // Default, draw nothing or black background
+                         //    ctx.fillStyle = '#000';
+                         //    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                         // break;
+                    }
+                }
+            }
+        }
+
+        // Load a level
+        function loadLevel(levelNum) {
+             console.log(`Loading Level ${levelNum}`);
+            // Reset player and game state for the new level
+            player.goldCollected = 0;
+            totalGold = 0; // Reset total gold count before scanning level
+            holes = [];
+            enemies = [];
+            isGameOver = false;
+            gameWon = false;
+            player.dx = 0;
+            player.dy = 0;
+            player.isClimbing = false;
+            player.isOnRope = false;
+            player.isFalling = false;
+
+
+            // Generate the level layout
+            generateLevel(levelNum); // This now just defines currentLevel and totalGold
+
+             // Find player start, count gold, place enemies from the generated map
+            let foundPlayerStart = false;
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                     const tile = currentLevel[row][col];
+                    if (tile === PLAYER) {
+                        player.x = col * TILE_SIZE + (TILE_SIZE - player.width) / 2; // Center player in tile
+                        player.y = row * TILE_SIZE + (TILE_SIZE - player.height); // Place feet at bottom of tile
+                        player.respawnX = player.x; // Store initial position
+                        player.respawnY = player.y;
+                        currentLevel[row][col] = EMPTY; // Remove player marker from grid
+                        foundPlayerStart = true;
+                    } else if (tile === ENEMY) {
+                        enemies.push({
+                            x: col * TILE_SIZE + 5, // Start slightly offset in tile
+                            y: row * TILE_SIZE + 5,
+                            inHole: false,
+                            holeTimer: 0
+                        });
+                        currentLevel[row][col] = EMPTY; // Remove enemy marker from grid
+                    } else if (tile === GOLD) {
+                        // totalGold++; // Gold count is now handled within createLevelX functions
+                    }
+                }
+            }
+
+             if (!foundPlayerStart) {
+                 console.error("Player start position not found in level data!");
+                 // Default placement if not found
+                 player.x = TILE_SIZE; player.y = TILE_SIZE;
+                 player.respawnX = player.x; player.respawnY = player.y;
+             }
+
+
+            // Update the info panel
+            updateInfoPanel();
+        }
+
+        // Generate a level structure based on level number
+        function generateLevel(levelNum) {
+            // Create empty level grid
+            currentLevel = Array(ROWS).fill().map(() => Array(COLS).fill(EMPTY));
+            totalGold = 0; // Reset gold count for the level being generated
+
+            // Basic ground (can be overridden by level design)
+            // for (let col = 0; col < COLS; col++) {
+            //    currentLevel[ROWS - 1][col] = BRICK;
+            // }
+
+            // Call the specific level creation function
+            switch (levelNum) {
+                case 1: createLevel1(); break;
+                case 2: createLevel2(); break;
+                case 3: createLevel3(); break;
+                case 4: createLevel4(); break; // Call the completed function
+                case 5: createLevel5(); break;
+                default:
+                    console.error("Invalid level number:", levelNum);
+                    createLevel1(); // Default to level 1 if invalid
+                    level = 1; // Reset level number state
+                    break;
+            }
+             // Ensure there's an exit ladder at the top if needed for level completion logic
+             let topLadderExists = false;
+             for (let col = 0; col < COLS; col++) {
+                 if (currentLevel[0][col] === LADDER) {
+                     topLadderExists = true;
+                     break;
+                 }
+             }
+             if (!topLadderExists && level <= 5) { // Add a default exit ladder if missing (e.g., center top)
+                  console.warn("Level", levelNum, "missing top exit ladder. Adding one.");
+                  currentLevel[0][Math.floor(COLS / 2)] = LADDER;
+                  currentLevel[1][Math.floor(COLS / 2)] = LADDER; // Ensure it connects down
+             }
+
+        }
+
+        // --- Level Design Functions ---
+        // (createLevel1, createLevel2, createLevel3, createLevel5 remain the same as provided)
+
+        function createLevel1() {
+            currentLevel[ROWS - 2][1] = PLAYER;
+            for (let col = 0; col < COLS; col++) { currentLevel[ROWS - 1][col] = BRICK; } // Ground
+            for (let col = 0; col < COLS; col++) { if (col !== 5 && col !== 15) currentLevel[ROWS - 4][col] = BRICK; }
+            for (let col = 0; col < COLS; col++) { if (col !== 10) currentLevel[ROWS - 7][col] = BRICK; }
+            for (let col = 0; col < COLS; col++) { if (col !== 3 && col !== 17) currentLevel[ROWS - 10][col] = BRICK; }
+            for (let row = ROWS - 4; row < ROWS - 1; row++) { currentLevel[row][5] = LADDER; currentLevel[row][15] = LADDER; }
+            for (let row = ROWS - 7; row < ROWS - 3; row++) { currentLevel[row][10] = LADDER; }
+            for (let row = ROWS - 10; row < ROWS - 6; row++) { currentLevel[row][3] = LADDER; currentLevel[row][17] = LADDER; }
+            for (let col = 4; col < 17; col++) { currentLevel[ROWS - 5][col] = ROPE; }
+            for (let col = 4; col < 16; col++) { currentLevel[ROWS - 8][col] = ROPE; }
+            currentLevel[ROWS - 5][7] = GOLD; totalGold++;
+            currentLevel[ROWS - 5][13] = GOLD; totalGold++;
+            currentLevel[ROWS - 8][5] = GOLD; totalGold++;
+            currentLevel[ROWS - 8][15] = GOLD; totalGold++;
+            currentLevel[ROWS - 11][9] = GOLD; totalGold++; // Check this position
+            currentLevel[ROWS - 2][18] = ENEMY;
+            currentLevel[ROWS - 5][9] = ENEMY;
+        }
+
+        function createLevel2() {
+            currentLevel[ROWS - 2][1] = PLAYER;
+             for (let col = 0; col < COLS; col++) { currentLevel[ROWS - 1][col] = BRICK; } // Ground
+            for (let col = 0; col < COLS; col++) { if (col !== 3 && col !== 17) currentLevel[ROWS - 4][col] = col % 5 === 0 ? FAKE_BRICK : BRICK;}
+            for (let col = 0; col < COLS; col++) { if (col !== 8 && col !== 12) currentLevel[ROWS - 7][col] = col % 4 === 0 ? FAKE_BRICK : BRICK;}
+            for (let col = 0; col < COLS; col++) { if (col !== 5 && col !== 15) currentLevel[ROWS - 10][col] = col % 7 === 0 ? FAKE_BRICK : BRICK;}
+            for (let col = 0; col < COLS; col++) { currentLevel[1][col] = BRICK;}
+            for (let row = ROWS - 4; row < ROWS - 1; row++) { currentLevel[row][3] = LADDER; currentLevel[row][17] = LADDER; }
+            for (let row = ROWS - 7; row < ROWS - 3; row++) { currentLevel[row][8] = LADDER; currentLevel[row][12] = LADDER; }
+            for (let row = ROWS - 10; row < ROWS - 6; row++) { currentLevel[row][5] = LADDER; currentLevel[row][15] = LADDER; }
+            for (let row = 2; row < ROWS - 9; row++) { currentLevel[row][10] = LADDER; }
+            for (let col = 4; col < 17; col++) { currentLevel[ROWS - 5][col] = ROPE; currentLevel[ROWS - 8][col] = ROPE; currentLevel[ROWS - 11][col] = ROPE; currentLevel[2][col] = ROPE; }
+            currentLevel[ROWS - 2][8] = GOLD; totalGold++;
+            currentLevel[ROWS - 2][12] = GOLD; totalGold++;
+            currentLevel[ROWS - 5][6] = GOLD; totalGold++;
+            currentLevel[ROWS - 5][14] = GOLD; totalGold++;
+            currentLevel[ROWS - 8][3] = GOLD; totalGold++;
+            currentLevel[ROWS - 8][17] = GOLD; totalGold++;
+            currentLevel[ROWS - 11][10] = GOLD; totalGold++;
+            currentLevel[2][5] = GOLD; totalGold++;
+            currentLevel[2][15] = GOLD; totalGold++;
+            currentLevel[ROWS - 5][10] = ENEMY;
+            currentLevel[ROWS - 8][8] = ENEMY;
+            currentLevel[ROWS - 11][3] = ENEMY;
+            currentLevel[2][18] = ENEMY;
+        }
+
+        function createLevel3() {
+            currentLevel[ROWS - 2][1] = PLAYER;
+            for (let col = 0; col < COLS; col++) { currentLevel[ROWS - 1][col] = BRICK; } // Ground
+            for (let col = 0; col < COLS; col += 2) { currentLevel[ROWS - 3][col] = BRICK; }
+            for (let col = 0; col < COLS; col += 2) { currentLevel[ROWS - 6][col + 1] = BRICK; }
+            for (let col = 0; col < COLS; col += 2) { currentLevel[ROWS - 9][col] = col % 5 === 0 ? FAKE_BRICK : BRICK; }
+            for (let col = 0; col < COLS; col += 2) { currentLevel[ROWS - 12][col + 1] = col % 6 === 0 ? FAKE_BRICK : BRICK; } // Adjusted +1
+            for (let col = 0; col < COLS; col += 2) { currentLevel[2][col] = col % 4 === 0 ? FAKE_BRICK : BRICK; }
+            for (let row = ROWS - 3; row < ROWS - 1; row++) { currentLevel[row][5] = LADDER; currentLevel[row][15] = LADDER; }
+            for (let row = ROWS - 6; row < ROWS - 2; row++) { currentLevel[row][3] = LADDER; currentLevel[row][17] = LADDER; } // Adjusted -2 end
+            for (let row = ROWS - 9; row < ROWS - 5; row++) { currentLevel[row][7] = LADDER; currentLevel[row][13] = LADDER; } // Adjusted -5 end
+            for (let row = ROWS - 12; row < ROWS - 8; row++) { currentLevel[row][9] = LADDER; } // Adjusted -8 end
+            for (let row = 3; row < ROWS - 11; row++) { currentLevel[row][10] = LADDER; }
+            for (let col = 2; col < COLS - 2; col++) { currentLevel[ROWS - 4][col] = ROPE; }
+            for (let col = 2; col < COLS - 2; col++) { currentLevel[ROWS - 7][col] = ROPE; }
+            for (let col = 2; col < COLS - 2; col++) { currentLevel[ROWS - 10][col] = ROPE; }
+            for (let col = 2; col < COLS - 2; col++) { currentLevel[3][col] = ROPE; }
+            currentLevel[ROWS - 2][3] = FAKE_BRICK; currentLevel[ROWS - 2][7] = FAKE_BRICK; currentLevel[ROWS - 2][13] = FAKE_BRICK; currentLevel[ROWS - 2][17] = FAKE_BRICK;
+            currentLevel[ROWS - 2][2] = GOLD; totalGold++;
+            currentLevel[ROWS - 2][18] = GOLD; totalGold++;
+            currentLevel[ROWS - 4][7] = GOLD; totalGold++;
+            currentLevel[ROWS - 4][13] = GOLD; totalGold++;
+            currentLevel[ROWS - 7][4] = GOLD; totalGold++;
+            currentLevel[ROWS - 7][16] = GOLD; totalGold++;
+            currentLevel[ROWS - 10][6] = GOLD; totalGold++;
+            currentLevel[ROWS - 10][14] = GOLD; totalGold++;
+            currentLevel[ROWS - 11][9] = GOLD; totalGold++; // Check pos
+            currentLevel[ROWS - 11][11] = GOLD; totalGold++; // Check pos
+            currentLevel[3][5] = GOLD; totalGold++;
+            currentLevel[3][15] = GOLD; totalGold++;
+            currentLevel[ROWS - 2][5] = ENEMY; currentLevel[ROWS - 2][15] = ENEMY; currentLevel[ROWS - 7][10] = ENEMY;
+            currentLevel[ROWS - 10][3] = ENEMY; currentLevel[ROWS - 10][17] = ENEMY; currentLevel[3][10] = ENEMY;
+        }
+
+         // ***** COMPLETED createLevel4 *****
+        function createLevel4() {
+            // Vertical challenge level
+
+            // Place player near bottom center
+            currentLevel[ROWS - 2][10] = PLAYER;
+
+            // Create side walls
+            for (let row = 0; row < ROWS; row++) {
+                currentLevel[row][0] = BRICK;
+                currentLevel[row][COLS - 1] = BRICK;
+            }
+             // Ground floor
+             for (let col = 1; col < COLS - 1; col++) {
+                 currentLevel[ROWS - 1][col] = BRICK;
+             }
+
+
+            // Create platforms (adjusting from the incomplete code)
+            for (let col = 1; col < COLS - 1; col++) {
+                 // Platform ~ROWS-3
+                 if (col > 2 && col < COLS - 3) currentLevel[ROWS - 3][col] = col % 5 === 1 ? FAKE_BRICK : BRICK;
+                  // Platform ~ROWS-6
+                 if (col > 4 && col < COLS - 5) currentLevel[ROWS - 6][col] = col % 4 === 0 ? FAKE_BRICK : BRICK;
+                  // Platform ~ROWS-9
+                 if (col > 1 && col < COLS - 2 && col % 2 != 0) currentLevel[ROWS - 9][col] = col % 7 === 0 ? FAKE_BRICK : BRICK; // Sparser
+                  // Platform ~ROWS-12
+                 if (col > 3 && col < COLS - 4) currentLevel[ROWS - 12][col] = col % 6 === 2 ? FAKE_BRICK : BRICK;
+                 // Top platform ~2
+                 if (col > 5 && col < COLS - 6) currentLevel[2][col] = BRICK;
+            }
+
+             // Add some floating bricks / obstacles
+             currentLevel[ROWS - 5][3] = BRICK; currentLevel[ROWS - 5][COLS - 4] = BRICK;
+             currentLevel[ROWS - 8][6] = BRICK; currentLevel[ROWS - 8][COLS - 7] = FAKE_BRICK;
+             currentLevel[ROWS - 11][9] = BRICK; currentLevel[ROWS - 11][COLS - 10] = BRICK;
+
+
+            // Add ladders for vertical movement
+            // Central ladder shaft
+            for (let row = ROWS - 3; row < ROWS - 1; row++) { currentLevel[row][10] = LADDER; }
+            for (let row = ROWS - 6; row < ROWS - 2; row++) { currentLevel[row][10] = LADDER; }
+            for (let row = ROWS - 9; row < ROWS - 5; row++) { currentLevel[row][10] = LADDER; }
+            for (let row = ROWS - 12; row < ROWS - 8; row++) { currentLevel[row][10] = LADDER; }
+             for (let row = 3; row < ROWS - 11; row++) { currentLevel[row][10] = LADDER; } // Connects to top platform area
+
+             // Side ladders
+             for (let row = ROWS - 6; row < ROWS - 1; row++) { currentLevel[row][3] = LADDER; } // Left side lower
+             for (let row = ROWS - 9; row < ROWS - 1; row++) { currentLevel[row][COLS - 4] = LADDER; } // Right side lower/mid
+             for (let row = 3; row < ROWS - 10; row++) { currentLevel[row][6] = LADDER; } // Left side upper
+             for (let row = 3; row < ROWS - 8; row++) { currentLevel[row][COLS - 7] = LADDER; } // Right side upper
+
+             // Ensure top ladder connects for exit
+             currentLevel[0][10] = LADDER;
+             currentLevel[1][10] = LADDER;
+             currentLevel[2][10] = LADDER;
+
+
+            // Add ropes (optional, can make some areas easier/harder)
+            for (let col = 4; col < 10; col++) { currentLevel[ROWS - 4][col] = ROPE; }
+            for (let col = 11; col < COLS - 4; col++) { currentLevel[ROWS - 7][col] = ROPE; }
+            for (let col = 2; col < 8; col++) { currentLevel[ROWS - 10][col] = ROPE; }
+             for (let col = COLS - 9; col < COLS - 2; col++) { currentLevel[ROWS - 10][col] = ROPE; }
+             for (let col = 7; col < COLS - 7 ; col++) { currentLevel[3][col] = ROPE; }
+
+
+            // Add gold - scatter vertically
+            currentLevel[ROWS - 2][2] = GOLD; totalGold++;
+            currentLevel[ROWS - 2][COLS - 3] = GOLD; totalGold++;
+            currentLevel[ROWS - 4][6] = GOLD; totalGold++;
+            currentLevel[ROWS - 5][COLS - 5] = GOLD; totalGold++;
+            currentLevel[ROWS - 7][14] = GOLD; totalGold++;
+            currentLevel[ROWS - 8][4] = GOLD; totalGold++;
+            currentLevel[ROWS - 10][7] = GOLD; totalGold++;
+            currentLevel[ROWS - 11][COLS - 8] = GOLD; totalGold++;
+            currentLevel[ROWS - 13][12] = GOLD; totalGold++; // Check position
+            currentLevel[3][8] = GOLD; totalGold++;
+            currentLevel[3][COLS - 9] = GOLD; totalGold++;
+            currentLevel[1][7] = GOLD; totalGold++; // High up gold
+
+
+            // Add enemies - place them to pressure climbing
+            currentLevel[ROWS - 4][8] = ENEMY;
+            currentLevel[ROWS - 4][12] = ENEMY;
+            currentLevel[ROWS - 7][5] = ENEMY;
+            currentLevel[ROWS - 7][COLS - 6] = ENEMY;
+            currentLevel[ROWS - 10][4] = ENEMY;
+            currentLevel[ROWS - 10][COLS - 5] = ENEMY;
+             currentLevel[3][10] = ENEMY; // Guard near top ladder
+
+            // totalGold is incremented above
+             console.log("Level 4 Total Gold:", totalGold);
+        }
+
+
+        function createLevel5() {
+            currentLevel[ROWS - 2][1] = PLAYER;
+            for (let col = 0; col < COLS; col++) { currentLevel[ROWS - 1][col] = BRICK; } // Ground
+            for (let col = 0; col < COLS; col++) { currentLevel[ROWS - 3][col] = col % 4 === 0 ? FAKE_BRICK : BRICK; }
+            for (let col = 0; col < COLS / 2; col++) { currentLevel[ROWS - 5][col] = col % 3 === 0 ? FAKE_BRICK : BRICK; }
+            for (let col = COLS / 2; col < COLS; col++) { currentLevel[ROWS - 7][col] = col % 5 === 0 ? FAKE_BRICK : BRICK; }
+            for (let col = 0; col < COLS; col++) { if (col % 2 === 0) currentLevel[ROWS - 9][col] = col % 3 === 0 ? FAKE_BRICK : BRICK; else currentLevel[ROWS - 11][col] = BRICK; }
+            for (let col = 3; col < COLS - 3; col++) { currentLevel[2][col] = col % 6 === 0 ? FAKE_BRICK : BRICK; }
+            for (let row = ROWS - 7; row < ROWS - 3; row++) { currentLevel[row][Math.floor(COLS / 2)] = BRICK; }
+            for (let row = ROWS - 11; row < ROWS - 7; row++) { currentLevel[row][Math.floor(COLS / 4)] = BRICK; currentLevel[row][Math.floor(3 * COLS / 4)] = BRICK; }
+            for (let row = ROWS - 3; row < ROWS - 1; row++) { currentLevel[row][3] = LADDER; currentLevel[row][COLS - 4] = LADDER; }
+            for (let row = ROWS - 7; row < ROWS - 2; row++) { currentLevel[row][Math.floor(COLS / 4)] = LADDER; currentLevel[row][Math.floor(3 * COLS / 4)] = LADDER; } // extended ladder
+            for (let row = ROWS - 9; row < ROWS - 4; row++) { currentLevel[row][2] = LADDER; currentLevel[row][COLS - 3] = LADDER; } // extended ladder
+            for (let row = ROWS - 11; row < ROWS - 8; row++) { currentLevel[row][Math.floor(COLS / 2)] = LADDER; } // extended ladder
+            for (let row = 3; row < ROWS - 10; row++) { currentLevel[row][5] = LADDER; currentLevel[row][COLS - 6] = LADDER; }
+            for (let col = 4; col < COLS - 4; col++) { currentLevel[ROWS - 4][col] = ROPE; currentLevel[ROWS - 8][col] = ROPE; currentLevel[ROWS - 12][col] = ROPE; currentLevel[3][col] = ROPE; }
+            currentLevel[ROWS - 2][8] = GOLD; totalGold++; currentLevel[ROWS - 2][12] = GOLD; totalGold++;
+            currentLevel[ROWS - 4][5] = GOLD; totalGold++; currentLevel[ROWS - 4][15] = GOLD; totalGold++;
+            currentLevel[ROWS - 6][3] = GOLD; totalGold++; currentLevel[ROWS - 6][17] = GOLD; totalGold++;
+            currentLevel[ROWS - 8][7] = GOLD; totalGold++; currentLevel[ROWS - 8][13] = GOLD; totalGold++;
+            currentLevel[ROWS - 10][2] = GOLD; totalGold++; currentLevel[ROWS - 10][18] = GOLD; totalGold++;
+            currentLevel[ROWS - 12][5] = GOLD; totalGold++; currentLevel[ROWS - 12][15] = GOLD; totalGold++;
+            currentLevel[3][9] = GOLD; totalGold++; currentLevel[3][11] = GOLD; totalGold++;
+            currentLevel[1][1] = GOLD; totalGold++; // Check pos (was row 4)
+            currentLevel[1][COLS - 2] = GOLD; totalGold++; // Check pos (was row 4)
+            currentLevel[ROWS - 2][COLS - 2] = ENEMY; currentLevel[ROWS - 6][10] = ENEMY; currentLevel[ROWS - 8][5] = ENEMY;
+            currentLevel[ROWS - 8][15] = ENEMY; currentLevel[ROWS - 10][10] = ENEMY; currentLevel[ROWS - 12][3] = ENEMY;
+            currentLevel[ROWS - 12][17] = ENEMY; currentLevel[3][7] = ENEMY;
+        }
+
+
+        // --- Helper Functions ---
+
+        // Get tile type at grid coordinates (col, row)
+        function getTile(col, row) {
+            if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
+                // Consider outside bounds as solid or empty depending on game needs
+                // For Lode Runner, hitting edges should usually stop movement.
+                return BRICK; // Treat outside as wall
+            }
+            return currentLevel[row][col];
+        }
+
+        // Set tile type at grid coordinates
+        function setTile(col, row, value) {
+            if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+                currentLevel[row][col] = value;
+            }
+        }
+
+        // Update the HUD info panel
+        function updateInfoPanel() {
+            document.getElementById('level').textContent = level;
+            document.getElementById('gold').textContent = player.goldCollected;
+            document.getElementById('total-gold').textContent = totalGold;
+            document.getElementById('lives').textContent = player.lives;
+        }
+
+        // Handle player death
+        function playerDied() {
+            if (isGameOver) return; // Prevent multiple deaths after game over screen shows
+
+            console.log("Player died!");
+            player.lives--;
+            updateInfoPanel();
+
+            if (player.lives <= 0) {
+                showMessage("Game Over!", 0); // Show indefinitely
+                isGameOver = true;
+                 // Explicitly stop animation frame request
+                 // cancelAnimationFrame(gameLoop); // Might cause issues if gameLoop var isn't accessible
+            } else {
+                // Respawn player after a short delay
+                showMessage(`Died! Lives left: ${player.lives}`, 1000); // Show message briefly
+                 // Reset relevant player state before respawn
+                 player.dx = 0; player.dy = 0;
+                 player.isClimbing = false; player.isOnRope = false; player.isFalling = false;
+                 player.digCooldown = 0;
+                 isGameOver = true; // Temporarily pause updates during respawn message
+
+                setTimeout(() => {
+                    isGameOver = false; // Resume updates
+                    // Reset player position to start of level
+                    player.x = player.respawnX;
+                    player.y = player.respawnY;
+
+                    // Reset enemies and holes (or could just reset enemies)
+                    // For classic feel, often level state resets on death
+                    loadLevel(level); // Reloading level is simplest way to reset everything
+                    // OR: Manually reset enemy positions if preferred
+                    // resetEnemies();
+                    // clearHoles();
+                    // gameLoop(); // Re-initiate loop if it was cancelled
+
+                }, 1100); // Delay respawn slightly longer than message
+            }
+        }
+
+         // Restart the whole game
+         function restartGame() {
+             console.log("Restarting game...");
+             isGameOver = false;
+             gameWon = false;
+             level = 1;
+             player.lives = 3;
+             // player.goldCollected = 0; // loadLevel handles this
+             loadLevel(level);
+             if (!isGameOver) { // Start loop again if it was stopped
+                 gameLoop();
+             }
+         }
+
+
+        // Show a message overlay on screen
+        function showMessage(message, duration = 0) {
+            // Use a dedicated message element or draw on canvas
+            // Drawing on canvas is simpler here:
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(canvas.width / 4, canvas.height / 3, canvas.width / 2, canvas.height / 4);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+
+            // If duration > 0, we need a way to clear it.
+            // The current structure redraws everything each frame, so the message
+            // needs to be drawn conditionally within render() or cleared explicitly.
+            // The current implementation relies on the game state (isGameOver) or timeouts.
+        }
+
+        // Check if two rectangles intersect
+        function rectsIntersect(r1, r2) {
+            return !(
+                r1.x >= r2.x + r2.width ||  // r1 is to the right of r2
+                r1.x + r1.width <= r2.x ||  // r1 is to the left of r2
+                r1.y >= r2.y + r2.height || // r1 is below r2
+                r1.y + r1.height <= r2.y    // r1 is above r2
+            );
+        }
+
+       // Removed the extra event listener for 'R' key as it's handled in the main keydown listener now.
+
+    </script>
+</body>
+</html>
