@@ -1,0 +1,1702 @@
+
+Got it. You want the game to run using only built-in colors and shapes, completely removing the need for any external sound or image files, even the Babylon.js Playground ones.
+
+Here's the modified code:
+
+1.  **Sounds:** Remain as `src: ['#']`. They will be silent, fulfilling the no-external-file requirement.
+2.  **Textures:** All `material.diffuseTexture = ...` and `particleSystem.particleTexture = ...` lines have been removed. Materials will now solely rely on their `diffuseColor` and `emissiveColor`. Particles will render as colored squares.
+
+```html
+--- START OF FILE index2.html ---
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Gauntlet 3D</title>
+    <style>
+        /* CSS remains the same as provided */
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #gameUI {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            z-index: 10;
+        }
+        #playerStats {
+            display: flex;
+            gap: 20px;
+        }
+        .playerInfo {
+            padding: 5px;
+            border-radius: 5px;
+            background-color: rgba(0,0,0,0.5);
+        }
+        #messageLog {
+            position: absolute;
+            bottom: 70px; /* Adjusted position */
+            left: 50%;
+            transform: translateX(-50%);
+            color: gold; /* Changed color */
+            font-size: 24px;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+            z-index: 10;
+            min-height: 30px; /* Ensure space even when empty */
+            opacity: 1; /* Start visible */
+            pointer-events: none; /* Prevent stealing clicks */
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+             pointer-events: none;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+        }
+        #characterSelection {
+            display: flex;
+            gap: 20px;
+            margin-top: 30px;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            justify-content: center;
+        }
+        .characterCard {
+            background-color: rgba(50,50,50,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 180px; /* Slightly smaller */
+        }
+        .characterCard:hover {
+            transform: scale(1.05);
+            background-color: rgba(70,70,70,0.8);
+        }
+        .characterCard h3 {
+            margin-top: 0;
+            color: gold;
+        }
+        .characterStats {
+            text-align: left;
+            margin-top: 10px;
+            font-size: 14px; /* Smaller stats text */
+        }
+        #gameOverScreen, #levelCompleteScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            display: none; /* Start hidden */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+        }
+        button {
+            background-color: #8a5a00;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 10px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #b87700;
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            display: flex; /* Start shown */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+        }
+        #loadingBar {
+            width: 300px;
+            height: 30px;
+            background-color: #333;
+            border-radius: 15px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        #loadingProgress {
+            height: 100%;
+            width: 0%;
+            background-color: gold;
+            transition: width 0.3s;
+        }
+        .healthBar {
+            width: 100%;
+            height: 8px;
+            background-color: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .healthFill {
+            height: 100%;
+            background-color: #0f0; /* Green */
+            transition: width 0.3s;
+        }
+         /* Enemy and Generator Health Bars are created via Babylon GUI */
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="gameUI">
+        <div id="playerStats">
+            <!-- Will be populated with player info -->
+        </div>
+    </div>
+
+    <div id="messageLog"></div>
+
+    <div id="controls">
+        <p>WASD: Move | SPACE: Attack | E: Use Potion | F: Use Special | Mouse: Aim</p>
+    </div>
+
+    <div id="startScreen">
+        <h1>GAUNTLET 3D</h1>
+        <p>Choose your character to begin the adventure</p>
+        <div id="characterSelection">
+            <div class="characterCard" data-type="WARRIOR">
+                <h3>WARRIOR</h3>
+                <p>A mighty melee fighter with high strength</p>
+                <div class="characterStats">
+                    <p>Health: ★★★★☆ (800)</p>
+                    <p>Attack: ★★★★☆ (40)</p>
+                    <p>Magic: ★☆☆☆☆ (10)</p>
+                    <p>Speed: ★★☆☆☆ (5)</p>
+                </div>
+            </div>
+            <div class="characterCard" data-type="VALKYRIE">
+                <h3>VALKYRIE</h3>
+                <p>A balanced fighter with shield defense</p>
+                <div class="characterStats">
+                    <p>Health: ★★★☆☆ (600)</p>
+                    <p>Attack: ★★★☆☆ (30)</p>
+                    <p>Magic: ★★☆☆☆ (20)</p>
+                    <p>Speed: ★★★☆☆ (7)</p>
+                </div>
+            </div>
+            <div class="characterCard" data-type="WIZARD">
+                <h3>WIZARD</h3>
+                <p>A powerful spellcaster with magical attacks</p>
+                <div class="characterStats">
+                    <p>Health: ★★☆☆☆ (400)</p>
+                    <p>Attack: ★☆☆☆☆ (10)</p>
+                    <p>Magic: ★★★★★ (50)</p>
+                    <p>Speed: ★★☆☆☆ (5)</p>
+                </div>
+            </div>
+            <div class="characterCard" data-type="ELF">
+                <h3>ELF</h3>
+                <p>An agile archer with high speed</p>
+                <div class="characterStats">
+                    <p>Health: ★★☆☆☆ (450)</p>
+                    <p>Attack: ★★★☆☆ (25)</p>
+                    <p>Magic: ★★★☆☆ (30)</p>
+                    <p>Speed: ★★★★★ (10)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="gameOverScreen">
+        <h1>GAME OVER</h1>
+        <p id="gameOverMessage">Your quest has ended...</p>
+        <button id="restartButton">Play Again</button>
+    </div>
+
+    <div id="levelCompleteScreen">
+        <h1>LEVEL COMPLETE</h1>
+        <p>You've conquered this dungeon!</p>
+        <div id="levelStats">Score: <span id="finalLevelScore">0</span></div>
+        <button id="nextLevelButton">Enter Next Dungeon</button>
+    </div>
+
+    <div id="loadingScreen">
+        <h1>LOADING GAUNTLET 3D</h1>
+        <div id="loadingBar">
+            <div id="loadingProgress"></div>
+        </div>
+        <p id="loadingText">Preparing the dungeon...</p>
+    </div>
+
+    <!-- Babylon.js Libraries -->
+    <script src="babylon.js"></script>
+    <script src="babylonjs.loaders.min.js"></script>
+    <script src="babylon.gui.min.js"></script>
+    <!-- Physics Engine -->
+    <script src="cannon.js"></script>
+    <!-- Sound Engine -->
+    <script src="howler.min.js"></script>
+
+    <script>
+        // Game Constants
+        const GAME_STATES = {
+            LOADING: 0,
+            START_SCREEN: 1,
+            PLAYING: 2,
+            GAME_OVER: 3,
+            LEVEL_COMPLETE: 4
+        };
+
+        // Character classes
+        const CHARACTER_CLASSES = {
+            WARRIOR: { name: "Warrior", health: 800, attack: 40, magic: 10, speed: 5, special: "Whirlwind Attack", color: new BABYLON.Color3(0.8, 0.1, 0.1), shotCooldown: 600, specialCooldown: 12000 },
+            VALKYRIE: { name: "Valkyrie", health: 600, attack: 30, magic: 20, speed: 7, special: "Shield Bash", color: new BABYLON.Color3(0.1, 0.6, 0.8), shotCooldown: 500, specialCooldown: 10000 },
+            WIZARD: { name: "Wizard", health: 400, attack: 10, magic: 50, speed: 5, special: "Arcane Nova", color: new BABYLON.Color3(0.6, 0.1, 0.8), shotCooldown: 700, specialCooldown: 15000 },
+            ELF: { name: "Elf", health: 450, attack: 25, magic: 30, speed: 10, special: "Rapid Fire", color: new BABYLON.Color3(0.1, 0.8, 0.3), shotCooldown: 350, specialCooldown: 8000 }
+        };
+
+        // Enemy types
+        const ENEMY_TYPES = {
+            GHOST: { name: "Ghost", health: 60, attack: 15, speed: 3.5, color: new BABYLON.Color3(0.85, 0.85, 0.95), score: 10, meshType: 'sphere', size: 0.8, alpha: 0.7 },
+            GRUNT: { name: "Grunt", health: 120, attack: 20, speed: 2.8, color: new BABYLON.Color3(0.8, 0.4, 0), score: 20, meshType: 'box', size: [0.8, 1.2, 0.8] },
+            DEMON: { name: "Demon", health: 180, attack: 30, speed: 2.2, color: new BABYLON.Color3(0.9, 0.1, 0), score: 30, meshType: 'box', size: [1, 1.5, 1] },
+            SORCERER: { name: "Sorcerer", health: 90, attack: 35, speed: 3.0, color: new BABYLON.Color3(0.5, 0, 0.5), score: 40, meshType: 'cylinder', size: { diameter: 0.8, height: 1.5 }, canShoot: true, shootRange: 15, shootCooldown: 2500 },
+            DEATH: { name: "Death", health: 400, attack: 50, speed: 1.8, color: new BABYLON.Color3(0.1, 0.1, 0.1), score: 100, meshType: 'box', size: [1.2, 2, 1.2], isInvulnerable: false, specialAttack: false, alpha: 0.8 } // Made Death vulnerable, removed special attack for simplicity
+        };
+
+        // Item types
+        const ITEM_TYPES = {
+            FOOD: { name: "Food", health: 100, color: new BABYLON.Color3(0, 0.8, 0), meshType: 'box', size: [0.8, 0.3, 0.8], score: 5 },
+            POTION: { name: "Potion", special: "potion", color: new BABYLON.Color3(0, 0.5, 0.8), meshType: 'cylinder', size: { diameter: 0.5, height: 0.8 }, score: 10 },
+            KEY: { name: "Key", special: "key", color: new BABYLON.Color3(0.8, 0.8, 0), meshType: 'box', size: [0.5, 0.5, 0.1], score: 20 },
+            TREASURE: { name: "Treasure", score: 50, color: new BABYLON.Color3(0.9, 0.7, 0.1), meshType: 'sphere', size: 0.6 }
+        };
+
+        // Game state variables
+        let gameState = GAME_STATES.LOADING;
+        let currentLevel = 1;
+        let player = null;
+        let playerClassInfo = null; // Store selected class details
+        let enemies = [];
+        let projectiles = [];
+        let items = [];
+        let doors = [];
+        let walls = []; // Keep track for potential destruction? Or just collision.
+        let generators = [];
+        let exitKey = null;
+        let exitDoor = null;
+        let score = 0;
+        let keys = 0;
+        let potions = 0;
+        let hasExitKey = false;
+
+        // Game engine variables
+        let canvas, engine, scene;
+        let camera, light;
+        let inputMap = {};
+        let gameTime = 0; // Simple timer using engine delta time
+        let lastMessageTime = 0; // Track time of last message for throttling
+
+        // Sound effects
+        let sounds = {};
+
+        // Map generation constants
+        const TILE_SIZE = 4;
+        const MAP_WIDTH = 20;
+        const MAP_HEIGHT = 20;
+        let dungeon = []; // 2D array representing the level layout
+
+        // UI Elements
+        let playerHealthBarFill; // Reference to the fill element in the player's UI stat block (not GUI)
+        let enemyHealthBars = new Map(); // Map enemy ID to its GUI health bar object { healthBar, healthBarFill }
+        let generatorHealthBars = new Map(); // Map generator ID to its GUI health bar object { healthBar, healthBarFill }
+        let playerStatsDiv, messageLogDiv, gameOverScreen, levelCompleteScreen, startScreen, loadingScreen;
+        let advancedTextureGUI; // Single AdvancedDynamicTexture for all overlaid GUI elements
+
+        // Initialize BabylonJS
+        window.addEventListener('DOMContentLoaded', function() {
+            canvas = document.getElementById('renderCanvas');
+            playerStatsDiv = document.getElementById('playerStats');
+            messageLogDiv = document.getElementById('messageLog');
+            gameOverScreen = document.getElementById('gameOverScreen');
+            levelCompleteScreen = document.getElementById('levelCompleteScreen');
+            startScreen = document.getElementById('startScreen');
+            loadingScreen = document.getElementById('loadingScreen');
+
+            engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+
+            loadGame(); // Start the loading process
+
+            // Use engine's delta time for game time updates within the render loop
+            engine.runRenderLoop(function() {
+                if (scene && engine && gameState !== GAME_STATES.LOADING) { // Only run if scene exists and not loading
+                    let deltaTime = engine.getDeltaTime(); // Time since last frame in ms
+                    gameTime += deltaTime; // Update game time
+
+                    if (gameState === GAME_STATES.PLAYING) {
+                         updateGame(deltaTime); // Pass delta time to main game update logic
+                    }
+                    // Only render if the scene hasn't been disposed (e.g., during restart)
+                    if (scene && !scene.isDisposed) {
+                        scene.render();
+                    }
+                }
+            });
+
+            window.addEventListener('resize', function() {
+                engine.resize();
+            });
+        });
+
+        // Register input
+        window.addEventListener('keydown', function(e) { inputMap[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', function(e) { inputMap[e.key.toLowerCase()] = false; });
+
+        // Load game assets and setup
+        async function loadGame() {
+            gameState = GAME_STATES.LOADING;
+            loadingScreen.style.display = 'flex';
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            levelCompleteScreen.style.display = 'none';
+
+            let loadingProgress = document.getElementById('loadingProgress');
+            let loadingText = document.getElementById('loadingText');
+            let progress = 0;
+
+            try {
+                // Simulate loading steps with progress updates
+                await new Promise(resolve => setTimeout(resolve, 300));
+                loadingText.innerText = 'Loading Sounds (Placeholders)...';
+                await loadSounds(); // Wait for sounds to attempt loading (will use '#')
+                progress = 30;
+                loadingProgress.style.width = progress + '%';
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                loadingText.innerText = 'Initializing Engine...';
+                await setupEngine(); // Setup basic scene, physics, etc.
+                progress = 60;
+                loadingProgress.style.width = progress + '%';
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                loadingText.innerText = 'Setting up UI Listeners...';
+                setupUIListeners(); // Set up button clicks etc.
+                progress = 100;
+                loadingProgress.style.width = progress + '%';
+                await new Promise(resolve => setTimeout(resolve, 500)); // Short pause before showing start screen
+
+                loadingScreen.style.display = 'none';
+                startScreen.style.display = 'flex';
+                gameState = GAME_STATES.START_SCREEN;
+
+            } catch (error) {
+                console.error("Error during game loading:", error);
+                loadingText.innerText = 'Error loading game! Please refresh.';
+                // Optionally display an error message to the user on the loading screen
+            }
+        }
+
+        // Load sound effects (Placeholders only)
+        function loadSounds() {
+          return new Promise((resolve) => {
+            // Using placeholder '#' - NO SOUNDS WILL PLAY.
+            // This satisfies the requirement of not needing external sound files.
+            // If you later decide to add sounds, replace '#' with actual URLs.
+            console.warn("SOUND SYSTEM: Using placeholder URLs ('#'). NO SOUNDS WILL PLAY.");
+            sounds = {
+                background: new Howl({ src: ['#'], loop: true, volume: 0.3, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading background:', err); */ checkSoundsLoaded(); } }),
+                attack_melee: new Howl({ src: ['#'], volume: 0.4, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading attack_melee:', err); */ checkSoundsLoaded(); } }),
+                attack_ranged: new Howl({ src: ['#'], volume: 0.4, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading attack_ranged:', err); */ checkSoundsLoaded(); } }),
+                hit_player: new Howl({ src: ['#'], volume: 0.5, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading hit_player:', err); */ checkSoundsLoaded(); } }),
+                hit_enemy: new Howl({ src: ['#'], volume: 0.3, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading hit_enemy:', err); */ checkSoundsLoaded(); } }),
+                death_enemy: new Howl({ src: ['#'], volume: 0.5, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading death_enemy:', err); */ checkSoundsLoaded(); } }),
+                pickup_item: new Howl({ src: ['#'], volume: 0.6, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading pickup_item:', err); */ checkSoundsLoaded(); } }),
+                pickup_key: new Howl({ src: ['#'], volume: 0.7, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading pickup_key:', err); */ checkSoundsLoaded(); } }),
+                door_open: new Howl({ src: ['#'], volume: 0.5, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading door_open:', err); */ checkSoundsLoaded(); } }),
+                door_locked: new Howl({ src: ['#'], volume: 0.5, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading door_locked:', err); */ checkSoundsLoaded(); } }),
+                special_warrior: new Howl({ src: ['#'], volume: 0.7, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading special_warrior:', err); */ checkSoundsLoaded(); } }),
+                special_valkyrie: new Howl({ src: ['#'], volume: 0.7, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading special_valkyrie:', err); */ checkSoundsLoaded(); } }),
+                special_wizard: new Howl({ src: ['#'], volume: 0.8, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading special_wizard:', err); */ checkSoundsLoaded(); } }),
+                special_elf: new Howl({ src: ['#'], volume: 0.6, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading special_elf:', err); */ checkSoundsLoaded(); } }),
+                levelComplete: new Howl({ src: ['#'], volume: 0.8, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading levelComplete:', err); */ checkSoundsLoaded(); } }),
+                gameOver: new Howl({ src: ['#'], volume: 0.8, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading gameOver:', err); */ checkSoundsLoaded(); } }),
+                potion_use: new Howl({ src: ['#'], volume: 0.6, onload: checkSoundsLoaded, onloaderror: (id, err) => { /* console.error('Error loading potion_use:', err); */ checkSoundsLoaded(); } })
+            };
+            // Commented out error logs to reduce console noise when using placeholders intentionally.
+
+            let loadedCount = 0;
+            const totalSounds = Object.keys(sounds).length;
+            let resolved = false; // Prevent multiple resolves
+
+            function checkSoundsLoaded() {
+              loadedCount++;
+              if (!resolved && loadedCount >= totalSounds) { // Use >= in case errors fire quickly
+                console.log("All sound placeholders processed.");
+                resolved = true;
+                resolve();
+              }
+            }
+            // Failsafe timeout is less critical now, but keep it just in case.
+            setTimeout(() => { if (!resolved) { console.warn(`Sound placeholder processing timed out.`); resolved = true; resolve(); } }, 5000);
+          });
+        }
+
+        function setupUIListeners() {
+            // Set up character selection
+            let characterCards = document.querySelectorAll('.characterCard');
+            characterCards.forEach(card => {
+                card.addEventListener('click', function() {
+                    let type = this.getAttribute('data-type');
+                    if (gameState === GAME_STATES.START_SCREEN) {
+                        selectCharacter(type);
+                    }
+                });
+            });
+
+            // Set up restart button
+            document.getElementById('restartButton').addEventListener('click', function() {
+                if (gameState === GAME_STATES.GAME_OVER) {
+                    restartGame();
+                }
+            });
+
+            // Set up next level button
+            document.getElementById('nextLevelButton').addEventListener('click', function() {
+                if (gameState === GAME_STATES.LEVEL_COMPLETE) {
+                    loadNextLevel();
+                }
+            });
+        }
+
+        // Set up game scene (can be called multiple times for new levels)
+        function setupEngine() {
+          return new Promise((resolve) => {
+            // Dispose previous scene if exists to prevent resource leaks
+            if (scene) {
+                console.log("Disposing previous scene...");
+                scene.dispose();
+                scene = null; // Ensure scene is nullified
+            }
+            // Dispose previous GUI texture if it exists
+            if(advancedTextureGUI) {
+                console.log("Disposing previous GUI Texture...");
+                advancedTextureGUI.dispose();
+                advancedTextureGUI = null;
+            }
+
+            console.log("Creating new scene...");
+            scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color3(0.05, 0.05, 0.1);
+            scene.collisionsEnabled = true; // Enable scene collisions for camera/player
+            scene.gravity = new BABYLON.Vector3(0, -9.81 * 2.5, 0); // Slightly stronger gravity? Adjust as needed
+
+            // Set up lighting
+            light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.7;
+            light.diffuse = new BABYLON.Color3(0.8, 0.8, 1); // Cool ambient light
+            light.groundColor = new BABYLON.Color3(0.4, 0.4, 0.5); // Darker ground ambient
+
+            // Add some fog for atmosphere
+            scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+            scene.fogDensity = 0.015; // Controls fog intensity
+            scene.fogColor = new BABYLON.Color3(0.1, 0.1, 0.15); // Dark fog color
+
+            // Setup physics - Use Cannon.js
+            if (window.CANNON) {
+                scene.enablePhysics(scene.gravity, new BABYLON.CannonJSPlugin());
+                console.log("Physics enabled.");
+            } else {
+                console.error("Cannon.js physics engine not found!");
+            }
+
+             // Create the single AdvancedDynamicTexture for GUI overlays
+            advancedTextureGUI = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+            console.log("Fullscreen GUI Texture created.");
+
+            console.log("Engine setup complete.");
+            resolve();
+          });
+        }
+
+        // Select character and start game
+        async function selectCharacter(type) {
+            if (!CHARACTER_CLASSES[type]) {
+                console.error(`Invalid character type selected: ${type}`);
+                return;
+            }
+            startScreen.style.display = 'none';
+            playerClassInfo = CHARACTER_CLASSES[type];
+
+            resetFullGameState(); // Reset score, level etc. for a new game
+            await setupEngine(); // Ensure engine/scene is ready *before* starting level
+            startGameLevel(); // Start the first level
+        }
+
+        // Starts or restarts the game at the current level
+        function startGameLevel() {
+            if (!scene) {
+              console.error("Scene not initialized! Cannot start level.");
+              return;
+            }
+            console.log(`Starting Level ${currentLevel}`);
+            clearLevel();       // Clear meshes, arrays from previous level (if any)
+            generateLevel();    // Create dungeon layout data and meshes
+            createPlayer();     // Create the player mesh and data object
+            setupPlayerCamera(); // Set up the camera after player exists
+            setupUI();          // Initialize UI text/stats display
+            lastMessageTime = 0; // Reset message timer
+            inputMap = {};       // Reset input map to prevent stuck keys
+
+            // Background sound is placeholder, so no actual music will play
+            if (sounds.background && sounds.background.state() === 'loaded') {
+                 // sounds.background.play(); // Don't attempt to play the placeholder
+                 console.log("Background sound placeholder loaded (no audio).");
+            } else {
+                console.warn("Background sound placeholder not loaded or failed.");
+            }
+
+            gameState = GAME_STATES.PLAYING;
+            showMessage(`${playerClassInfo.name} enters the dungeon! LEVEL ${currentLevel}`, 5000);
+        }
+
+        // Reset game state for a completely new game
+        function resetFullGameState() {
+            console.log("Resetting full game state.");
+            score = 0;
+            keys = 0;
+            potions = 3; // Start with 3 potions
+            currentLevel = 1;
+            hasExitKey = false;
+            gameTime = 0; // Reset game timer as well
+        }
+
+        // Clear current level entities and scene elements
+        function clearLevel() {
+            if (!scene) {
+                console.warn("Attempted to clear level, but scene does not exist.");
+                return;
+            }
+            console.log("Clearing level entities...");
+
+             // --- Dispose GUI Elements First ---
+             if (advancedTextureGUI) {
+                 // console.log(`Disposing ${enemyHealthBars.size} enemy health bars from GUI.`);
+                 enemyHealthBars.forEach(enemyData => {
+                     if (enemyData && enemyData.healthBar && !enemyData.healthBar.isDisposed) {
+                        advancedTextureGUI.removeControl(enemyData.healthBar);
+                        enemyData.healthBar.dispose();
+                     }
+                 });
+                 enemyHealthBars.clear();
+
+                 // console.log(`Disposing ${generatorHealthBars.size} generator health bars from GUI.`);
+                 generatorHealthBars.forEach(genData => {
+                     if (genData && genData.healthBar && !genData.healthBar.isDisposed) {
+                         advancedTextureGUI.removeControl(genData.healthBar);
+                         genData.healthBar.dispose();
+                     }
+                 });
+                 generatorHealthBars.clear();
+             } else {
+                // console.warn("AdvancedTextureGUI not found during clearLevel, cannot dispose health bars.");
+             }
+
+
+            // --- Dispose Meshes and Physics Impostors ---
+            // console.log("Disposing entity meshes and physics impostors...");
+            let entitiesToClear = [enemies, projectiles, items, walls, doors, generators];
+            entitiesToClear.forEach(arr => {
+                for(let i = arr.length - 1; i >= 0; i--) {
+                    let entity = arr[i];
+                     if (entity && entity.mesh) {
+                        if (entity.mesh.physicsImpostor) {
+                             entity.mesh.physicsImpostor.dispose();
+                             entity.mesh.physicsImpostor = null;
+                        }
+                        if (!entity.mesh.isDisposed()) {
+                            entity.mesh.dispose();
+                        }
+                        entity.mesh = null;
+                    }
+                }
+                arr.length = 0;
+            });
+
+            if (exitKey && exitKey.mesh && !exitKey.mesh.isDisposed()) {
+                 if (exitKey.mesh.physicsImpostor) exitKey.mesh.physicsImpostor.dispose();
+                 exitKey.mesh.dispose();
+            }
+            exitKey = null;
+
+            if (exitDoor && exitDoor.mesh && !exitDoor.mesh.isDisposed()) {
+                 if (exitDoor.mesh.physicsImpostor) exitDoor.mesh.physicsImpostor.dispose();
+                 exitDoor.mesh.dispose();
+            }
+            exitDoor = null;
+
+            if (player && player.mesh && !player.mesh.isDisposed()) {
+                if (player.mesh.physicsImpostor) {
+                     player.mesh.physicsImpostor.dispose();
+                     player.mesh.physicsImpostor = null;
+                }
+                player.mesh.dispose();
+                 player.mesh = null;
+            } else {
+                player = null;
+            }
+
+            let ground = scene.getMeshByName("ground");
+            if (ground && !ground.isDisposed()) {
+                 if (ground.physicsImpostor) ground.physicsImpostor.dispose();
+                 ground.dispose();
+            }
+            let ceiling = scene.getMeshByName("ceiling");
+            if (ceiling && !ceiling.isDisposed()) {
+                ceiling.dispose();
+            }
+
+            dungeon = [];
+            hasExitKey = false;
+            console.log("Level clear complete.");
+        }
+
+
+        // Generate a random dungeon level (simplified BSP or room/corridor approach)
+        function generateLevel() {
+            // --- Same dungeon generation logic as before ---
+            console.log("Generating dungeon layout...");
+            dungeon = new Array(MAP_HEIGHT).fill(0).map(() => new Array(MAP_WIDTH).fill(1)); // Start with all walls
+            let rooms = [];
+            const maxRooms = 5 + Math.floor(currentLevel * 1.5);
+            const minRoomSize = 3;
+            const maxRoomSize = 6 + Math.min(5, Math.floor(currentLevel / 2));
+            const maxTries = maxRooms * 10;
+            for (let i = 0; i < maxTries && rooms.length < maxRooms; i++) {
+                let w = minRoomSize + Math.floor(Math.random() * (maxRoomSize - minRoomSize + 1));
+                let h = minRoomSize + Math.floor(Math.random() * (maxRoomSize - minRoomSize + 1));
+                let x = 1 + Math.floor(Math.random() * (MAP_WIDTH - w - 2));
+                let y = 1 + Math.floor(Math.random() * (MAP_HEIGHT - h - 2));
+                if (x < 1 || y < 1 || x+w >= MAP_WIDTH-1 || y+h >= MAP_HEIGHT-1) continue;
+                let newRoom = { x, y, w, h, cx: x + Math.floor(w / 2), cy: y + Math.floor(h / 2) };
+                let overlaps = false;
+                for (let existingRoom of rooms) { if (x < existingRoom.x + existingRoom.w + 1 && x + w + 1 > existingRoom.x && y < existingRoom.y + existingRoom.h + 1 && y + h + 1 > existingRoom.y) { overlaps = true; break; } }
+                if (!overlaps) {
+                    for (let ry = y; ry < y + h; ry++) { for (let rx = x; rx < x + w; rx++) { if (ry >= 0 && ry < MAP_HEIGHT && rx >=0 && rx < MAP_WIDTH) dungeon[ry][rx] = 0; } }
+                    rooms.push(newRoom);
+                }
+            }
+            if (rooms.length === 0) {
+                console.warn("Room generation failed, creating failsafe room.");
+                let w = 5, h = 5; let x = Math.max(1, Math.floor(MAP_WIDTH/2 - w/2)); let y = Math.max(1, Math.floor(MAP_HEIGHT/2 - h/2));
+                let newRoom = { x, y, w, h, cx: x + Math.floor(w / 2), cy: y + Math.floor(h / 2) };
+                for (let ry = y; ry < y + h; ry++) { for (let rx = x; rx < x + w; rx++) { if (ry >= 0 && ry < MAP_HEIGHT && rx >=0 && rx < MAP_WIDTH) dungeon[ry][rx] = 0; } }
+                rooms.push(newRoom);
+            }
+            // console.log(`Generated ${rooms.length} rooms.`);
+            for (let i = 0; i < rooms.length - 1; i++) {
+                let c1 = rooms[i]; let c2 = rooms[i + 1]; let x1 = c1.cx, y1 = c1.cy; let x2 = c2.cx, y2 = c2.cy;
+                if (Math.random() > 0.5) { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) { if (y1 >= 0 && y1 < MAP_HEIGHT && x >=0 && x < MAP_WIDTH) dungeon[y1][x] = 0; } for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) { if (y >= 0 && y < MAP_HEIGHT && x2 >=0 && x2 < MAP_WIDTH) dungeon[y][x2] = 0; }
+                } else { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) { if (y >= 0 && y < MAP_HEIGHT && x1 >=0 && x1 < MAP_WIDTH) dungeon[y][x1] = 0; } for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) { if (y2 >= 0 && y2 < MAP_HEIGHT && x >=0 && x < MAP_WIDTH) dungeon[y2][x] = 0; } }
+            }
+            let placedDoors = 0; let doorCandidates = [];
+            for (let y = 1; y < MAP_HEIGHT - 1; y++) { for (let x = 1; x < MAP_WIDTH - 1; x++) { if (dungeon[y][x] === 1) { if (dungeon[y][x - 1] === 0 && dungeon[y][x + 1] === 0 && dungeon[y - 1][x] === 1 && dungeon[y + 1][x] === 1) doorCandidates.push({x, y}); else if (dungeon[y - 1][x] === 0 && dungeon[y + 1][x] === 0 && dungeon[y][x - 1] === 1 && dungeon[y][x + 1] === 1) doorCandidates.push({x, y}); } } }
+            shuffleArray(doorCandidates); let numDoorsToPlace = Math.min(doorCandidates.length, rooms.length + Math.floor(currentLevel / 2));
+            for(let i=0; i < numDoorsToPlace; i++) { let pos = doorCandidates[i]; dungeon[pos.y][pos.x] = 2; placedDoors++; }
+            // console.log(`Placed ${placedDoors} doors.`);
+            let playerStartRoom = rooms[0]; let startX = playerStartRoom.cx; let startY = playerStartRoom.cy;
+            if (player) { player.startX = startX; player.startY = startY; } else { player = { startX: startX, startY: startY }; }
+            let exitRoomIndex = rooms.length > 1 ? rooms.length - 1 : 0; let keyRoomIndex = 0;
+            if (rooms.length > 2) { keyRoomIndex = Math.floor(1 + Math.random() * (rooms.length - 2)); if (keyRoomIndex === exitRoomIndex) { keyRoomIndex = (exitRoomIndex > 1) ? exitRoomIndex - 1 : 1; } } else if (rooms.length > 1) { keyRoomIndex = 1; if (keyRoomIndex === exitRoomIndex) keyRoomIndex = 0; }
+            keyRoomIndex = Math.max(0, Math.min(rooms.length - 1, keyRoomIndex)); if (keyRoomIndex === 0 && exitRoomIndex === 0 && rooms.length > 1) { exitRoomIndex = 1; }
+            let exitRoom = rooms[exitRoomIndex]; let keyRoom = rooms[keyRoomIndex];
+            dungeon[exitRoom.cy][exitRoom.cx] = 5; dungeon[keyRoom.cy][keyRoom.cx] = 4;
+            let floorTiles = [];
+            for (let y = 1; y < MAP_HEIGHT - 1; y++) { for (let x = 1; x < MAP_WIDTH - 1; x++) { if (dungeon[y][x] === 0) { let distPlayer = Math.abs(x - startX) + Math.abs(y - startY); let distExit = Math.abs(x - exitRoom.cx) + Math.abs(y - exitRoom.cy); let distKey = Math.abs(x - keyRoom.cx) + Math.abs(y - keyRoom.cy); if(distPlayer > 3 && distExit > 0 && distKey > 0) floorTiles.push({x, y}); } } }
+            shuffleArray(floorTiles);
+            let numGenerators = Math.min(floorTiles.length, 1 + Math.floor(currentLevel / 3));
+            for(let i=0; i < numGenerators && floorTiles.length > 0; i++) { let pos = floorTiles.pop(); dungeon[pos.y][pos.x] = 3; }
+            let numItems = Math.min(floorTiles.length, 4 + Math.floor(currentLevel * 1.2));
+            for(let i=0; i < numItems && floorTiles.length > 0; i++) { let pos = floorTiles.pop(); dungeon[pos.y][pos.x] = 6; }
+            let numEnemies = Math.min(floorTiles.length, 3 + Math.floor(currentLevel * 1.5));
+            for(let i=0; i < numEnemies && floorTiles.length > 0; i++) { let pos = floorTiles.pop(); dungeon[pos.y][pos.x] = 7; }
+             // --- End of dungeon generation logic ---
+
+            // Build 3D level from dungeon grid
+            console.log("Building 3D level geometry (using colors only)...");
+            buildLevel();
+            console.log("Level generation complete.");
+        }
+
+        // Fisher-Yates Shuffle
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+
+        // Build the 3D level from the dungeon grid (Colors only)
+        function buildLevel() {
+            // --- Materials (Define once for efficiency) ---
+            let groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+            groundMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.35, 0.25); // Brownish ground
+            // groundMaterial.diffuseTexture = ...; // REMOVED
+            groundMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+            let ceilingMaterial = new BABYLON.StandardMaterial("ceilingMat", scene);
+            ceilingMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.25); // Darker ceiling
+            ceilingMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            ceilingMaterial.backFaceCulling = false; // Ensure ceiling is visible from below
+
+            let wallMaterial = new BABYLON.StandardMaterial("wallMat", scene);
+            wallMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.55); // Grey walls
+            // wallMaterial.diffuseTexture = ...; // REMOVED
+            wallMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+            // Create ground plane
+            let ground = BABYLON.MeshBuilder.CreateGround("ground", {width: MAP_WIDTH * TILE_SIZE, height: MAP_HEIGHT * TILE_SIZE}, scene);
+            ground.position.y = 0;
+            ground.material = groundMaterial;
+            ground.checkCollisions = true;
+             if (scene.isPhysicsEnabled) {
+                ground.physicsImpostor = new BABYLON.PhysicsImpostor(ground, BABYLON.PhysicsImpostor.BoxImpostor, { mass: 0, friction: 0.8, restitution: 0.1 }, scene);
+             }
+
+             // Create ceiling plane
+            let ceiling = BABYLON.MeshBuilder.CreatePlane("ceiling", {width: MAP_WIDTH * TILE_SIZE, height: MAP_HEIGHT * TILE_SIZE}, scene);
+            ceiling.position.y = TILE_SIZE;
+            ceiling.rotation.x = Math.PI; // Flip it to face down
+            ceiling.material = ceilingMaterial;
+            ceiling.checkCollisions = true;
+
+
+            // Process each cell in the dungeon grid
+            for (let y = 0; y < MAP_HEIGHT; y++) {
+                for (let x = 0; x < MAP_WIDTH; x++) {
+                    let worldX = (x - MAP_WIDTH / 2 + 0.5) * TILE_SIZE;
+                    let worldZ = (y - MAP_HEIGHT / 2 + 0.5) * TILE_SIZE;
+                    switch (dungeon[y][x]) {
+                        case 1: createWall(worldX, worldZ, wallMaterial); break;
+                        case 2: createDoor(worldX, worldZ); break;
+                        case 3: createGenerator(worldX, worldZ); break;
+                        case 4: createExitKey(worldX, worldZ); break;
+                        case 5: createExitDoor(worldX, worldZ); break;
+                        case 6: createRandomItem(worldX, worldZ); break;
+                        case 7: createRandomEnemy(worldX, worldZ); break;
+                    }
+                }
+            }
+            console.log(`Created ${walls.length} walls, ${doors.length} doors, ${generators.length} generators, ${items.length} items, ${enemies.length} enemies.`);
+        }
+
+        // Create a wall - Accepts shared material
+        function createWall(x, z, material) {
+            let wall = BABYLON.MeshBuilder.CreateBox("wall_" + x + "_" + z, {width: TILE_SIZE, height: TILE_SIZE, depth: TILE_SIZE}, scene);
+            wall.position = new BABYLON.Vector3(x, TILE_SIZE / 2, z);
+            wall.material = material; // Use shared wall material (now color only)
+            wall.checkCollisions = true;
+            if (scene.isPhysicsEnabled) {
+                wall.physicsImpostor = new BABYLON.PhysicsImpostor(wall, BABYLON.PhysicsImpostor.BoxImpostor, { mass: 0, friction: 0.6, restitution: 0.2 }, scene);
+            }
+            walls.push({ mesh: wall, x: x, z: z });
+        }
+
+        // Create a door
+        function createDoor(x, z) {
+            const doorHeight = TILE_SIZE * 0.9;
+            const doorWidth = TILE_SIZE * 0.9;
+            const doorDepth = 0.3;
+            let door = BABYLON.MeshBuilder.CreateBox("door_" + x + "_" + z, {width: doorWidth, height: doorHeight, depth: doorDepth}, scene);
+            door.position = new BABYLON.Vector3(x, doorHeight / 2, z);
+            let doorMaterial = new BABYLON.StandardMaterial("doorMat_" + x + "_" + z, scene);
+            doorMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.1); // Wood color
+            doorMaterial.specularColor = new BABYLON.Color3(0.1, 0.05, 0);
+            door.material = doorMaterial;
+            door.checkCollisions = true;
+             if (scene.isPhysicsEnabled) {
+                door.physicsImpostor = new BABYLON.PhysicsImpostor(door, BABYLON.PhysicsImpostor.BoxImpostor, { mass: 0, friction: 0.5, restitution: 0.3 }, scene);
+             }
+            let requiresKey = Math.random() < Math.min(0.6, 0.15 + currentLevel * 0.05);
+            let doorData = { mesh: door, x: x, z: z, isOpen: false, isOpening: false, requiresKey: requiresKey, originalY: door.position.y };
+            doors.push(doorData);
+            if (requiresKey) { doorMaterial.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0); }
+        }
+
+        // Open a door
+        function openDoor(door) {
+            if (!door || door.isOpen || door.isOpening || !door.mesh || door.mesh.isDisposed()) return;
+            if (door.requiresKey) {
+                if (player && player.keys > 0) {
+                    player.keys--; keys = player.keys; showMessage("Used a key to open the door.", 2000);
+                    if (door.mesh.material) door.mesh.material.emissiveColor = new BABYLON.Color3(0, 0, 0);
+                } else {
+                    showMessage("This door requires a key!", 2000);
+                    if (sounds.door_locked && sounds.door_locked.state() === 'loaded') sounds.door_locked.play(); // Placeholder check
+                    return;
+                }
+            } else { showMessage("Door opened.", 1500); }
+            door.isOpening = true;
+            if (sounds.door_open && sounds.door_open.state() === 'loaded') sounds.door_open.play(); // Placeholder check
+            updatePlayerStats();
+            let targetY = door.originalY + TILE_SIZE;
+            let animation = new BABYLON.Animation("doorOpenAnim", "position.y", 60, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+            animation.setKeys([{ frame: 0, value: door.mesh.position.y }, { frame: 30, value: targetY }]);
+            scene.beginDirectAnimation(door.mesh, [animation], 0, 30, false, 1, () => {
+                if (door.mesh && !door.mesh.isDisposed()) {
+                    door.mesh.checkCollisions = false;
+                    if (door.mesh.physicsImpostor) { door.mesh.physicsImpostor.dispose(); door.mesh.physicsImpostor = null; }
+                    door.isOpen = true;
+                }
+                door.isOpening = false;
+            });
+        }
+
+        // Create an enemy generator
+        function createGenerator(x, z) {
+            let genMesh = BABYLON.MeshBuilder.CreateCylinder("generator_" + x + "_" + z, {diameter: 1.5, height: 1.5, tessellation: 12}, scene);
+            genMesh.position = new BABYLON.Vector3(x, 0.75, z);
+            let genMaterial = new BABYLON.StandardMaterial("genMat_" + x + "_" + z, scene);
+            genMaterial.diffuseColor = new BABYLON.Color3(0.7, 0.1, 0.7); // Purple
+            genMaterial.emissiveColor = new BABYLON.Color3(0.4, 0, 0.4); // Glowing purple
+            genMaterial.specularColor = new BABYLON.Color3(0.2, 0, 0.2);
+            genMesh.material = genMaterial;
+            genMesh.checkCollisions = true;
+             if (scene.isPhysicsEnabled) {
+                genMesh.physicsImpostor = new BABYLON.PhysicsImpostor(genMesh, BABYLON.PhysicsImpostor.CylinderImpostor, { mass: 0, friction: 0.5, restitution: 0.3 }, scene);
+            }
+            let health = 150 + currentLevel * 30;
+            let generator = { mesh: genMesh, x: x, z: z, health: health, maxHealth: health, lastSpawnTime: gameTime, spawnRate: Math.max(3000, 8000 - currentLevel * 500), isDestroyed: false, id: "gen_" + BABYLON.Tools.RandomId() };
+            generators.push(generator);
+            createGeneratorHealthBar(generator);
+        }
+
+         // Create GUI health bar for a generator
+        function createGeneratorHealthBar(generator) {
+            if (!advancedTextureGUI) { console.error("Cannot create generator health bar, advancedTextureGUI is not initialized."); return; }
+            let healthBar = new BABYLON.GUI.Rectangle(generator.id + "_bar");
+            healthBar.width = "60px"; healthBar.height = "6px"; healthBar.cornerRadius = 3; healthBar.color = "#111"; healthBar.thickness = 1; healthBar.background = "#333";
+            healthBar.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            let healthFill = new BABYLON.GUI.Rectangle(generator.id + "_fill");
+            healthFill.width = 1.0; healthFill.height = 1.0; healthFill.cornerRadius = 3; healthFill.color = "transparent"; healthFill.background = "#ff00ff";
+            healthFill.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            healthBar.addControl(healthFill);
+            advancedTextureGUI.addControl(healthBar);
+            healthBar.linkWithMesh(generator.mesh);
+            let meshHeight = 1.5;
+            healthBar.linkOffsetY = -(meshHeight * 10 + 10);
+            generator.healthBar = healthBar; generator.healthBarFill = healthFill;
+            generatorHealthBars.set(generator.id, generator);
+            healthBar.isVisible = false;
+        }
+
+        // Update generator health bar display
+        function updateGeneratorHealthBar(generator) {
+            if (generator && generator.healthBar && !generator.healthBar.isDisposed && generator.healthBarFill) {
+                let healthPercent = Math.max(0, generator.health / generator.maxHealth);
+                generator.healthBarFill.width = healthPercent;
+                generator.healthBar.isVisible = (healthPercent > 0 && healthPercent < 1);
+            }
+        }
+
+        // Create the exit key
+        function createExitKey(x, z) {
+            let keyMesh = BABYLON.MeshBuilder.CreateBox("exitKey", {width: 0.5, height: 0.5, depth: 0.1}, scene);
+            keyMesh.position = new BABYLON.Vector3(x, 0.6, z); keyMesh.rotation.y = Math.PI / 4;
+            let keyMaterial = new BABYLON.StandardMaterial("keyMat", scene);
+            keyMaterial.diffuseColor = new BABYLON.Color3(1, 0.85, 0); keyMaterial.emissiveColor = new BABYLON.Color3(0.5, 0.4, 0); keyMaterial.specularColor = new BABYLON.Color3(1, 1, 0.7);
+            keyMesh.material = keyMaterial;
+            keyMesh.checkCollisions = false; keyMesh.isPickable = false;
+            let rotateAnim = new BABYLON.Animation("keyRotate", "rotation.y", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+            rotateAnim.setKeys([ { frame: 0, value: keyMesh.rotation.y }, { frame: 60, value: keyMesh.rotation.y + 2 * Math.PI }]);
+            let bobAnim = new BABYLON.Animation("keyBob", "position.y", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+            let startY = keyMesh.position.y;
+            bobAnim.setKeys([ { frame: 0, value: startY - 0.1 }, { frame: 30, value: startY + 0.1 }, { frame: 60, value: startY - 0.1 } ]);
+            keyMesh.animations = [rotateAnim, bobAnim];
+            scene.beginAnimation(keyMesh, 0, 60, true);
+            exitKey = { mesh: keyMesh, x: x, z: z, collected: false };
+        }
+
+        // Create the exit door
+        function createExitDoor(x, z) {
+            let doorMesh = BABYLON.MeshBuilder.CreateBox("exitDoor", {width: TILE_SIZE * 0.8, height: TILE_SIZE * 0.9, depth: 0.4}, scene);
+            doorMesh.position = new BABYLON.Vector3(x, TILE_SIZE * 0.9 / 2, z);
+            let doorMaterial = new BABYLON.StandardMaterial("exitDoorMat", scene);
+            doorMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.7, 0.1); doorMaterial.emissiveColor = new BABYLON.Color3(0, 0.3, 0); doorMaterial.specularColor = new BABYLON.Color3(0.2, 0.5, 0.2);
+            doorMesh.material = doorMaterial;
+            doorMesh.checkCollisions = true;
+            if (scene.isPhysicsEnabled) {
+                doorMesh.physicsImpostor = new BABYLON.PhysicsImpostor(doorMesh, BABYLON.PhysicsImpostor.BoxImpostor, { mass: 0, friction: 0.5, restitution: 0.3 }, scene);
+            }
+            exitDoor = { mesh: doorMesh, x: x, z: z, isOpen: false };
+        }
+
+        // Create a random item based on type percentages
+        function createRandomItem(x, z) {
+             let rand = Math.random(); let type;
+             if (rand < 0.50) type = 'FOOD'; else if (rand < 0.75) type = 'TREASURE'; else if (rand < 0.90) type = 'POTION'; else type = 'KEY';
+             let itemData = ITEM_TYPES[type]; if (!itemData) return;
+             let itemMesh; let meshName = type + "_" + BABYLON.Tools.RandomId();
+             if (itemData.meshType === 'box') itemMesh = BABYLON.MeshBuilder.CreateBox(meshName, {width: itemData.size[0], height: itemData.size[1], depth: itemData.size[2]}, scene);
+             else if (itemData.meshType === 'cylinder') itemMesh = BABYLON.MeshBuilder.CreateCylinder(meshName, {diameter: itemData.size.diameter, height: itemData.size.height, tessellation: 12}, scene);
+             else itemMesh = BABYLON.MeshBuilder.CreateSphere(meshName, {diameter: itemData.size, segments: 12}, scene);
+             let baseY = (itemData.meshType === 'box' ? itemData.size[1] : (itemData.meshType === 'cylinder' ? itemData.size.height : itemData.size)) / 2 + 0.1;
+             itemMesh.position = new BABYLON.Vector3(x, baseY, z);
+             if (type === 'KEY') itemMesh.rotation.y = Math.PI / 4 + Math.random() * Math.PI / 2;
+             let itemMaterial = new BABYLON.StandardMaterial("itemMat_" + meshName, scene);
+             itemMaterial.diffuseColor = itemData.color.clone(); itemMaterial.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+             if (type === 'TREASURE' || type === 'POTION' || type === 'KEY') itemMaterial.emissiveColor = itemData.color.scale(0.3);
+             itemMesh.material = itemMaterial;
+             itemMesh.checkCollisions = false; itemMesh.isPickable = false;
+             itemMesh.animations = [];
+             let bobAnim = new BABYLON.Animation("itemBob", "position.y", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+             let startY = itemMesh.position.y;
+             bobAnim.setKeys([ { frame: 0, value: startY - 0.1 }, { frame: 30, value: startY + 0.1 }, { frame: 60, value: startY - 0.1 } ]);
+             itemMesh.animations.push(bobAnim);
+             if (type === 'KEY' || type === 'POTION' || type === 'TREASURE') {
+                 let rotateAnim = new BABYLON.Animation("itemRotate", "rotation.y", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+                 let startRotY = itemMesh.rotation.y;
+                 rotateAnim.setKeys([ { frame: 0, value: startRotY }, { frame: 90, value: startRotY + 2 * Math.PI }]);
+                 itemMesh.animations.push(rotateAnim);
+             }
+             scene.beginAnimation(itemMesh, 0, 90, true);
+             items.push({ mesh: itemMesh, type: type, x: x, z: z, health: itemData.health || 0, special: itemData.special || null, score: itemData.score || 0 });
+        }
+
+        // Create a random enemy at a specific location
+        function createRandomEnemy(x, z, specificType = null) {
+            let type;
+            if (specificType && ENEMY_TYPES[specificType]) type = specificType;
+            else {
+                let possibleTypes = []; let weightSum = 0;
+                let weights = { GHOST: 20 - currentLevel, GRUNT: 30 + currentLevel, DEMON: (currentLevel > 2) ? 15 + currentLevel : 0, SORCERER: (currentLevel > 3) ? 10 + currentLevel : 0, DEATH: (currentLevel > 5) ? 5 + currentLevel * 0.5 : 0 };
+                for (const key in weights) { if (weights[key] > 0) { possibleTypes.push({ type: key, weight: weights[key] }); weightSum += weights[key]; } }
+                if (weightSum === 0 || possibleTypes.length === 0) type = 'GHOST';
+                else { let rand = Math.random() * weightSum; let cumulativeWeight = 0; for(let item of possibleTypes) { cumulativeWeight += item.weight; if (rand < cumulativeWeight) { type = item.type; break; } } if (!type) type = possibleTypes[possibleTypes.length - 1].type; }
+            }
+            let enemyData = ENEMY_TYPES[type]; if (!enemyData) { type = 'GRUNT'; enemyData = ENEMY_TYPES[type]; }
+            let enemyMesh; let meshHeight = 1.5; let meshName = "enemy_" + type + "_" + BABYLON.Tools.RandomId();
+            if (enemyData.meshType === 'box') { enemyMesh = BABYLON.MeshBuilder.CreateBox(meshName, {width: enemyData.size[0], height: enemyData.size[1], depth: enemyData.size[2]}, scene); meshHeight = enemyData.size[1]; }
+            else if (enemyData.meshType === 'cylinder') { enemyMesh = BABYLON.MeshBuilder.CreateCylinder(meshName, {diameter: enemyData.size.diameter, height: enemyData.size.height, tessellation: 12}, scene); meshHeight = enemyData.size.height; }
+            else { enemyMesh = BABYLON.MeshBuilder.CreateSphere(meshName, {diameter: enemyData.size, segments: 12}, scene); meshHeight = enemyData.size; }
+            enemyMesh.position = new BABYLON.Vector3(x, meshHeight / 2 + 0.05, z);
+            let enemyMaterial = new BABYLON.StandardMaterial("enemyMat_" + meshName, scene);
+            enemyMaterial.diffuseColor = enemyData.color.clone(); enemyMaterial.specularColor = enemyData.color.scale(0.3);
+            if (enemyData.alpha && enemyData.alpha < 1.0) enemyMaterial.alpha = enemyData.alpha;
+            enemyMesh.material = enemyMaterial;
+            enemyMesh.checkCollisions = true;
+            if (scene.isPhysicsEnabled) {
+                let impostorType;
+                if (enemyData.meshType === 'sphere') impostorType = BABYLON.PhysicsImpostor.SphereImpostor;
+                else if (enemyData.meshType === 'cylinder') impostorType = BABYLON.PhysicsImpostor.CylinderImpostor;
+                else impostorType = BABYLON.PhysicsImpostor.BoxImpostor;
+                enemyMesh.physicsImpostor = new BABYLON.PhysicsImpostor(enemyMesh, impostorType, { mass: 40 + Math.random() * 20, friction: 0.4, restitution: 0.1 }, scene);
+                enemyMesh.physicsImpostor.physicsBody.angularDamping = 0.98;
+                if (impostorType !== BABYLON.PhysicsImpostor.SphereImpostor) { enemyMesh.physicsImpostor.physicsBody.fixedRotation = true; enemyMesh.physicsImpostor.physicsBody.updateMassProperties(); }
+            }
+            let health = enemyData.health + Math.floor(currentLevel * enemyData.health * 0.1);
+            let attack = enemyData.attack + Math.floor(currentLevel * enemyData.attack * 0.08);
+            let speed = enemyData.speed * (1 + Math.min(0.5, currentLevel * 0.03));
+            let enemy = { mesh: enemyMesh, id: "enemy_" + BABYLON.Tools.RandomId(), type: type, x: x, z: z, health: health, maxHealth: health, attack: attack, speed: speed, lastAttackTime: 0, lastShotTime: 0, shootCooldown: enemyData.shootCooldown || 2000, shootRange: enemyData.shootRange || 0, canShoot: enemyData.canShoot || false, isInvulnerable: enemyData.isInvulnerable || false, specialAttack: enemyData.specialAttack || false, score: enemyData.score, state: 'idle', targetPosition: null, healthBar: null, healthBarFill: null, markedForDeath: false };
+            enemies.push(enemy);
+            createEnemyHealthBar(enemy);
+        }
+
+        // Create GUI health bar for an enemy
+        function createEnemyHealthBar(enemy) {
+             if (!advancedTextureGUI) { console.error("Cannot create enemy health bar, advancedTextureGUI is not initialized."); return; }
+             let healthBar = new BABYLON.GUI.Rectangle(enemy.id + "_bar");
+             healthBar.width = "50px"; healthBar.height = "5px"; healthBar.cornerRadius = 2; healthBar.color = "#300"; healthBar.thickness = 1; healthBar.background = "#500";
+             healthBar.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+             let healthFill = new BABYLON.GUI.Rectangle(enemy.id + "_fill");
+             healthFill.width = 1.0; healthFill.height = 1.0; healthFill.cornerRadius = 2; healthFill.color = "transparent"; healthFill.background = "#f00";
+             healthFill.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+             healthBar.addControl(healthFill);
+             advancedTextureGUI.addControl(healthBar);
+             healthBar.linkWithMesh(enemy.mesh);
+             let meshHeight = enemy.mesh.getBoundingInfo().boundingBox.extendSize.y * 2;
+             healthBar.linkOffsetY = -(meshHeight * 10 + 8);
+             enemy.healthBar = healthBar; enemy.healthBarFill = healthFill;
+             enemyHealthBars.set(enemy.id, enemy);
+             healthBar.isVisible = false;
+        }
+
+        // Update enemy health bar display
+        function updateEnemyHealthBar(enemy) {
+            if (enemy && enemy.healthBar && !enemy.healthBar.isDisposed && enemy.healthBarFill) {
+                let healthPercent = Math.max(0, enemy.health / enemy.maxHealth);
+                enemy.healthBarFill.width = healthPercent;
+                enemy.healthBar.isVisible = (healthPercent > 0 && healthPercent < 1);
+            }
+        }
+
+        // Create player character
+        function createPlayer() {
+            if (!playerClassInfo) { console.error("Player class not selected! Cannot create player."); return; }
+             if (!player || player.startX === undefined || player.startY === undefined) { console.error("Player start position not defined!"); player = { startX: Math.floor(MAP_WIDTH/2), startY: Math.floor(MAP_HEIGHT/2) }; }
+            let worldX = (player.startX - MAP_WIDTH / 2 + 0.5) * TILE_SIZE;
+            let worldZ = (player.startY - MAP_HEIGHT / 2 + 0.5) * TILE_SIZE;
+            let playerMesh = BABYLON.MeshBuilder.CreateCapsule("player", { radius: 0.4, height: 1.8 }, scene);
+            playerMesh.position = new BABYLON.Vector3(worldX, 1.0, worldZ);
+            let playerMaterial = new BABYLON.StandardMaterial("playerMat", scene);
+            playerMaterial.diffuseColor = playerClassInfo.color;
+            playerMaterial.specularColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+            playerMesh.material = playerMaterial;
+            playerMesh.checkCollisions = true;
+             if (scene.isPhysicsEnabled) {
+                playerMesh.physicsImpostor = new BABYLON.PhysicsImpostor(playerMesh, BABYLON.PhysicsImpostor.CapsuleImpostor, { mass: 70, friction: 0.5, restitution: 0.1 }, scene);
+                 if (playerMesh.physicsImpostor.physicsBody) {
+                    playerMesh.physicsImpostor.physicsBody.angularDamping = 0.999;
+                    playerMesh.physicsImpostor.physicsBody.fixedRotation = true;
+                    playerMesh.physicsImpostor.physicsBody.updateMassProperties();
+                 } else { console.warn("Player physics body not created immediately."); }
+             }
+             let startingHealth = playerClassInfo.health; let currentScore = 0; let currentKeys = 0; let currentPotions = 3;
+             if (player) {
+                startingHealth = player.health !== undefined ? player.health : playerClassInfo.health;
+                currentScore = player.score || 0; currentKeys = player.keys || 0; currentPotions = player.potions !== undefined ? player.potions : 3;
+             }
+             player = { mesh: playerMesh, type: playerClassInfo.name, health: startingHealth, maxHealth: playerClassInfo.health, attack: playerClassInfo.attack, magic: playerClassInfo.magic, speed: playerClassInfo.speed, special: playerClassInfo.special, keys: currentKeys, potions: currentPotions, score: currentScore, lastShotTime: 0, lastSpecialTime: 0, invulnerableUntil: 0, shotCooldown: playerClassInfo.shotCooldown, specialCooldown: playerClassInfo.specialCooldown };
+             score = player.score; keys = player.keys; potions = player.potions;
+             let playerLight = new BABYLON.PointLight("playerLight", new BABYLON.Vector3(0, 1.5, 0), scene);
+             playerLight.diffuse = new BABYLON.Color3(0.9, 0.9, 1.0); playerLight.specular = new BABYLON.Color3(0.5, 0.5, 0.7); playerLight.intensity = 0.5; playerLight.range = 10; playerLight.parent = playerMesh;
+        }
+
+        // Setup player camera
+        function setupPlayerCamera() {
+            if (!player || !player.mesh || player.mesh.isDisposed()) { console.error("Cannot setup camera, player mesh not found."); return; }
+            if (camera) camera.detachControl(canvas);
+            if (!camera) camera = new BABYLON.FollowCamera("playerCamera", player.mesh.position.add(new BABYLON.Vector3(0, 5, -7)), scene);
+            else camera.lockedTarget = player.mesh;
+            camera.radius = 12; camera.heightOffset = 8; camera.rotationOffset = 0; camera.cameraAcceleration = 0.08; camera.maxCameraSpeed = 15; camera.attachControl(canvas, true); camera.lockedTarget = player.mesh;
+            camera.lowerRadiusLimit = 6; camera.upperRadiusLimit = 25; camera.lowerHeightOffsetLimit = 4; camera.upperHeightOffsetLimit = 15;
+            camera.checkCollisions = true; camera.collisionRadius = new BABYLON.Vector3(0.8, 0.8, 0.8);
+        }
+
+        // Setup UI elements
+        function setupUI() {
+            updatePlayerStats();
+            messageLogDiv.innerText = ''; messageLogDiv.style.transition = ''; messageLogDiv.style.opacity = 1;
+             if (messageLogDiv.timeoutId) { clearTimeout(messageLogDiv.timeoutId); messageLogDiv.timeoutId = null; }
+        }
+
+        // Update player stats display
+        function updatePlayerStats() {
+            if (!player || !playerClassInfo || !playerStatsDiv) return;
+            playerStatsDiv.innerHTML = '';
+            let playerInfo = document.createElement('div'); playerInfo.className = 'playerInfo';
+            let now = gameTime; let timeSinceSpecial = now - player.lastSpecialTime; let specialReady = timeSinceSpecial >= player.specialCooldown;
+            let specialCooldownRemaining = Math.max(0, player.specialCooldown - timeSinceSpecial);
+            let specialStatus = specialReady ? '<span style="color:lime;">(Ready)</span>' : `<span style="color:yellow;">(${Math.ceil(specialCooldownRemaining / 1000)}s)</span>`;
+            let healthPercent = Math.max(0, Math.min(100, (player.health / player.maxHealth) * 100));
+            let displayHealth = Math.max(0, Math.ceil(player.health));
+            playerInfo.innerHTML = `<div><b>${player.type}</b> (Lvl ${currentLevel})</div> <div>Health: ${displayHealth} / ${player.maxHealth}</div> <div class="healthBar"><div class="healthFill" style="width: ${healthPercent}%"></div></div> <div>Score: ${player.score}</div> <div>Keys: ${player.keys}</div> <div>Potions: ${player.potions}</div> <div>Special: ${player.special} ${specialStatus}</div>`;
+            playerStatsDiv.appendChild(playerInfo);
+        }
+
+        // Show a game message
+        function showMessage(message, duration = 3000) {
+             const fadeDuration = 500; if (duration <= fadeDuration) duration = fadeDuration + 100;
+             if (messageLogDiv.timeoutId) { clearTimeout(messageLogDiv.timeoutId); messageLogDiv.timeoutId = null; }
+             messageLogDiv.innerText = message; messageLogDiv.style.transition = ''; messageLogDiv.style.opacity = 1; lastMessageTime = gameTime;
+             messageLogDiv.timeoutId = setTimeout(() => {
+                 messageLogDiv.style.transition = `opacity ${fadeDuration}ms ease-out`; messageLogDiv.style.opacity = 0;
+                 setTimeout(() => { if (messageLogDiv.style.opacity == 0) {} messageLogDiv.timeoutId = null; }, fadeDuration);
+             }, duration - fadeDuration);
+        }
+
+        // --- Game Update Logic ---
+
+        // Main game update loop
+        function updateGame(deltaTime) {
+             try {
+                if (!player || !player.mesh || player.mesh.isDisposed() || !scene || scene.isDisposed) return;
+                handlePlayerInput(deltaTime);
+                updateEnemies(deltaTime);
+                updateGenerators(deltaTime);
+                updateProjectiles(deltaTime);
+                checkCollisions();
+                updateUI();
+            } catch (error) { console.error("Error during game update:", error); }
+        }
+
+        // Handle player input
+        function handlePlayerInput(deltaTime) {
+            if (!player || !player.mesh || player.mesh.isDisposed() || !player.mesh.physicsImpostor || player.health <= 0) return;
+            let currentVelocity = player.mesh.physicsImpostor.getLinearVelocity(); if (!currentVelocity) return;
+            let camForward = camera.getDirection(BABYLON.Axis.Z); camForward.y = 0; camForward.normalize();
+            let camRight = camera.getDirection(BABYLON.Axis.X); camRight.y = 0; camRight.normalize();
+            let moveDirection = BABYLON.Vector3.Zero();
+            if (inputMap['w'] || inputMap['arrowup']) moveDirection.addInPlace(camForward);
+            if (inputMap['s'] || inputMap['arrowdown']) moveDirection.subtractInPlace(camForward);
+            if (inputMap['a'] || inputMap['arrowleft']) moveDirection.subtractInPlace(camRight);
+            if (inputMap['d'] || inputMap['arrowright']) moveDirection.addInPlace(camRight);
+            if (moveDirection.lengthSquared() > 0.001) {
+                moveDirection.normalize();
+                let targetVelocity = moveDirection.scale(player.speed);
+                player.mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, currentVelocity.y, targetVelocity.z));
+             } else {
+                 let dampingFactor = 0.85;
+                 player.mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(currentVelocity.x * dampingFactor, currentVelocity.y, currentVelocity.z * dampingFactor));
+             }
+             let pickInfo = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh.name === "ground");
+             if (pickInfo && pickInfo.hit && pickInfo.pickedPoint) {
+                 let targetPoint = pickInfo.pickedPoint; let direction = targetPoint.subtract(player.mesh.getAbsolutePosition()); direction.y = 0;
+                 if (direction.lengthSquared() > 0.01) { let targetAngle = Math.atan2(direction.x, direction.z); player.mesh.rotation.y = targetAngle; }
+             }
+             if (inputMap[' '] && gameTime > player.lastShotTime + player.shotCooldown) playerAttack();
+             if (inputMap['f'] && gameTime > player.lastSpecialTime + player.specialCooldown) playerSpecialAttack();
+             if (inputMap['e']) { usePotion(); inputMap['e'] = false; }
+        }
+
+        // Player normal attack
+        function playerAttack() {
+            if (!player || !player.mesh || player.mesh.isDisposed() || player.health <= 0) return;
+            player.lastShotTime = gameTime;
+            let forward = player.mesh.forward.scale(-1); // Assumed player facing
+
+            if (player.type === 'Warrior') {
+                 if (sounds.attack_melee && sounds.attack_melee.state() === 'loaded') sounds.attack_melee.play(); // Placeholder check
+                 let attackRange = 1.8; let attackArcDegrees = 120; let attackArcRadians = BABYLON.Tools.ToRadians(attackArcDegrees / 2); let playerPos = player.mesh.getAbsolutePosition();
+                 let hitSomething = false;
+                 enemies.forEach(enemy => {
+                     if (enemy && enemy.mesh && !enemy.mesh.isDisposed() && enemy.health > 0 && enemy.mesh.isEnabled()) {
+                         let enemyPos = enemy.mesh.getAbsolutePosition(); let vecToEnemy = enemyPos.subtract(playerPos); let distSqr = vecToEnemy.lengthSquared();
+                         if (distSqr < attackRange * attackRange) {
+                             vecToEnemy.y = 0; if (vecToEnemy.lengthSquared() < 0.001) return; vecToEnemy.normalize();
+                             let forwardHorizontal = forward.clone(); forwardHorizontal.y = 0; forwardHorizontal.normalize();
+                             let dotProduct = BABYLON.Vector3.Dot(forwardHorizontal, vecToEnemy);
+                              if (dotProduct > Math.cos(attackArcRadians)) {
+                                  damageEnemy(enemy, player.attack); hitSomething = true;
+                                  if(enemy.mesh.physicsImpostor) { enemy.mesh.physicsImpostor.applyImpulse(vecToEnemy.scale(50), enemyPos); }
+                             }
+                         }
+                     }
+                 });
+                 generators.forEach(gen => {
+                     if (gen && !gen.isDestroyed && gen.mesh && !gen.mesh.isDisposed() && gen.mesh.isEnabled()) {
+                          let genPos = gen.mesh.getAbsolutePosition(); let vecToGen = genPos.subtract(playerPos); let distSqr = vecToGen.lengthSquared();
+                          if (distSqr < attackRange * attackRange) {
+                              vecToGen.y = 0; if (vecToGen.lengthSquared() < 0.001) return; vecToGen.normalize();
+                              let forwardHorizontal = forward.clone(); forwardHorizontal.y = 0; forwardHorizontal.normalize();
+                              let dotProduct = BABYLON.Vector3.Dot(forwardHorizontal, vecToGen);
+                              if (dotProduct > Math.cos(attackArcRadians)) { damageGenerator(gen, player.attack); hitSomething = true; }
+                          }
+                     }
+                 });
+                 if (hitSomething) { // Simple visual effect (no texture needed)
+                     let slash = BABYLON.MeshBuilder.CreateTorus("slash", {diameter: attackRange * 1.2, thickness: 0.1, tessellation: 16}, scene);
+                     slash.position = playerPos.add(forward.scale(attackRange * 0.5)).add(new BABYLON.Vector3(0, 1.0, 0));
+                     slash.rotation.x = Math.PI / 2; slash.rotation.y = player.mesh.rotation.y; slash.isPickable = false;
+                     let slashMat = new BABYLON.StandardMaterial("slashMat", scene);
+                     slashMat.diffuseColor = new BABYLON.Color3(1, 1, 0.8); slashMat.emissiveColor = new BABYLON.Color3(1, 1, 0.5); slashMat.alpha = 0.8; slashMat.disableLighting = true;
+                     slash.material = slashMat;
+                     let fadeAnim = new BABYLON.Animation("fade", "material.alpha", 60, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+                     fadeAnim.setKeys([{ frame: 0, value: 0.8 }, { frame: 6, value: 0 }]);
+                     let scaleAnim = new BABYLON.Animation("scale", "scaling.x", 60, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+                     scaleAnim.setKeys([{ frame: 0, value: 0.5 }, { frame: 4, value: 1.2 }]);
+                     let scaleAnimZ = new BABYLON.Animation("scaleZ", "scaling.z", 60, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+                     scaleAnimZ.setKeys([{ frame: 0, value: 0.5 }, { frame: 4, value: 1.2 }]);
+                     scene.beginDirectAnimation(slash, [fadeAnim, scaleAnim, scaleAnimZ], 0, 6, false, 1, () => { if (slash && !slash.isDisposed()) slash.dispose(); });
+                 }
+            } else { // Ranged Attack
+                 if (sounds.attack_ranged && sounds.attack_ranged.state() === 'loaded') sounds.attack_ranged.play(); // Placeholder check
+                 let projectileStartPos = player.mesh.getAbsolutePosition().add(new BABYLON.Vector3(0, 1.0, 0)).add(forward.scale(0.6));
+                 let damage = player.attack;
+                 if (player.type === 'Wizard') damage = player.magic * 1.2;
+                 else if (player.type === 'Elf') damage = player.attack * 0.8 + player.magic * 0.4;
+                 else if (player.type === 'Valkyrie') damage = player.attack * 1.1 + player.magic * 0.2;
+                 createProjectile(projectileStartPos, forward, true, damage, player.type);
+            }
+        }
+
+        // Player special attack
+        function playerSpecialAttack() {
+             if (!player || !player.mesh || player.mesh.isDisposed() || player.health <= 0) return;
+             player.lastSpecialTime = gameTime; showMessage(`${player.special}!`, 2000); updatePlayerStats();
+
+             if (player.type === 'Warrior') {
+                 if (sounds.special_warrior && sounds.special_warrior.state() === 'loaded') sounds.special_warrior.play(); // Placeholder check
+                 let range = 4.0; let rangeSqr = range * range; let damage = player.attack * 2.0; let playerPos = player.mesh.getAbsolutePosition();
+                 let whirl = BABYLON.MeshBuilder.CreateTorus("whirl", {diameter: 0.2, thickness: 0.3, tessellation: 32}, scene);
+                 whirl.position = playerPos.add(new BABYLON.Vector3(0, 0.5, 0));
+                 let mat = new BABYLON.StandardMaterial("whirlMat", scene); mat.diffuseColor = new BABYLON.Color3(1, 0.4, 0.4); mat.emissiveColor = new BABYLON.Color3(0.8, 0.2, 0.2); mat.alpha = 0.7; mat.disableLighting = true;
+                 whirl.material = mat; whirl.rotation.x = Math.PI / 2; whirl.isPickable = false;
+                 enemies.forEach(enemy => { if (enemy && enemy.mesh && !enemy.mesh.isDisposed() && enemy.health > 0 && enemy.mesh.isEnabled()) { let enemyPos = enemy.mesh.getAbsolutePosition(); if (BABYLON.Vector3.DistanceSquared(playerPos, enemyPos) < rangeSqr) { damageEnemy(enemy, damage); if (enemy.mesh.physicsImpostor) { let knockbackDir = enemyPos.subtract(playerPos).normalize(); enemy.mesh.physicsImpostor.applyImpulse(knockbackDir.scale(150), enemyPos); } } } });
+                 generators.forEach(gen => { if (gen && !gen.isDestroyed && gen.mesh && !gen.mesh.isDisposed() && gen.mesh.isEnabled()) { let genPos = gen.mesh.getAbsolutePosition(); if (BABYLON.Vector3.DistanceSquared(playerPos, genPos) < rangeSqr) { damageGenerator(gen, damage); } } });
+                 let scaleAnim = new BABYLON.Animation("whirlScale", "scaling", 30, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT); scaleAnim.setKeys([{ frame: 0, value: new BABYLON.Vector3(0.1, 0.1, 0.1)}, { frame: 15, value: new BABYLON.Vector3(range * 2, range * 2, 1)}]);
+                 let fadeAnim = new BABYLON.Animation("whirlFade", "material.alpha", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT); fadeAnim.setKeys([{ frame: 5, value: 0.7 }, { frame: 20, value: 0 }]);
+                 scene.beginDirectAnimation(whirl, [scaleAnim, fadeAnim], 0, 20, false, 1, () => { if (whirl && !whirl.isDisposed()) whirl.dispose(); });
+
+             } else if (player.type === 'Valkyrie') {
+                 if (sounds.special_valkyrie && sounds.special_valkyrie.state() === 'loaded') sounds.special_valkyrie.play(); // Placeholder check
+                 let dashForce = player.speed * 150; let dashDuration = 300; let damage = player.attack * 1.5; let forward = player.mesh.forward.scale(-1);
+                 if (player.mesh.physicsImpostor) player.mesh.physicsImpostor.applyImpulse(forward.scale(dashForce), player.mesh.getAbsolutePosition());
+                 player.invulnerableUntil = gameTime + dashDuration + 100;
+                 let checkInterval = 50; let checksDone = 0; let maxChecks = Math.floor(dashDuration / checkInterval); let hitEnemy = null;
+                 let intervalId = setInterval(() => {
+                      if (gameState !== GAME_STATES.PLAYING || !player || !player.mesh || player.mesh.isDisposed() || checksDone >= maxChecks || hitEnemy) { clearInterval(intervalId); return; }
+                      checksDone++; let checkRange = 2.0; let playerPos = player.mesh.getAbsolutePosition(); let checkPos = playerPos.add(forward.scale(checkRange * 0.5));
+                      enemies.forEach(enemy => { if (!hitEnemy && enemy && enemy.mesh && !enemy.mesh.isDisposed() && enemy.health > 0 && enemy.mesh.isEnabled()) { let enemyPos = enemy.mesh.getAbsolutePosition(); if (BABYLON.Vector3.DistanceSquared(checkPos, enemyPos) < (checkRange * checkRange)) { let dirToEnemy = enemyPos.subtract(playerPos); if(dirToEnemy.lengthSquared() < 0.001) return; dirToEnemy.normalize(); if (BABYLON.Vector3.Dot(forward, dirToEnemy) > 0.7) { damageEnemy(enemy, damage); if (enemy.mesh.physicsImpostor) enemy.mesh.physicsImpostor.applyImpulse(dirToEnemy.scale(250), enemyPos); hitEnemy = enemy; } } } });
+                 }, checkInterval);
+
+             } else if (player.type === 'Wizard') {
+                 if (sounds.special_wizard && sounds.special_wizard.state() === 'loaded') sounds.special_wizard.play(); // Placeholder check
+                 let range = 5.0; let rangeSqr = range * range; let damage = player.magic * 2.5; let playerPos = player.mesh.getAbsolutePosition();
+                 let nova = BABYLON.MeshBuilder.CreateSphere("nova", {diameter: 0.2, segments: 16}, scene); nova.position = playerPos.add(new BABYLON.Vector3(0, 1.0, 0));
+                 let mat = new BABYLON.StandardMaterial("novaMat", scene); mat.diffuseColor = playerClassInfo.color.scale(0.8); mat.emissiveColor = playerClassInfo.color; mat.alpha = 0.8; mat.disableLighting = true; nova.material = mat; nova.isPickable = false;
+                 enemies.forEach(enemy => { if (enemy && enemy.mesh && !enemy.mesh.isDisposed() && enemy.health > 0 && enemy.mesh.isEnabled()) { let enemyPos = enemy.mesh.getAbsolutePosition(); if (BABYLON.Vector3.DistanceSquared(playerPos, enemyPos) < rangeSqr) damageEnemy(enemy, damage); } });
+                 generators.forEach(gen => { if (gen && !gen.isDestroyed && gen.mesh && !gen.mesh.isDisposed() && gen.mesh.isEnabled()) { let genPos = gen.mesh.getAbsolutePosition(); if (BABYLON.Vector3.DistanceSquared(playerPos, genPos) < rangeSqr) damageGenerator(gen, damage); } });
+                 let novaDiameter = range * 2; let scaleFactor = novaDiameter / 0.2;
+                 let scaleAnim = new BABYLON.Animation("novaScale", "scaling", 30, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT); scaleAnim.setKeys([{ frame: 0, value: new BABYLON.Vector3(1, 1, 1)}, { frame: 20, value: new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor)}]);
+                 let fadeAnim = new BABYLON.Animation("novaFade", "material.alpha", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT); fadeAnim.setKeys([{ frame: 5, value: 0.8 }, { frame: 25, value: 0 }]);
+                 scene.beginDirectAnimation(nova, [scaleAnim, fadeAnim], 0, 25, false, 1, () => { if (nova && !nova.isDisposed()) nova.dispose(); });
+
+             } else if (player.type === 'Elf') {
+                 if (sounds.special_elf && sounds.special_elf.state() === 'loaded') sounds.special_elf.play(); // Placeholder check
+                 let numShots = 5; let shotDelay = 80; let damagePerShot = (player.attack + player.magic * 0.5) * 0.7; let spreadAngle = 5;
+                 let baseForward = player.mesh.forward.scale(-1);
+                 for (let i = 0; i < numShots; i++) {
+                     setTimeout(() => {
+                         if (gameState === GAME_STATES.PLAYING && player && player.mesh && !player.mesh.isDisposed() && player.health > 0) {
+                             let angleOffset = BABYLON.Tools.ToRadians((Math.random() - 0.5) * spreadAngle);
+                             let finalDirection = baseForward.clone();
+                             let rotationQuaternion = BABYLON.Quaternion.RotationAxis(BABYLON.Axis.Y, angleOffset);
+                             finalDirection.rotateByQuaternionToRef(rotationQuaternion, finalDirection);
+                             let projectileStartPos = player.mesh.getAbsolutePosition().add(new BABYLON.Vector3(0, 1.0, 0)).add(finalDirection.scale(0.6));
+                             createProjectile(projectileStartPos, finalDirection, true, damagePerShot, player.type);
+                             if (sounds.attack_ranged && sounds.attack_ranged.state() === 'loaded') sounds.attack_ranged.play(); // Placeholder check
+                         }
+                     }, i * shotDelay);
+                 }
+                 player.lastShotTime = gameTime + numShots * shotDelay;
+             }
+        }
+
+        // Use a health potion
+        function usePotion() {
+             if (!player || player.health <= 0) return;
+             if (player.potions > 0 && player.health < player.maxHealth) {
+                 if (sounds.potion_use && sounds.potion_use.state() === 'loaded') sounds.potion_use.play(); // Placeholder check
+                 player.potions--; potions = player.potions;
+                 let healAmount = player.maxHealth * 0.5; let healthBefore = player.health;
+                 player.health = Math.min(player.maxHealth, player.health + healAmount);
+                 let healedAmount = Math.round(player.health - healthBefore);
+                 showMessage(`Used a potion! +${healedAmount} Health`, 2000); updatePlayerStats();
+                 if (player.mesh && !player.mesh.isDisposed()) { // Particle effect (no texture)
+                     let particleSystem = new BABYLON.ParticleSystem("potionParticles", 500, scene);
+                     // particleSystem.particleTexture = ...; // REMOVED
+                     particleSystem.emitter = player.mesh;
+                     particleSystem.minEmitBox = new BABYLON.Vector3(-0.3, 0, -0.3); particleSystem.maxEmitBox = new BABYLON.Vector3(0.3, 1.5, 0.3);
+                     particleSystem.color1 = new BABYLON.Color4(0.2, 1, 0.2, 1.0); particleSystem.color2 = new BABYLON.Color4(0.5, 1, 0.5, 0.8); particleSystem.colorDead = new BABYLON.Color4(0, 0.5, 0, 0.0);
+                     particleSystem.minSize = 0.1; particleSystem.maxSize = 0.3; particleSystem.minLifeTime = 0.4; particleSystem.maxLifeTime = 0.9;
+                     particleSystem.emitRate = 400; particleSystem.manualEmitCount = 200; particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+                     particleSystem.gravity = new BABYLON.Vector3(0, 2.0, 0); particleSystem.minEmitPower = 0.5; particleSystem.maxEmitPower = 1.5; particleSystem.updateSpeed = 0.01;
+                     particleSystem.start();
+                     setTimeout(() => { if (particleSystem) particleSystem.dispose(); }, (particleSystem.maxLifeTime * 1000) + 200);
+                 }
+             } else if (player.potions <= 0) { showMessage("No potions left!", 1500); }
+             else { showMessage("Health is already full!", 1500); }
+        }
+
+        // Create a projectile
+        function createProjectile(position, direction, isPlayerProjectile, damage, ownerType) {
+            let projectileMesh = BABYLON.MeshBuilder.CreateSphere("projectile_" + BABYLON.Tools.RandomId(), {diameter: 0.3, segments: 6}, scene);
+            projectileMesh.position = position.clone();
+            let mat = new BABYLON.StandardMaterial("projMat_" + projectileMesh.name, scene);
+            mat.specularColor = new BABYLON.Color3(0,0,0); mat.disableLighting = true;
+            if (isPlayerProjectile) {
+                 let baseColor = CHARACTER_CLASSES[ownerType]?.color || new BABYLON.Color3(1,1,1);
+                 mat.diffuseColor = baseColor.scale(1.2); mat.emissiveColor = baseColor;
+            } else { mat.diffuseColor = new BABYLON.Color3(1, 0.2, 0); mat.emissiveColor = mat.diffuseColor.scale(0.8); }
+            projectileMesh.material = mat;
+            projectileMesh.checkCollisions = false; projectileMesh.isPickable = false;
+            let projectile = { mesh: projectileMesh, direction: direction.normalize(), speed: isPlayerProjectile ? 25 : 18, damage: damage, isPlayerProjectile: isPlayerProjectile, spawnTime: gameTime, lifeTime: 3000 };
+            projectiles.push(projectile);
+        }
+
+        // Update enemy behavior (AI)
+        function updateEnemies(deltaTime) {
+             if (!player || !player.mesh || player.mesh.isDisposed() || player.health <= 0) return;
+             let playerPos = player.mesh.getAbsolutePosition();
+             enemies.forEach((enemy, index) => {
+                 if (!enemy || !enemy.mesh || enemy.mesh.isDisposed() || enemy.health <= 0 || !enemy.mesh.isEnabled()) return;
+                 if (!enemy.mesh.physicsImpostor) return;
+                 let enemyPos = enemy.mesh.getAbsolutePosition();
+                 let distanceToPlayerSqr = BABYLON.Vector3.DistanceSquared(playerPos, enemyPos);
+                 let detectionRangeSqr = 20 * 20;
+                 let attackRange = (enemy.canShoot ? enemy.shootRange : 1.6);
+                 let attackRangeSqr = attackRange * attackRange;
+                 if (distanceToPlayerSqr > detectionRangeSqr) enemy.state = 'idle';
+                 else if (distanceToPlayerSqr <= attackRangeSqr) enemy.state = 'attacking';
+                 else enemy.state = 'chasing';
+                 let currentVelocity = enemy.mesh.physicsImpostor.getLinearVelocity(); if (!currentVelocity) return;
+                 let directionToPlayer = playerPos.subtract(enemyPos); directionToPlayer.y = 0;
+                 if ((enemy.state === 'chasing' || enemy.state === 'attacking') && directionToPlayer.lengthSquared() > 0.01) {
+                     let directionNormalized = directionToPlayer.normalize(); let targetAngle = Math.atan2(directionNormalized.x, directionNormalized.z);
+                     enemy.mesh.rotation.y = targetAngle;
+                 }
+                 if (enemy.state === 'chasing') {
+                      if (directionToPlayer.lengthSquared() > 0.01) {
+                         let directionNormalized = directionToPlayer.normalize(); let targetVelocity = directionNormalized.scale(enemy.speed);
+                         enemy.mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, currentVelocity.y, targetVelocity.z));
+                     }
+                 } else if (enemy.state === 'attacking') {
+                     enemy.mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0, currentVelocity.y, 0));
+                     let attackCooldown = enemy.canShoot ? enemy.shootCooldown : 1500;
+                     if (gameTime > enemy.lastAttackTime + attackCooldown) {
+                         enemy.lastAttackTime = gameTime;
+                         if (enemy.canShoot) {
+                             if (directionToPlayer.lengthSquared() > 0.01) {
+                                 let directionNormalized = directionToPlayer.normalize();
+                                 let projectileStartPos = enemyPos.add(new BABYLON.Vector3(0,1,0)).add(directionNormalized.scale(0.5));
+                                 createProjectile(projectileStartPos, directionNormalized, false, enemy.attack, enemy.type);
+                             }
+                         } else { // Melee
+                              if (BABYLON.Vector3.DistanceSquared(playerPos, enemyPos) < (attackRange + 0.5) * (attackRange + 0.5)) {
+                                 damagePlayer(enemy.attack);
+                                 if (player.mesh && player.mesh.physicsImpostor) {
+                                     let knockbackDir = playerPos.subtract(enemyPos);
+                                     if(knockbackDir.lengthSquared() > 0.001) { knockbackDir.normalize(); player.mesh.physicsImpostor.applyImpulse(knockbackDir.scale(30), playerPos); }
+                                 }
+                             }
+                         }
+                     }
+                 } else { // Idle
+                     let dampingFactor = 0.85;
+                      enemy.mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(currentVelocity.x * dampingFactor, currentVelocity.y, currentVelocity.z * dampingFactor));
+                 }
+                 updateEnemyHealthBar(enemy);
+             });
+        }
+
+        // Update enemy generators
+        function updateGenerators(deltaTime) {
+            generators.forEach((gen, index) => {
+                 if (!gen || gen.isDestroyed || !gen.mesh || gen.mesh.isDisposed() || !gen.mesh.isEnabled()) return;
+                 if (gameTime > gen.lastSpawnTime + gen.spawnRate) {
+                     gen.lastSpawnTime = gameTime;
+                     if (!player || !player.mesh || player.mesh.isDisposed()) return;
+                     let genPos = gen.mesh.getAbsolutePosition(); let playerPos = player.mesh.getAbsolutePosition();
+                     let distanceToPlayerSqr = BABYLON.Vector3.DistanceSquared(playerPos, genPos); let minSpawnDistSqr = 4 * 4;
+                      let maxEnemies = 20 + currentLevel * 2;
+                      if (enemies.length < maxEnemies && distanceToPlayerSqr > minSpawnDistSqr) {
+                         let validSpawnFound = false; let spawnPos = new BABYLON.Vector3.Zero();
+                         for (let tryCount = 0; tryCount < 5 && !validSpawnFound; tryCount++) {
+                             let offsetX = (Math.random() - 0.5) * TILE_SIZE * 1.8; let offsetZ = (Math.random() - 0.5) * TILE_SIZE * 1.8;
+                             let spawnX = genPos.x + offsetX; let spawnZ = genPos.z + offsetZ;
+                             let gridX = Math.floor((spawnX / TILE_SIZE) + MAP_WIDTH / 2); let gridY = Math.floor((spawnZ / TILE_SIZE) + MAP_HEIGHT / 2);
+                             if (gridX >= 1 && gridX < MAP_WIDTH - 1 && gridY >= 1 && gridY < MAP_HEIGHT - 1 && dungeon[gridY][gridX] === 0) {
+                                 spawnPos.set(spawnX, 1.0, spawnZ); validSpawnFound = true;
+                             }
+                         }
+                         if (validSpawnFound) {
+                             createRandomEnemy(spawnPos.x, spawnPos.z);
+                             // Spawn particle effect (no texture)
+                             let spawnEffect = new BABYLON.ParticleSystem("spawnParticles", 300, scene);
+                             // spawnEffect.particleTexture = ...; // REMOVED
+                             spawnEffect.emitter = genPos.add(new BABYLON.Vector3(0, 0.5, 0));
+                             spawnEffect.minEmitBox = new BABYLON.Vector3(-0.5, 0, -0.5); spawnEffect.maxEmitBox = new BABYLON.Vector3(0.5, 1, 0.5);
+                             spawnEffect.color1 = new BABYLON.Color4(0.8, 0.2, 0.8, 1.0); spawnEffect.color2 = new BABYLON.Color4(1, 0.5, 1, 1.0); spawnEffect.colorDead = new BABYLON.Color4(0.5, 0, 0.5, 0.0);
+                             spawnEffect.minSize = 0.2; spawnEffect.maxSize = 0.5; spawnEffect.minLifeTime = 0.4; spawnEffect.maxLifeTime = 1.0;
+                             spawnEffect.emitRate = 400; spawnEffect.manualEmitCount = 150; spawnEffect.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+                             spawnEffect.gravity = new BABYLON.Vector3(0, 3.0, 0); spawnEffect.minEmitPower = 1; spawnEffect.maxEmitPower = 4; spawnEffect.updateSpeed = 0.01;
+                             spawnEffect.start();
+                             setTimeout(() => { if (spawnEffect) spawnEffect.dispose(); }, (spawnEffect.maxLifeTime * 1000) + 200);
+                         }
+                     }
+                 }
+                 updateGeneratorHealthBar(gen);
+            });
+        }
+
+        // Update projectiles using Raycasting
+        function updateProjectiles(deltaTime) {
+             let dt = deltaTime / 1000.0;
+             for (let i = projectiles.length - 1; i >= 0; i--) {
+                 let proj = projectiles[i];
+                 if (!proj || !proj.mesh || proj.mesh.isDisposed()) { projectiles.splice(i, 1); continue; }
+                 if (gameTime > proj.spawnTime + proj.lifeTime) { createImpactEffect(proj.mesh.position); proj.mesh.dispose(); projectiles.splice(i, 1); continue; }
+                 let currentPos = proj.mesh.position.clone(); let moveVector = proj.direction.scale(proj.speed * dt);
+                 let nextPos = currentPos.add(moveVector); let rayLength = moveVector.length();
+                  if (rayLength < 0.001) continue;
+                 let ray = new BABYLON.Ray(currentPos, proj.direction, rayLength);
+                 let predicate = function (mesh) {
+                     if (!mesh || mesh.isDisposed() || !mesh.isEnabled()) return false;
+                     if (mesh === proj.mesh || mesh.name.startsWith("projectile_")) return false;
+                     if (mesh.name.startsWith("FOOD_") || mesh.name.startsWith("POTION_") || mesh.name.startsWith("KEY_") || mesh.name.startsWith("TREASURE_") || mesh.name === "exitKey") return false;
+                     if (mesh.name === "ground" || mesh.name === "ceiling") return false;
+                     if (proj.isPlayerProjectile && mesh.name === "player") return false;
+                     if (!proj.isPlayerProjectile && (mesh.name.startsWith("enemy_") || mesh.name.startsWith("generator_"))) return false;
+                     return true;
+                 };
+                 let pickInfo = scene.pickWithRay(ray, predicate, true);
+                 if (pickInfo && pickInfo.hit && pickInfo.pickedMesh && !pickInfo.pickedMesh.isDisposed()) {
+                     let hitMesh = pickInfo.pickedMesh; let hitPoint = pickInfo.pickedPoint;
+                     let impactColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+                     if (hitMesh.material && hitMesh.material.diffuseColor) impactColor = hitMesh.material.diffuseColor.scale(1.2);
+                     else if (hitMesh.name === "player" && playerClassInfo) impactColor = playerClassInfo.color.scale(1.2);
+                     createImpactEffect(hitPoint, impactColor);
+                     if (hitMesh.name.startsWith("wall")) {}
+                      else if (hitMesh.name.startsWith("door")) {}
+                      else if (hitMesh.name.startsWith("generator")) { let gen = generators.find(g => g.mesh === hitMesh); if (gen && !gen.isDestroyed) damageGenerator(gen, proj.damage); }
+                      else if (hitMesh.name.startsWith("enemy_")) { let enemy = enemies.find(e => e.mesh === hitMesh); if (enemy && enemy.health > 0) damageEnemy(enemy, proj.damage); }
+                      else if (hitMesh.name === "player") { if (player && player.health > 0) damagePlayer(proj.damage); }
+                      else if (hitMesh.name === "exitDoor") {}
+                     proj.mesh.dispose(); projectiles.splice(i, 1);
+                 } else { proj.mesh.position = nextPos; }
+             }
+        }
+
+        // Create particle effect for projectile impact (no texture)
+        function createImpactEffect(position, color) {
+             let C = color || new BABYLON.Color3(0.8, 0.8, 0.8);
+             let particleSystem = new BABYLON.ParticleSystem("impactParticles", 100, scene);
+             // particleSystem.particleTexture = ...; // REMOVED
+             particleSystem.emitter = position.clone();
+             particleSystem.minEmitBox = BABYLON.Vector3.Zero(); particleSystem.maxEmitBox = BABYLON.Vector3.Zero();
+             particleSystem.color1 = new BABYLON.Color4(C.r, C.g, C.b, 0.9); particleSystem.color2 = new BABYLON.Color4(C.r * 0.8, C.g * 0.8, C.b * 0.8, 0.6); particleSystem.colorDead = new BABYLON.Color4(C.r * 0.5, C.g * 0.5, C.b * 0.5, 0.0);
+             particleSystem.minSize = 0.1; particleSystem.maxSize = 0.3; particleSystem.minLifeTime = 0.1; particleSystem.maxLifeTime = 0.3;
+             particleSystem.emitRate = 600; particleSystem.manualEmitCount = 50; particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+             particleSystem.gravity = new BABYLON.Vector3(0, -2.0, 0); particleSystem.direction1 = new BABYLON.Vector3(-1, -1, -1); particleSystem.direction2 = new BABYLON.Vector3(1, 1, 1);
+             particleSystem.minEmitPower = 1; particleSystem.maxEmitPower = 4; particleSystem.updateSpeed = 0.01;
+             particleSystem.start();
+             setTimeout(() => { if(particleSystem) particleSystem.dispose(); }, 500);
+        }
+
+        // Check Player Collisions with items, doors, exit using intersectsMesh
+        function checkCollisions() {
+            if (!player || !player.mesh || player.mesh.isDisposed() || player.health <= 0) return;
+            // Items Pickup
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                 if (item && item.mesh && !item.mesh.isDisposed() && player.mesh.intersectsMesh(item.mesh, false)) {
+                    let message = `Picked up ${item.type}`; let playSound = sounds.pickup_item;
+                    if (item.type === 'FOOD') { if (player.health < player.maxHealth) { let healthBefore = player.health; player.health = Math.min(player.maxHealth, player.health + item.health); let healedAmount = Math.round(player.health - healthBefore); message += ` (+${healedAmount} Health)`; } else { message += " (Health Full)"; } }
+                    else if (item.type === 'POTION') { player.potions++; potions = player.potions; message += "!"; }
+                    else if (item.type === 'KEY') { player.keys++; keys = player.keys; message += "!"; playSound = sounds.pickup_key; }
+                    else if (item.type === 'TREASURE') { message += ` (+${item.score} Score)`; }
+                    player.score += item.score; score = player.score; showMessage(message, 1500); updatePlayerStats();
+                     if (playSound && playSound.state() === 'loaded') playSound.play(); // Placeholder check
+                    item.mesh.dispose(); items.splice(i, 1);
+                }
+            }
+            // Doors Interaction
+            doors.forEach(door => { if (!door.isOpen && !door.isOpening && door.mesh && !door.mesh.isDisposed() && player.mesh.intersectsMesh(door.mesh, true)) { openDoor(door); } });
+            // Exit Key Pickup
+             if (exitKey && !exitKey.collected && exitKey.mesh && !exitKey.mesh.isDisposed() && player.mesh.intersectsMesh(exitKey.mesh, false)) {
+                 exitKey.collected = true; hasExitKey = true;
+                 if (sounds.pickup_key && sounds.pickup_key.state() === 'loaded') sounds.pickup_key.play(); // Placeholder check
+                 showMessage("Picked up the EXIT KEY!", 3000); player.score += 100; score = player.score; updatePlayerStats();
+                 let scaleAnim = new BABYLON.Animation("keyCollectScale", "scaling", 30, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+                 scaleAnim.setKeys([{ frame: 0, value: exitKey.mesh.scaling }, { frame: 15, value: BABYLON.Vector3.Zero()}]);
+                 scene.beginDirectAnimation(exitKey.mesh, [scaleAnim], 0, 15, false, 1, () => { if (exitKey && exitKey.mesh && !exitKey.mesh.isDisposed()) { exitKey.mesh.dispose(); exitKey.mesh = null; } });
+             }
+             // Exit Door Interaction
+             if (exitDoor && exitDoor.mesh && !exitDoor.mesh.isDisposed() && player.mesh.intersectsMesh(exitDoor.mesh, true)) {
+                 if (hasExitKey) { levelComplete(); }
+                 else { if (gameTime > lastMessageTime + 2500) { showMessage("The exit is locked. Find the key!", 2500); if (sounds.door_locked && sounds.door_locked.state() === 'loaded') sounds.door_locked.play(); } } // Placeholder check
+             }
+        }
+
+        // --- Damage Handling ---
+
+        // Damage the player
+        function damagePlayer(amount) {
+             if (!player || player.health <= 0 || gameState !== GAME_STATES.PLAYING || gameTime < player.invulnerableUntil) return;
+             let damageAmount = Math.max(1, Math.round(amount)); player.health -= damageAmount;
+             if (sounds.hit_player && sounds.hit_player.state() === 'loaded') sounds.hit_player.play(); // Placeholder check
+             updatePlayerStats(); player.invulnerableUntil = gameTime + 300;
+             if (camera) {
+                 let redFlash = new BABYLON.ImageProcessingPostProcess("redFlash", 1.0, camera);
+                 redFlash.vignetteEnabled = true; redFlash.vignetteWeight = 2.5; redFlash.vignetteColor = new BABYLON.Color4(1, 0, 0, 0.3); redFlash.vignetteBlendMode = BABYLON.ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
+                 setTimeout(() => { if (redFlash) redFlash.dispose(); }, 150);
+             }
+             if (player.health <= 0) { player.health = 0; updatePlayerStats(); gameOver(); }
+        }
+
+        // Damage an enemy
+        function damageEnemy(enemy, amount) {
+            if (!enemy || !enemy.mesh || enemy.mesh.isDisposed() || enemy.isInvulnerable || enemy.health <= 0 || !enemy.mesh.isEnabled() || enemy.markedForDeath) return;
+             let damageAmount = Math.max(1, Math.round(amount)); enemy.health -= damageAmount;
+             if (sounds.hit_enemy && sounds.hit_enemy.state() === 'loaded') sounds.hit_enemy.play(); // Placeholder check
+             updateEnemyHealthBar(enemy);
+             if (enemy.mesh.material) {
+                 let originalEmissive = enemy.mesh.material.emissiveColor?.clone() || new BABYLON.Color3(0,0,0);
+                 enemy.mesh.material.emissiveColor = new BABYLON.Color3(1, 1, 1);
+                 setTimeout(() => { if (enemy.mesh && !enemy.mesh.isDisposed() && enemy.mesh.material) enemy.mesh.material.emissiveColor = originalEmissive; }, 100);
+             }
+             if (enemy.health <= 0) { if (!enemy.markedForDeath) { enemy.markedForDeath = true; enemyDeath(enemy); } }
+             else { if (enemy.state === 'idle') enemy.state = 'chasing'; }
+        }
+
+        // Handle enemy death sequence
+        function enemyDeath(enemy) {
+            if (!enemy || !enemy.mesh || enemy.mesh.isDisposed() || !enemy.mesh.isEnabled()) { // More robust check
+                 if(enemy) enemyHealthBars.delete(enemy.id); // Attempt cleanup even if mesh is bad
+                 return;
+            }
+            enemy.mesh.setEnabled(false); enemy.mesh.checkCollisions = false;
+            if (sounds.death_enemy && sounds.death_enemy.state() === 'loaded') sounds.death_enemy.play(); // Placeholder check
+             if(player) { player.score += enemy.score; score = player.score; updatePlayerStats(); }
+             if (Math.random() < 0.20) { let dropRand = Math.random(); let dropType = (dropRand < 0.50) ? 'FOOD' : (dropRand < 0.75) ? 'TREASURE' : (dropRand < 0.90) ? 'POTION' : 'KEY'; createRandomItem(enemy.mesh.position.x, enemy.mesh.position.z); }
+             if (enemy.healthBar && !enemy.healthBar.isDisposed) { if(advancedTextureGUI) advancedTextureGUI.removeControl(enemy.healthBar); enemy.healthBar.dispose(); enemy.healthBar = null; }
+             enemyHealthBars.delete(enemy.id);
+             if (enemy.mesh.physicsImpostor) { enemy.mesh.physicsImpostor.dispose(); enemy.mesh.physicsImpostor = null; }
+             // Death animation (no texture needed for particles)
+             let deathAnimDuration = 15;
+             let scaleAnim = new BABYLON.Animation("deathScale", "scaling", 60, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT); scaleAnim.setKeys([{ frame: 0, value: enemy.mesh.scaling.clone() }, { frame: deathAnimDuration, value: BABYLON.Vector3.Zero()}]);
+             let fadeAnim = new BABYLON.Animation("deathFade", "material.alpha", 60, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT); let startAlpha = (enemy.mesh.material && enemy.mesh.material.alpha !== undefined) ? enemy.mesh.material.alpha : 1.0; fadeAnim.setKeys([{ frame: 0, value: startAlpha }, { frame: deathAnimDuration, value: 0 }]);
+             scene.beginDirectAnimation(enemy.mesh, [scaleAnim, fadeAnim], 0, deathAnimDuration, false, 1, () => {
+                  let enemyId = enemy.id;
+                  if (enemy.mesh && !enemy.mesh.isDisposed()) { enemy.mesh.dispose(); enemy.mesh = null; }
+                  let index = enemies.findIndex(e => e && e.id === enemyId); if (index !== -1) enemies.splice(index, 1);
+             });
+        }
+
+        // Damage a generator
+        function damageGenerator(gen, amount) {
+             if (!gen || gen.isDestroyed || gen.health <= 0 || !gen.mesh || gen.mesh.isDisposed() || !gen.mesh.isEnabled()) return;
+             let damageAmount = Math.max(1, Math.round(amount)); gen.health -= damageAmount;
+             if (sounds.hit_enemy && sounds.hit_enemy.state() === 'loaded') sounds.hit_enemy.play(); // Placeholder check
+             updateGeneratorHealthBar(gen);
+             if (gen.mesh.material) {
+                 let originalEmissive = gen.mesh.material.emissiveColor?.clone() || new BABYLON.Color3(0,0,0);
+                 gen.mesh.material.emissiveColor = new BABYLON.Color3(1, 1, 1);
+                 setTimeout(() => { if (gen.mesh && !gen.mesh.isDisposed() && gen.mesh.material) gen.mesh.material.emissiveColor = originalEmissive; }, 100);
+             }
+             if (gen.health <= 0) { if (!gen.isDestroyed) { generatorDestroyed(gen); } }
+        }
+
+        // Handle generator destruction sequence
+        function generatorDestroyed(gen) {
+            if (!gen || !gen.mesh || gen.isDestroyed || gen.mesh.isDisposed() || !gen.mesh.isEnabled()) { // Robust check
+                if(gen) generatorHealthBars.delete(gen.id); // Attempt cleanup
+                return;
+            }
+            gen.isDestroyed = true; gen.mesh.setEnabled(false); gen.mesh.checkCollisions = false;
+            showMessage("Generator destroyed!", 2000);
+             if(player) { player.score += 50; score = player.score; updatePlayerStats(); }
+             if (sounds.death_enemy && sounds.death_enemy.state() === 'loaded') sounds.death_enemy.play(); // Placeholder check
+             if (gen.healthBar && !gen.healthBar.isDisposed) { if(advancedTextureGUI) advancedTextureGUI.removeControl(gen.healthBar); gen.healthBar.dispose(); gen.healthBar = null; }
+             generatorHealthBars.delete(gen.id);
+             // Destruction effect (no texture needed for particles)
+              let particleSystem = new BABYLON.ParticleSystem("genDestroyParticles", 1000, scene);
+              // particleSystem.particleTexture = ...; // REMOVED
+              particleSystem.emitter = gen.mesh.position.clone();
+              particleSystem.minEmitBox = new BABYLON.Vector3(-0.5, 0, -0.5); particleSystem.maxEmitBox = new BABYLON.Vector3(0.5, 1, 0.5);
+              particleSystem.color1 = new BABYLON.Color4(1, 0.2, 1, 1.0); particleSystem.color2 = new BABYLON.Color4(1, 0.8, 1, 1.0); particleSystem.colorDead = new BABYLON.Color4(0.5, 0, 0.5, 0.0);
+              particleSystem.minSize = 0.2; particleSystem.maxSize = 0.7; particleSystem.minLifeTime = 0.5; particleSystem.maxLifeTime = 1.5;
+              particleSystem.emitRate = 1000; particleSystem.manualEmitCount = 500; particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+              particleSystem.gravity = new BABYLON.Vector3(0, -6.0, 0); particleSystem.direction1 = new BABYLON.Vector3(-1, 0.5, -1); particleSystem.direction2 = new BABYLON.Vector3(1, 1, 1);
+              particleSystem.minEmitPower = 3; particleSystem.maxEmitPower = 8; particleSystem.updateSpeed = 0.01;
+              particleSystem.start();
+              setTimeout(() => { if (particleSystem) particleSystem.dispose(); }, 2000);
+             if (gen.mesh.physicsImpostor) { gen.mesh.physicsImpostor.dispose(); gen.mesh.physicsImpostor = null; }
+             setTimeout(() => {
+                 let genId = gen.id;
+                 if (gen.mesh && !gen.mesh.isDisposed()) { gen.mesh.dispose(); gen.mesh = null; }
+                 let index = generators.findIndex(g => g && g.id === genId); if (index !== -1) generators.splice(index, 1);
+             }, 100);
+        }
+
+        // --- Game Flow ---
+
+        // Game Over
+        function gameOver(optionalMessage = "") {
+            if (gameState === GAME_STATES.GAME_OVER) return;
+            console.log("GAME OVER triggered."); gameState = GAME_STATES.GAME_OVER;
+             Howler.stop(); // Stop all sounds (placeholders wouldn't be playing anyway)
+             if (sounds.gameOver && sounds.gameOver.state() === 'loaded') sounds.gameOver.play(); // Placeholder check
+             if(player && player.mesh && !player.mesh.isDisposed()) {
+                  if (player.mesh.physicsImpostor) { player.mesh.physicsImpostor.dispose(); player.mesh.physicsImpostor = null; }
+             }
+              if (camera) camera.detachControl(canvas); inputMap = {};
+             let finalMessage = optionalMessage || `Your quest ended on level ${currentLevel} with a score of ${player?.score || 0}.`;
+             document.getElementById('gameOverMessage').innerText = finalMessage;
+             gameOverScreen.style.display = 'flex';
+        }
+
+        // Restart Game
+        function restartGame() {
+             if (gameState !== GAME_STATES.GAME_OVER) return;
+             console.log("Restarting game via page reload...");
+             gameOverScreen.style.display = 'none';
+             location.reload(); // Reloads the page for a clean reset
+        }
+
+        // Level Complete
+        function levelComplete() {
+            if (gameState === GAME_STATES.LEVEL_COMPLETE || gameState === GAME_STATES.GAME_OVER) return;
+            console.log(`Level ${currentLevel} Complete! Score: ${player?.score || 0}`); gameState = GAME_STATES.LEVEL_COMPLETE;
+             if (sounds.background && sounds.background.playing()) sounds.background.stop(); // Stop placeholder if somehow playing
+             if (sounds.levelComplete && sounds.levelComplete.state() === 'loaded') sounds.levelComplete.play(); // Placeholder check
+             if(player && player.mesh && !player.mesh.isDisposed() && player.mesh.physicsImpostor) { player.mesh.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero()); player.mesh.physicsImpostor.setAngularVelocity(BABYLON.Vector3.Zero()); }
+             if (camera) camera.detachControl(canvas); inputMap = {};
+             document.getElementById('finalLevelScore').innerText = player?.score || 0;
+             levelCompleteScreen.style.display = 'flex';
+        }
+
+        // Load Next Level
+        async function loadNextLevel() {
+             if (gameState !== GAME_STATES.LEVEL_COMPLETE) return;
+             console.log("Loading next level..."); levelCompleteScreen.style.display = 'none'; currentLevel++;
+             if (player) {
+                 let healthBonus = player.maxHealth * 0.25; player.health = Math.min(player.maxHealth, player.health + healthBonus);
+                 score = player.score; keys = player.keys; potions = player.potions;
+             } else { gameOver("Error loading next level - Player lost!"); return; }
+             hasExitKey = false;
+             console.log("Preparing to start next level...");
+             startGameLevel(); // Re-initializes the level using existing scene/engine
+        }
+
+        // Update UI
+        function updateUI() {
+            updatePlayerStats();
+        }
+
+    </script>
+</body>
+</html>

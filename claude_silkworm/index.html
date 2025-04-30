@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silkworm HTML5 Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            border: 1px solid #333;
+            background-color: #111;
+        }
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+        }
+        #lives-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 20px;
+        }
+        #power-display {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 18px;
+        }
+        #game-over, #game-start {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            text-align: center;
+            display: none;
+        }
+        #game-start {
+            display: block;
+            pointer-events: auto;
+        }
+        button {
+            background-color: #333;
+            color: #fff;
+            border: 2px solid #555;
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        .player-selection {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-layer">
+            <div id="score-display">Score: 0</div>
+            <div id="lives-display">Lives: 3</div>
+            <div id="power-display">Power: 1/5</div>
+            <div id="game-start">
+                <h1>SILKWORM</h1>
+                <div class="player-selection">
+                    <button id="helicopter-btn">Helicopter (P1)</button>
+                    <button id="jeep-btn">Jeep (P1)</button>
+                    <button id="two-player-btn">Two Players</button>
+                </div>
+            </div>
+            <div id="game-over">
+                <h2>GAME OVER</h2>
+                <button id="restart-btn">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const SCROLL_SPEED = 2;
+        const PLAYER_SPEED = 5;
+        const BULLET_SPEED = 10;
+        const ENEMY_BULLET_SPEED = 6;
+        const HELICOPTER_HEIGHT = 30;
+        const HELICOPTER_WIDTH = 60;
+        const JEEP_HEIGHT = 25;
+        const JEEP_WIDTH = 50;
+        const ENEMY_TYPES = {
+            TURRET: 'turret',
+            BUNKER: 'bunker',
+            FLYING_DRONE: 'flying_drone',
+            TANK: 'tank',
+            MISSILE_LAUNCHER: 'missile_launcher',
+            BOSS: 'boss'
+        };
+        const POWERUP_TYPES = {
+            WEAPON_UPGRADE: 'weapon_upgrade',
+            EXTRA_LIFE: 'extra_life',
+            SHIELD: 'shield',
+            SPECIAL_WEAPON: 'special_weapon',
+            SPEED_UP: 'speed_up'
+        };
+        
+        // Game state
+        let gameState = {
+            isRunning: false,
+            isPaused: false,
+            score: 0,
+            level: 1,
+            scrollOffset: 0,
+            players: [],
+            enemies: [],
+            bullets: [],
+            enemyBullets: [],
+            powerups: [],
+            explosions: [],
+            sceneryObjects: [],
+            bossActive: false,
+            levelData: null
+        };
+
+        // DOM elements
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const livesDisplay = document.getElementById('lives-display');
+        const powerDisplay = document.getElementById('power-display');
+        const gameStartDiv = document.getElementById('game-start');
+        const gameOverDiv = document.getElementById('game-over');
+        const helicopterBtn = document.getElementById('helicopter-btn');
+        const jeepBtn = document.getElementById('jeep-btn');
+        const twoPlayerBtn = document.getElementById('two-player-btn');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // Set canvas dimensions
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        // Key state tracking
+        const keyState = {};
+        
+        // Player class
+        class Player {
+            constructor(type, playerNumber = 1) {
+                this.type = type; // 'helicopter' or 'jeep'
+                this.playerNumber = playerNumber;
+                this.width = type === 'helicopter' ? HELICOPTER_WIDTH : JEEP_WIDTH;
+                this.height = type === 'helicopter' ? HELICOPTER_HEIGHT : JEEP_HEIGHT;
+                this.x = 100;
+                this.y = type === 'helicopter' ? 150 : CANVAS_HEIGHT - 100;
+                this.speed = PLAYER_SPEED;
+                this.lives = 3;
+                this.score = 0;
+                this.powerLevel = 1;
+                this.maxPowerLevel = 5;
+                this.shieldActive = false;
+                this.shieldTime = 0;
+                this.specialWeaponAmmo = 0;
+                this.invulnerable = false;
+                this.invulnerableTime = 0;
+                this.fireRate = 10;
+                this.fireCounter = 0;
+                this.firing = false;
+                this.specialFiring = false;
+                this.controls = playerNumber === 1 ? {
+                    up: 'ArrowUp',
+                    down: 'ArrowDown',
+                    left: 'ArrowLeft',
+                    right: 'ArrowRight',
+                    fire: ' ',
+                    special: 'Shift'
+                } : {
+                    up: 'w',
+                    down: 's',
+                    left: 'a',
+                    right: 'd',
+                    fire: 'f',
+                    special: 'g'
+                };
+            }
+            
+            update() {
+                // Movement
+                if (this.type === 'helicopter') {
+                    if (keyState[this.controls.up]) this.y -= this.speed;
+                    if (keyState[this.controls.down]) this.y += this.speed;
+                } else {
+                    // Jeep is ground-based, can only move left/right
+                    this.y = CANVAS_HEIGHT - 80; // Ground level
+                }
+                
+                if (keyState[this.controls.left]) this.x -= this.speed;
+                if (keyState[this.controls.right]) this.x += this.speed;
+                
+                // Keep player in bounds
+                this.x = Math.max(0, Math.min(CANVAS_WIDTH - this.width, this.x));
+                this.y = Math.max(0, Math.min(CANVAS_HEIGHT - this.height, this.y));
+                
+                // Weapon firing
+                this.firing = keyState[this.controls.fire] || false;
+                this.specialFiring = keyState[this.controls.special] || false;
+                
+                if (this.firing && this.fireCounter <= 0) {
+                    this.shoot();
+                    this.fireCounter = this.fireRate;
+                }
+                
+                if (this.specialFiring && this.specialWeaponAmmo > 0 && this.fireCounter <= 0) {
+                    this.shootSpecial();
+                    this.specialWeaponAmmo--;
+                    this.fireCounter = this.fireRate * 2;
+                }
+                
+                if (this.fireCounter > 0) {
+                    this.fireCounter--;
+                }
+                
+                // Shield timer
+                if (this.shieldActive && this.shieldTime > 0) {
+                    this.shieldTime--;
+                } else if (this.shieldActive) {
+                    this.shieldActive = false;
+                }
+                
+                // Invulnerability timer (after being hit)
+                if (this.invulnerable && this.invulnerableTime > 0) {
+                    this.invulnerableTime--;
+                } else if (this.invulnerable) {
+                    this.invulnerable = false;
+                }
+            }
+            
+            draw() {
+                // Draw player with appropriate color for the type
+                ctx.save();
+                
+                // Flashing effect for invulnerability
+                if (this.invulnerable && Math.floor(this.invulnerableTime / 5) % 2 === 0) {
+                    ctx.globalAlpha = 0.5;
+                }
+                
+                const playerColor = this.type === 'helicopter' ? '#1E90FF' : '#32CD32';
+                
+                // Draw placeholder graphics
+                if (this.type === 'helicopter') {
+                    ctx.fillStyle = playerColor;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    
+                    // Helicopter rotors
+                    ctx.fillRect(this.x + 20, this.y - 5, 20, 5);
+                } else {
+                    ctx.fillStyle = playerColor;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    
+                    // Jeep wheels
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(this.x + 5, this.y + this.height, 10, 5);
+                    ctx.fillRect(this.x + this.width - 15, this.y + this.height, 10, 5);
+                }
+                
+                // Draw shield if active
+                if (this.shieldActive) {
+                    ctx.strokeStyle = '#00FFFF';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width / 2, this.y + this.height / 2, 
+                            Math.max(this.width, this.height) * 0.75, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+            
+            shoot() {
+                // Create bullets based on power level
+                switch(this.powerLevel) {
+                    case 1:
+                        // Single bullet
+                        gameState.bullets.push({
+                            x: this.x + this.width,
+                            y: this.y + this.height / 2,
+                            width: 10,
+                            height: 3,
+                            speed: BULLET_SPEED,
+                            damage: 1,
+                            owner: this
+                        });
+                        break;
+                        
+                    case 2:
+                        // Double bullets
+                        gameState.bullets.push({
+                            x: this.x + this.width,
+                            y: this.y + this.height / 3,
+                            width: 10,
+                            height: 3,
+                            speed: BULLET_SPEED,
+                            damage: 1,
+                            owner: this
+                        });
+                        gameState.bullets.push({
+                            x: this.x + this.width,
+                            y: this.y + (this.height * 2 / 3),
+                            width: 10,
+                            height: 3,
+                            speed: BULLET_SPEED,
+                            damage: 1,
+                            owner: this
+                        });
+                        break;
+                        
+                    case 3:
+                        // Triple bullets (front and diagonal)
+                        gameState.bullets.push({
+                            x: this.x + this.width,
+                            y: this.y + this.height / 2,
+                            width: 10,
+                            height: 3,
+                            speed: BULLET_SPEED,
+                            damage: 1,
+                            dx: 1,
+                            dy: 0,
+                            owner: this
+                        });
+                        gameState.bullets.push({
+                            x: this.x + this.width,
+                            y: this.y + this.height / 3,
+                            width: 10,
+                            height: 3,
+                            speed: BULLET_SPEED * 0.8,
+                            damage: 1,
+                            dx: 1,
+                            dy: -0.5,
+                            owner: this
+                        });
+                        gameState.bullets.push({
+                            x: this.x + this.width,
+                            y: this.y + (this.height * 2 / 3),
+                            width: 10,
+                            height: 3,
+                            speed: BULLET_SPEED * 0.8,
+                            damage: 1,
+                            dx: 1,
+                            dy: 0.5,
+                            owner: this
+                        });
+                        break;
+                        
+                    case 4:
+                        // Quad bullets (stronger)
+                        for (let i = 0; i < 4; i++) {
+                            gameState.bullets.push({
+                                x: this.x + this.width,
+                                y: this.y + (this.height * (i + 1) / 5),
+                                width: 12,
+                                height: 3,
+                                speed: BULLET_SPEED,
+                                damage: 2,
+                                owner: this
+                            });
+                        }
+                        break;
+                        
+                    case 5:
+                        // Max power - spread and powerful
+                        for (let i = -2; i <= 2; i++) {
+                            gameState.bullets.push({
+                                x: this.x + this.width,
+                                y: this.y + this.height / 2,
+                                width: 15,
+                                height: 4,
+                                speed: BULLET_SPEED,
+                                damage: 2,
+                                dx: 1,
+                                dy: i * 0.2,
+                                owner: this
+                            });
+                        }
+                        break;
+                }
+                
+                // Add sound effect placeholder
+                // playSound('player_shoot');
+            }
+            
+            shootSpecial() {
+                // Special weapon based on player type
+                if (this.type === 'helicopter') {
+                    // Helicopter special: missiles that seek enemies
+                    for (let i = -1; i <= 1; i += 2) {
+                        gameState.bullets.push({
+                            x: this.x + this.width / 2,
+                            y: this.y + this.height / 2,
+                            width: 15,
+                            height: 7,
+                            speed: BULLET_SPEED * 0.7,
+                            damage: 5,
+                            isSpecial: true,
+                            isMissile: true,
+                            dx: 1,
+                            dy: i * 0.2,
+                            owner: this,
+                            target: null,
+                            retargetCounter: 10
+                        });
+                    }
+                } else {
+                    // Jeep special: ground bomb that explodes
+                    gameState.bullets.push({
+                        x: this.x + this.width,
+                        y: this.y,
+                        width: 15,
+                        height: 15,
+                        speed: BULLET_SPEED * 0.5,
+                        damage: 10,
+                        isSpecial: true,
+                        isBomb: true,
+                        owner: this,
+                        explosionTimer: 30
+                    });
+                }
+                
+                // Add sound effect placeholder
+                // playSound('special_weapon');
+            }
+            
+            takeDamage() {
+                if (this.invulnerable || this.shieldActive) return false;
+                
+                this.lives--;
+                this.invulnerable = true;
+                this.invulnerableTime = 90; // 1.5 seconds at 60fps
+                
+                // Power level drops by 1 on hit
+                if (this.powerLevel > 1) {
+                    this.powerLevel--;
+                }
+                
+                // Create explosion
+                createExplosion(this.x + this.width / 2, this.y + this.height / 2, 1);
+                
+                // Add sound effect placeholder
+                // playSound('player_hit');
+                
+                updateUI();
+                return this.lives <= 0;
+            }
+            
+            collectPowerup(type) {
+                switch(type) {
+                    case POWERUP_TYPES.WEAPON_UPGRADE:
+                        if (this.powerLevel < this.maxPowerLevel) {
+                            this.powerLevel++;
+                        } else {
+                            // Score bonus for max power
+                            this.score += 1000;
+                        }
+                        break;
+                        
+                    case POWERUP_TYPES.EXTRA_LIFE:
+                        this.lives++;
+                        break;
+                        
+                    case POWERUP_TYPES.SHIELD:
+                        this.shieldActive = true;
+                        this.shieldTime = 300; // 5 seconds at 60fps
+                        break;
+                        
+                    case POWERUP_TYPES.SPECIAL_WEAPON:
+                        this.specialWeaponAmmo += 5;
+                        break;
+                        
+                    case POWERUP_TYPES.SPEED_UP:
+                        this.speed += 1;
+                        // Cap speed
+                        if (this.speed > PLAYER_SPEED * 1.5) {
+                            this.speed = PLAYER_SPEED * 1.5;
+                        }
+                        break;
+                }
+                
+                // Add sound effect placeholder
+                // playSound('powerup');
+                
+                updateUI();
+            }
+        }
+        
+        // Enemy class
+        class Enemy {
+            constructor(type, x, y, options = {}) {
+                this.type = type;
+                this.x = x;
+                this.y = y;
+                this.width = options.width || 40;
+                this.height = options.height || 40;
+                this.health = options.health || 5;
+                this.maxHealth = this.health;
+                this.speed = options.speed || 1;
+                this.scoreValue = options.scoreValue || 100;
+                this.fireRate = options.fireRate || 0;
+                this.fireCounter = Math.floor(Math.random() * 60);
+                this.movePattern = options.movePattern || 'none';
+                this.moveCounter = 0;
+                this.dropsPowerup = options.dropsPowerup || 0.2; // 20% chance
+                this.powerupType = options.powerupType || null;
+                this.isBoss = options.isBoss || false;
+                this.isGroundUnit = type === ENEMY_TYPES.TURRET || 
+                                   type === ENEMY_TYPES.BUNKER ||
+                                   type === ENEMY_TYPES.TANK ||
+                                   type === ENEMY_TYPES.MISSILE_LAUNCHER;
+            }
+            
+            update() {
+                // Default scrolling with the level
+                this.x -= SCROLL_SPEED;
+                
+                // Apply move pattern
+                switch(this.movePattern) {
+                    case 'sine':
+                        this.y += Math.sin(this.moveCounter / 20) * 2;
+                        break;
+                        
+                    case 'zigzag':
+                        if (this.moveCounter % 60 < 30) {
+                            this.y -= this.speed;
+                        } else {
+                            this.y += this.speed;
+                        }
+                        break;
+                        
+                    case 'circle':
+                        const centerY = this.y;
+                        const radius = 30;
+                        this.y = centerY + Math.sin(this.moveCounter / 20) * radius;
+                        this.x += Math.cos(this.moveCounter / 20) * this.speed - SCROLL_SPEED;
+                        break;
+                        
+                    case 'charge':
+                        // Charge toward player if close enough
+                        if (gameState.players.length > 0) {
+                            const player = gameState.players[0];
+                            if (this.x - player.x < 200 && this.x > player.x) {
+                                this.x -= this.speed * 2;
+                                
+                                if (player.type === this.isGroundUnit ? 'jeep' : 'helicopter') {
+                                    if (this.y < player.y) this.y += this.speed;
+                                    if (this.y > player.y) this.y -= this.speed;
+                                }
+                            }
+                        }
+                        break;
+                }
+                
+                this.moveCounter++;
+                
+                // Fire weapons if applicable
+                if (this.fireRate > 0) {
+                    this.fireCounter--;
+                    
+                    if (this.fireCounter <= 0) {
+                        this.shoot();
+                        this.fireCounter = this.fireRate + Math.floor(Math.random() * 30);
+                    }
+                }
+                
+                // Remove if off-screen
+                return this.x < -this.width || this.health <= 0;
+            }
+            
+            draw() {
+                // Draw enemy with appropriate color for the type
+                ctx.save();
+                
+                let color;
+                switch(this.type) {
+                    case ENEMY_TYPES.TURRET:
+                        color = '#8B0000'; // Dark red
+                        break;
+                    case ENEMY_TYPES.BUNKER:
+                        color = '#A52A2A'; // Brown
+                        break;
+                    case ENEMY_TYPES.FLYING_DRONE:
+                        color = '#9932CC'; // Purple
+                        break;
+                    case ENEMY_TYPES.TANK:
+                        color = '#8B4513'; // Saddle brown
+                        break;
+                    case ENEMY_TYPES.MISSILE_LAUNCHER:
+                        color = '#DC143C'; // Crimson
+                        break;
+                    case ENEMY_TYPES.BOSS:
+                        color = '#FF0000'; // Red
+                        break;
+                    default:
+                        color = '#FF0000'; // Default red
+                }
+                
+                ctx.fillStyle = color;
+                
+                // Draw basic placeholder shape
+                if (this.isBoss) {
+                    // Boss is bigger and more complex
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    
+                    // Boss details
+                    ctx.fillStyle = '#FF4500';
+                    ctx.fillRect(this.x + 10, this.y + 10, this.width - 20, this.height - 20);
+                    
+                    // Health bar for boss
+                    ctx.fillStyle = '#00FF00';
+                    const healthPercentage = this.health / this.maxHealth;
+                    ctx.fillRect(this.x, this.y - 10, this.width * healthPercentage, 5);
+                } else {
+                    // Regular enemies
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    
+                    // Add details based on enemy type
+                    switch(this.type) {
+                        case ENEMY_TYPES.TURRET:
+                            ctx.fillStyle = '#FF4500';
+                            ctx.fillRect(this.x + this.width / 2 - 5, this.y - 10, 10, 10);
+                            break;
+                            
+                        case ENEMY_TYPES.FLYING_DRONE:
+                            ctx.fillStyle = '#8A2BE2';
+                            ctx.beginPath();
+                            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, 10, 0, Math.PI * 2);
+                            ctx.fill();
+                            break;
+                            
+                        case ENEMY_TYPES.TANK:
+                            ctx.fillStyle = '#FF8C00';
+                            ctx.fillRect(this.x, this.y + this.height - 10, this.width, 10);
+                            ctx.fillRect(this.x + this.width / 2 - 5, this.y - 5, 30, 5);
+                            break;
+                            
+                        case ENEMY_TYPES.MISSILE_LAUNCHER:
+                            ctx.fillStyle = '#FF6347';
+                            ctx.fillRect(this.x + 5, this.y - 15, 5, 15);
+                            ctx.fillRect(this.x + this.width - 10, this.y - 15, 5, 15);
+                            break;
+                    }
+                }
+                
+                ctx.restore();
+            }
+            
+            shoot() {
+                let bulletType = 'normal';
+                let speed = ENEMY_BULLET_SPEED;
+                let damage = 1;
+                let width = 8;
+                let height = 3;
+                let targetPlayer = null;
+                
+                // Find closest player for targeting
+                if (gameState.players.length > 0) {
+                    targetPlayer = gameState.players[0];
+                    let minDist = Infinity;
+                    
+                    for (const player of gameState.players) {
+                        const dist = Math.hypot(player.x - this.x, player.y - this.y);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            targetPlayer = player;
+                        }
+                    }
+                }
+                
+                // Different enemy types have different bullet patterns
+                switch(this.type) {
+                    case ENEMY_TYPES.TURRET:
+                        // Single aimed shot
+                        if (targetPlayer) {
+                            const dx = targetPlayer.x - this.x;
+                            const dy = targetPlayer.y - this.y;
+                            const dist = Math.hypot(dx, dy);
+                            
+                            gameState.enemyBullets.push({
+                                x: this.x,
+                                y: this.y,
+                                width,
+                                height,
+                                speed,
+                                damage,
+                                dx: dx / dist,
+                                dy: dy / dist,
+                                type: bulletType
+                            });
+                        }
+                        break;
+                        
+                    case ENEMY_TYPES.FLYING_DRONE:
+                        // Spray of bullets
+                        for (let i = -1; i <= 1; i++) {
+                            gameState.enemyBullets.push({
+                                x: this.x,
+                                y: this.y + this.height / 2,
+                                width,
+                                height,
+                                speed,
+                                damage,
+                                dx: -1,
+                                dy: i * 0.3,
+                                type: bulletType
+                            });
+                        }
+                        break;
+                        
+                    case ENEMY_TYPES.MISSILE_LAUNCHER:
+                        // Homing missile
+                        gameState.enemyBullets.push({
+                            x: this.x,
+                            y: this.y,
+                            width: 12,
+                            height: 6,
+                            speed: speed * 0.7,
+                            damage: 2,
+                            isHoming: true,
+                            target: targetPlayer,
+                            homingStrength: 0.05,
+                            dx: -1,
+                            dy: 0,
+                            type: 'missile'
+                        });
+                        break;
+                        
+                    case ENEMY_TYPES.BOSS:
+                        // Boss has multiple attack patterns
+                        const pattern = Math.floor(Math.random() * 3);
+                        
+                        if (pattern === 0) {
+                            // Circle of bullets
+                            for (let angle = 0; angle < 360; angle += 30) {
+                                const rad = angle * Math.PI / 180;
+                                gameState.enemyBullets.push({
+                                    x: this.x + this.width / 2,
+                                    y: this.y + this.height / 2,
+                                    width: 10,
+                                    height: 10,
+                                    speed: speed * 0.8,
+                                    damage: 2,
+                                    dx: Math.cos(rad),
+                                    dy: Math.sin(rad),
+                                    type: 'boss'
+                                });
+                            }
+                        } else if (pattern === 1) {
+                            // Aimed spread shot
+                            if (targetPlayer) {
+                                const dx = targetPlayer.x - this.x;
+                                const dy = targetPlayer.y - this.y;
+                                const dist = Math.hypot(dx, dy);
+                                const baseDx = dx / dist;
+                                const baseDy = dy / dist;
+                                
+                                for (let i = -2; i <= 2; i++) {
+                                    const angle = i * 10 * Math.PI / 180;
+                                    const rotatedDx = baseDx * Math.cos(angle) - baseDy * Math.sin(angle);
+                                    const rotatedDy = baseDx * Math.sin(angle) + baseDy * Math.cos(angle);
+                                    
+                                    gameState.enemyBullets.push({
+                                        x: this.x + this.width / 2,
+                                        y: this.y + this.height / 2,
+                                        width: 12,
+                                        height: 12,
+                                        speed: speed,
+                                        damage: 2,
+                                        dx: rotatedDx,
+                                        dy: rotatedDy,
+                                        type: 'boss'
+                                    });
+                                }
+                            }
+                        } else {
+                            // Laser beam (instant hit)
+                            if (targetPlayer) {
+                                // Create beam effect
+                                const beam = {
+                                    x: this.x,
+                                    y: this.y + this.height / 2,
+                                    width: CANVAS_WIDTH,
+                                    height: 20,
+                                    damage: 3,
+                                    lifespan: 10,
+                                    type: 'laser'
+                                };
+                                
+                                gameState.enemyBullets.push(beam);
+                                
+                                // Check for collision with player
+                                for (const player of gameState.players) {
+                                    if (player.y > beam.y - beam.height / 2 && 
+                                        player.y < beam.y + beam.height / 2) {
+                                        player.takeDamage();
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                        
+                    default:
+                        // Basic enemy - just shoot forward
+                        gameState.enemyBullets.push({
+                            x: this.x,
+                            y: this.y + this.height / 2,
+                            width,
+                            height,
+                            speed,
+                            damage,
+                            dx: -1,
+                            dy: 0,
+                            type: bulletType
+                        });
+                }
+                
+                // Add sound effect placeholder
+                // playSound('enemy_shoot');
+            }
+            
+            takeDamage(amount = 1) {
+                this.health -= amount;
+                
+                // Flash effect would go here
+                
+                if (this.health <= 0) {
+                    // Enemy destroyed
+                    createExplosion(this.x + this.width / 2, this.y + this.height / 2, 
+                                   this.isBoss ? 3 : 2);
+                    
+                    // Add score to the player who destroyed it
+                    if (gameState.players.length > 0) {
+                        gameState.players[0].score += this.scoreValue;
+                        gameState.score += this.scoreValue;
+                        updateUI();
+                    }
+                    
+                    // Chance to drop powerup
+                    if (Math.random() < this.dropsPowerup) {
+                        let powerupType;
+                        
+                        if (this.powerupType) {
+                            powerupType = this.powerupType;
+                        } else {
+                            // Random powerup
+                            const types = Object.values(POWERUP_TYPES);
+                            powerupType = types[Math.floor(Math.random() * types.length)];
+                        }
+                        
+                        gameState.powerups.push({
+                            x: this.x + this.width / 2,
+                            y: this.y + this.height / 2,
+                            width: 20,
+                            height: 20,
+                            type: powerupType,
+                            speed: 1,
+                            lifespan: 300 // 5 seconds
+                        });
+                    }
+                    
+                    // Add sound effect placeholder
+                    // playSound('enemy_destroyed');
+                    
+                    return true;
+                }
+                
+                return false;
+            }
+        }
+        
+        // Create explosion effect
+        function createExplosion(x, y, size = 1) {
+            const explosion = {
+                x,
+                y,
+                size,
+                frame: 0,
+                maxFrames: 10,
+                radius: size * 20
+            };
+            
+            gameState.explosions.push(explosion);
+            
+            // Add sound effect placeholder
+            // playSound('explosion_' + (size > 2 ? 'large' : 'small'));
+        }
+        
+        // Draw explosion
+        function drawExplosion(explosion) {
+            ctx.save();
+            
+            const alpha = 1 - (explosion.frame / explosion.maxFrames);
+            ctx.globalAlpha = alpha;
+            
+            // Multi-circle explosion
+            const colors = ['#FF4500', '#FFA500', '#FFFF00', '#FFFFFF'];
+            
+            for (let i = 0; i < colors.length; i++) {
+                const radius = explosion.radius * (explosion.frame / explosion.maxFrames) * (1 - i * 0.2);
+                ctx.fillStyle = colors[i];
+                ctx.beginPath();
+                ctx.arc(explosion.x, explosion.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+            
+            explosion.frame++;
+            return explosion.frame >= explosion.maxFrames;
+        }
+        
+        // Level generation functions
+        function generateLevel(levelNum) {
+            const levelData = {
+                length: 10000, // Pixels
+                groundY: CANVAS_HEIGHT - 50,
+                enemies: [],
+                scenery: [],
+                powerups: [],
+                boss: null
+            };
+            
+            // Background parallax layers
+            levelData.scenery.push({
+                type: 'background',
+                speed: 0.2,
+                elements: []
+            });
+            
+            // Add clouds to background
+            for (let i = 0; i < 20; i++) {
+                levelData.scenery[0].elements.push({
+                    x: Math.random() * levelData.length,
+                    y: Math.random() * (CANVAS_HEIGHT / 2),
+                    width: 60 + Math.random() * 40,
+                    height: 30 + Math.random() * 20,
+                    type: 'cloud'
+                });
+            }
+            
+            // Midground layer
+            levelData.scenery.push({
+                type: 'midground',
+                speed: 0.6,
+                elements: []
+            });
+            
+            // Add hills to midground
+            for (let i = 0; i < 15; i++) {
+                levelData.scenery[1].elements.push({
+                    x: i * (levelData.length / 15),
+                    y: levelData.groundY - (50 + Math.random() * 100),
+                    width: 200 + Math.random() * 300,
+                    height: 100 + Math.random() * 150,
+                    type: 'hill'
+                });
+            }
+            
+            // Ground layer
+            levelData.scenery.push({
+                type: 'ground',
+                speed: 1,
+                elements: []
+            });
+            
+            // Generate ground details
+            for (let x = 0; x < levelData.length; x += 100) {
+                if (Math.random() < 0.3) {
+                    levelData.scenery[2].elements.push({
+                        x,
+                        y: levelData.groundY - 10,
+                        width: 50 + Math.random() * 50,
+                        height: 10,
+                        type: 'ground_detail'
+                    });
+                }
+            }
+            
+            // Enemy and obstacle generation based on level
+            const difficultyFactor = 1 + (levelNum - 1) * 0.2;
+            const enemyCount = Math.floor(30 * difficultyFactor);
+            const powerupCount = Math.floor(10 * difficultyFactor);
+            
+            // Add random enemies
+            for (let i = 0; i < enemyCount; i++) {
+                const x = 800 + (i * (levelData.length - 1000) / enemyCount);
+                let y, type, options;
+                
+                // Determine enemy type
+                const enemyRoll = Math.random();
+                
+                if (enemyRoll < 0.3) {
+                    // Ground unit - turret
+                    type = ENEMY_TYPES.TURRET;
+                    y = levelData.groundY - 30;
+                    options = {
+                        width: 30,
+                        height: 30,
+                        health: 3 * difficultyFactor,
+                        fireRate: 90,
+                        scoreValue: 100
+                    };
+                } else if (enemyRoll < 0.5) {
+                    // Ground unit - tank
+                    type = ENEMY_TYPES.TANK;
+                    y = levelData.groundY - 40;
+                    options = {
+                        width: 50,
+                        height: 30,
+                        health: 5 * difficultyFactor,
+                        fireRate: 120,
+                        movePattern: 'charge',
+                        speed: 1.5,
+                        scoreValue: 150
+                    };
+                } else if (enemyRoll < 0.7) {
+                    // Air unit - flying drone
+                    type = ENEMY_TYPES.FLYING_DRONE;
+                    y = 100 + Math.random() * (CANVAS_HEIGHT - 250);
+                    options = {
+                        width: 40,
+                        height: 25,
+                        health: 2 * difficultyFactor,
+                        fireRate: 60,
+                        movePattern: 'sine',
+                        speed: 2,
+                        scoreValue: 120
+                    };
+                } else if (enemyRoll < 0.85) {
+                    // Ground unit - bunker
+                    type = ENEMY_TYPES.BUNKER;
+                    y = levelData.groundY - 30;
+                    options = {
+                        width: 60,
+                        height: 30,
+                        health: 8 * difficultyFactor,
+                        fireRate: 45,
+                        scoreValue: 200
+                    };
+                } else {
+                    // Ground unit - missile launcher
+                    type = ENEMY_TYPES.MISSILE_LAUNCHER;
+                    y = levelData.groundY - 35;
+                    options = {
+                        width: 45,
+                        height: 35,
+                        health: 4 * difficultyFactor,
+                        fireRate: 150,
+                        scoreValue: 180
+                    };
+                }
+                
+                levelData.enemies.push({
+                    type,
+                    x,
+                    y,
+                    options
+                });
+            }
+            
+            // Add random powerups
+            for (let i = 0; i < powerupCount; i++) {
+                const x = 1000 + (i * (levelData.length - 2000) / powerupCount);
+                const y = 100 + Math.random() * (CANVAS_HEIGHT - 200);
+                
+                // Determine powerup type
+                const types = Object.values(POWERUP_TYPES);
+                const type = types[Math.floor(Math.random() * types.length)];
+                
+                levelData.powerups.push({
+                    type,
+                    x,
+                    y
+                });
+            }
+            
+            // Add boss at the end of level
+            const bossX = levelData.length - 400;
+            const bossY = CANVAS_HEIGHT / 2 - 75;
+            
+            let bossType, bossOptions;
+            
+            // Different boss types based on level
+            switch (levelNum % 3) {
+                case 1:
+                    bossType = "Tank Commander";
+                    bossOptions = {
+                        width: 120,
+                        height: 100,
+                        health: 50 * difficultyFactor,
+                        fireRate: 30,
+                        movePattern: 'zigzag',
+                        speed: 2,
+                        scoreValue: 2000,
+                        isBoss: true,
+                        dropsPowerup: 1.0,
+                        powerupType: POWERUP_TYPES.WEAPON_UPGRADE
+                    };
+                    break;
+                
+                case 2:
+                    bossType = "Air Destroyer";
+                    bossOptions = {
+                        width: 150,
+                        height: 80,
+                        health: 60 * difficultyFactor,
+                        fireRate: 20,
+                        movePattern: 'circle',
+                        speed: 3,
+                        scoreValue: 3000,
+                        isBoss: true,
+                        dropsPowerup: 1.0,
+                        powerupType: POWERUP_TYPES.SPECIAL_WEAPON
+                    };
+                    break;
+                
+                case 0:
+                    bossType = "Mega Fortress";
+                    bossOptions = {
+                        width: 180,
+                        height: 120,
+                        health: 80 * difficultyFactor,
+                        fireRate: 15,
+                        movePattern: 'sine',
+                        speed: 1,
+                        scoreValue: 5000,
+                        isBoss: true,
+                        dropsPowerup: 1.0,
+                        powerupType: POWERUP_TYPES.EXTRA_LIFE
+                    };
+                    break;
+            }
+            
+            levelData.boss = {
+                type: ENEMY_TYPES.BOSS,
+                bossName: bossType,
+                x: bossX,
+                y: bossY,
+                options: bossOptions
+            };
+            
+            return levelData;
+        }
+        
+        // Helper functions
+        function checkCollision(obj1, obj2) {
+            return (
+                obj1.x < obj2.x + obj2.width &&
+                obj1.x + obj1.width > obj2.x &&
+                obj1.y < obj2.y + obj2.height &&
+                obj1.y + obj1.height > obj2.y
+            );
+        }
+        
+        function updateUI() {
+            // Update score
+            scoreDisplay.textContent = `Score: ${gameState.score}`;
+            
+            // Update lives (use the first player's lives for simplicity)
+            if (gameState.players.length > 0) {
+                livesDisplay.textContent = `Lives: ${gameState.players[0].lives}`;
+                powerDisplay.textContent = `Power: ${gameState.players[0].powerLevel}/${gameState.players[0].maxPowerLevel}`;
+            }
+        }
+        
+        // Game initialization
+        function initGame(mode) {
+            gameState = {
+                isRunning: true,
+                isPaused: false,
+                score: 0,
+                level: 1,
+                scrollOffset: 0,
+                players: [],
+                enemies: [],
+                bullets: [],
+                enemyBullets: [],
+                powerups: [],
+                explosions: [],
+                sceneryObjects: [],
+                bossActive: false,
+                levelData: null
+            };
+            
+            // Create player(s) based on selected mode
+            if (mode === 'helicopter') {
+                gameState.players.push(new Player('helicopter', 1));
+            } else if (mode === 'jeep') {
+                gameState.players.push(new Player('jeep', 1));
+            } else if (mode === 'two-player') {
+                gameState.players.push(new Player('helicopter', 1));
+                gameState.players.push(new Player('jeep', 2));
+            }
+            
+            // Generate level
+            gameState.levelData = generateLevel(gameState.level);
+            
+            // Hide start screen, show game
+            gameStartDiv.style.display = 'none';
+            gameOverDiv.style.display = 'none';
+            
+            // Start the game loop
+            requestAnimationFrame(gameLoop);
+            
+            // Update UI
+            updateUI();
+        }
+        
+        // Game over handling
+        function gameOver() {
+            gameState.isRunning = false;
+            gameOverDiv.style.display = 'block';
+            
+            // Add high score functionality here
+        }
+        
+        // Level complete handling
+        function levelComplete() {
+            gameState.level++;
+            gameState.scrollOffset = 0;
+            gameState.enemies = [];
+            gameState.bullets = [];
+            gameState.enemyBullets = [];
+            gameState.powerups = [];
+            gameState.explosions = [];
+            gameState.bossActive = false;
+            
+            // Generate new level
+            gameState.levelData = generateLevel(gameState.level);
+            
+            // Bonus points for completing level
+            gameState.score += 5000;
+            
+            // Update UI
+            updateUI();
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            if (!gameState.isRunning) return;
+            
+            // Clear the canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw scrolling background
+            drawBackground();
+            
+            // Update scroll position
+            gameState.scrollOffset += SCROLL_SPEED;
+            
+            // Spawn enemies from level data
+            spawnEnemies();
+            
+            // Spawn powerups from level data
+            spawnPowerups();
+            
+            // Check if level is complete
+            if (gameState.scrollOffset >= gameState.levelData.length && !gameState.bossActive && gameState.enemies.length === 0) {
+                levelComplete();
+            }
+            
+            // Update and draw players
+            for (let i = gameState.players.length - 1; i >= 0; i--) {
+                const player = gameState.players[i];
+                player.update();
+                player.draw();
+                
+                // Check for game over
+                if (player.lives <= 0) {
+                    gameState.players.splice(i, 1);
+                    
+                    if (gameState.players.length === 0) {
+                        gameOver();
+                    }
+                }
+            }
+            
+            // Update and draw bullets
+            updateBullets();
+            
+            // Update and draw enemies
+            updateEnemies();
+            
+            // Update and draw powerups
+            updatePowerups();
+            
+            // Update and draw explosions
+            updateExplosions();
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Continue the game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Draw background
+        function drawBackground() {
+            // Draw sky
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+            skyGradient.addColorStop(0, '#0066CC');
+            skyGradient.addColorStop(1, '#99CCFF');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw ground
+            const groundY = gameState.levelData.groundY;
+            const groundGradient = ctx.createLinearGradient(0, groundY, 0, CANVAS_HEIGHT);
+            groundGradient.addColorStop(0, '#8B4513');
+            groundGradient.addColorStop(1, '#654321');
+            ctx.fillStyle = groundGradient;
+            ctx.fillRect(0, groundY, CANVAS_WIDTH, CANVAS_HEIGHT - groundY);
+            
+            // Draw parallax layers
+            for (const layer of gameState.levelData.scenery) {
+                const scrollPos = gameState.scrollOffset * layer.speed;
+                
+                for (const element of layer.elements) {
+                    // Only draw elements that are visible on screen
+                    const adjustedX = element.x - scrollPos;
+                    
+                    if (adjustedX > -element.width && adjustedX < CANVAS_WIDTH) {
+                        // Draw based on element type
+                        ctx.save();
+                        
+                        switch(element.type) {
+                            case 'cloud':
+                                ctx.fillStyle = '#FFFFFF';
+                                ctx.globalAlpha = 0.7;
+                                ctx.beginPath();
+                                ctx.arc(adjustedX, element.y, element.width / 3, 0, Math.PI * 2);
+                                ctx.arc(adjustedX + element.width / 3, element.y - element.height / 4, element.width / 4, 0, Math.PI * 2);
+                                ctx.arc(adjustedX + element.width / 2, element.y, element.width / 3, 0, Math.PI * 2);
+                                ctx.fill();
+                                break;
+                                
+                            case 'hill':
+                                ctx.fillStyle = '#4C7635';
+                                ctx.beginPath();
+                                ctx.moveTo(adjustedX, element.y + element.height);
+                                ctx.quadraticCurveTo(
+                                    adjustedX + element.width / 2, element.y, 
+                                    adjustedX + element.width, element.y + element.height
+                                );
+                                ctx.fill();
+                                break;
+                                
+                            case 'ground_detail':
+                                ctx.fillStyle = '#654321';
+                                ctx.fillRect(adjustedX, element.y, element.width, element.height);
+                                break;
+                        }
+                        
+                        ctx.restore();
+                    }
+                }
+            }
+        }
+        
+        // Spawn enemies from level data
+        function spawnEnemies() {
+            // Check for boss activation
+            if (!gameState.bossActive && 
+                gameState.levelData.boss && 
+                gameState.scrollOffset >= gameState.levelData.boss.x - CANVAS_WIDTH) {
+                
+                const boss = gameState.levelData.boss;
+                gameState.enemies.push(new Enemy(
+                    boss.type,
+                    CANVAS_WIDTH,
+                    boss.y,
+                    boss.options
+                ));
+                
+                gameState.bossActive = true;
+                
+                // Play boss music
+                // playSound('boss_music');
+            }
+            
+            // Spawn regular enemies
+            for (let i = gameState.levelData.enemies.length - 1; i >= 0; i--) {
+                const enemy = gameState.levelData.enemies[i];
+                
+                // Spawn enemy when it's about to be visible
+                if (enemy.x <= gameState.scrollOffset + CANVAS_WIDTH) {
+                    const screenX = enemy.x - gameState.scrollOffset + CANVAS_WIDTH;
+                    
+                    gameState.enemies.push(new Enemy(
+                        enemy.type,
+                        screenX,
+                        enemy.y,
+                        enemy.options
+                    ));
+                    
+                    // Remove from level data
+                    gameState.levelData.enemies.splice(i, 1);
+                }
+            }
+        }
+        
+        // Spawn powerups from level data
+        function spawnPowerups() {
+            for (let i = gameState.levelData.powerups.length - 1; i >= 0; i--) {
+                const powerup = gameState.levelData.powerups[i];
+                
+                // Spawn powerup when it's about to be visible
+                if (powerup.x <= gameState.scrollOffset + CANVAS_WIDTH) {
+                    const screenX = powerup.x - gameState.scrollOffset + CANVAS_WIDTH;
+                    
+                    gameState.powerups.push({
+                        x: screenX,
+                        y: powerup.y,
+                        width: 20,
+                        height: 20,
+                        type: powerup.type,
+                        speed: 1,
+                        lifespan: 300 // 5 seconds
+                    });
+                    
+                    // Remove from level data
+                    gameState.levelData.powerups.splice(i, 1);
+                }
+            }
+        }
+        
+        // Update and draw bullets
+        function updateBullets() {
+            // Player bullets
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                
+                // If it's a homing missile, find target
+                if (bullet.isMissile && bullet.retargetCounter <= 0) {
+                    let closestEnemy = null;
+                    let closestDist = Infinity;
+                    
+                    for (const enemy of gameState.enemies) {
+                        const dist = Math.hypot(enemy.x - bullet.x, enemy.y - bullet.y);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closestEnemy = enemy;
+                        }
+                    }
+                    
+                    if (closestEnemy && closestDist < 300) {
+                        bullet.target = closestEnemy;
+                    }
+                    
+                    bullet.retargetCounter = 10;
+                } else if (bullet.isMissile) {
+                    bullet.retargetCounter--;
+                }
+                
+                // Update position based on direction
+                if (bullet.dx === undefined) bullet.dx = 1;
+                if (bullet.dy === undefined) bullet.dy = 0;
+                
+                // If it's a missile with a target, adjust direction
+                if (bullet.isMissile && bullet.target) {
+                    const dx = bullet.target.x - bullet.x;
+                    const dy = bullet.target.y - bullet.y;
+                    const dist = Math.hypot(dx, dy);
+                    
+                    // Gradually turn toward target
+                    if (dist > 0) {
+                        bullet.dx += (dx / dist) * 0.1;
+                        bullet.dy += (dy / dist) * 0.1;
+                        
+                        // Normalize direction vector
+                        const speed = Math.hypot(bullet.dx, bullet.dy);
+                        bullet.dx = bullet.dx / speed;
+                        bullet.dy = bullet.dy / speed;
+                    }
+                }
+                
+                // If it's a bomb, update explosion timer
+                if (bullet.isBomb) {
+                    bullet.explosionTimer--;
+                    
+                    if (bullet.explosionTimer <= 0) {
+                        // Create explosion
+                        createExplosion(bullet.x, bullet.y, 2);
+                        
+                        // Check enemies in blast radius
+                        for (const enemy of gameState.enemies) {
+                            const dist = Math.hypot(enemy.x - bullet.x, enemy.y - bullet.y);
+                            if (dist < 100) {
+                                enemy.takeDamage(10 * (1 - dist / 100));
+                            }
+                        }
+                        
+                        // Remove bomb
+                        gameState.bullets.splice(i, 1);
+                        continue;
+                    }
+                }
+                
+                bullet.x += bullet.dx * bullet.speed;
+                bullet.y += bullet.dy * bullet.speed;
+                
+                // Check if out of bounds
+                if (bullet.x < 0 || bullet.x > CANVAS_WIDTH || 
+                    bullet.y < 0 || bullet.y > CANVAS_HEIGHT) {
+                    gameState.bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Draw bullet
+                ctx.save();
+                
+                if (bullet.isMissile) {
+                    // Draw missile
+                    ctx.fillStyle = '#FF4500';
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                    
+                    // Draw exhaust trail
+                    ctx.fillStyle = '#FFA500';
+                    ctx.fillRect(bullet.x - 10, bullet.y + bullet.height / 2 - 1, 8, 2);
+                } else if (bullet.isBomb) {
+                    // Draw bomb
+                    ctx.fillStyle = '#808080';
+                    ctx.beginPath();
+                    ctx.arc(bullet.x, bullet.y, bullet.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Flash countdown
+                    if (bullet.explosionTimer % 5 < 3) {
+                        ctx.fillStyle = '#FF0000';
+                        ctx.beginPath();
+                        ctx.arc(bullet.x, bullet.y, bullet.width / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else {
+                    // Draw regular bullet
+                    ctx.fillStyle = '#FFFF00';
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                }
+                
+                ctx.restore();
+            }
+            
+            // Enemy bullets
+            for (let i = gameState.enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.enemyBullets[i];
+                
+                // If it's a homing missile, adjust direction
+                if (bullet.isHoming && bullet.target) {
+                    const dx = bullet.target.x - bullet.x;
+                    const dy = bullet.target.y - bullet.y;
+                    const dist = Math.hypot(dx, dy);
+                    
+                    // Gradually turn toward target
+                    if (dist > 0) {
+                        bullet.dx += (dx / dist) * bullet.homingStrength;
+                        bullet.dy += (dy / dist) * bullet.homingStrength;
+                        
+                        // Normalize direction vector
+                        const speed = Math.hypot(bullet.dx, bullet.dy);
+                        bullet.dx = bullet.dx / speed;
+                        bullet.dy = bullet.dy / speed;
+                    }
+                }
+                
+                // Laser beams have a lifespan
+                if (bullet.type === 'laser') {
+                    bullet.lifespan--;
+                    if (bullet.lifespan <= 0) {
+                        gameState.enemyBullets.splice(i, 1);
+                        continue;
+                    }
+                } else {
+                    // Regular bullets move normally
+                    bullet.x += bullet.dx * bullet.speed;
+                    bullet.y += bullet.dy * bullet.speed;
+                }
+                
+                // Check if out of bounds
+                if (bullet.x < -bullet.width || bullet.x > CANVAS_WIDTH || 
+                    bullet.y < -bullet.height || bullet.y > CANVAS_HEIGHT) {
+                    gameState.enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Draw enemy bullet
+                ctx.save();
+                
+                if (bullet.type === 'missile') {
+                    // Draw missile
+                    ctx.fillStyle = '#FF0000';
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                    
+                    // Draw exhaust trail
+                    ctx.fillStyle = '#FFA500';
+                    ctx.fillRect(bullet.x + bullet.width, bullet.y + bullet.height / 2 - 1, 8, 2);
+                } else if (bullet.type === 'laser') {
+                    // Draw laser beam
+                    const gradient = ctx.createLinearGradient(bullet.x, 0, bullet.x + bullet.width, 0);
+                    gradient.addColorStop(0, 'rgba(255, 0, 0, 0.8)');
+                    gradient.addColorStop(0.5, 'rgba(255, 255, 0, 0.8)');
+                    gradient.addColorStop(1, 'rgba(255, 0, 0, 0.8)');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(bullet.x, bullet.y - bullet.height / 2, bullet.width, bullet.height);
+                } else if (bullet.type === 'boss') {
+                    // Boss bullets
+                    ctx.fillStyle = '#FF00FF';
+                    ctx.beginPath();
+                    ctx.arc(bullet.x, bullet.y, bullet.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Regular enemy bullet
+                    ctx.fillStyle = '#FF0000';
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                }
+                
+                ctx.restore();
+            }
+        }
+        
+        // Update and draw enemies
+        function updateEnemies() {
+            for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                const enemy = gameState.enemies[i];
+                
+                if (enemy.update()) {
+                    gameState.enemies.splice(i, 1);
+                    continue;
+                }
+                
+                enemy.draw();
+            }
+        }
+        
+              // ... (previous code remains the same up to updatePowerups) ...
+
+        // Update and draw powerups
+        function updatePowerups() {
+            for (let i = gameState.powerups.length - 1; i >= 0; i--) {
+                const powerup = gameState.powerups[i];
+
+                // Move powerup (scrolls with screen, slight downward drift)
+                powerup.x -= SCROLL_SPEED;
+                powerup.y += powerup.speed / 2; // Gentle downward movement
+
+                // Update lifespan
+                powerup.lifespan--;
+
+                // Remove if off-screen or lifespan expired
+                if (powerup.x < -powerup.width || powerup.lifespan <= 0) {
+                    gameState.powerups.splice(i, 1);
+                    continue;
+                }
+
+                // Draw powerup
+                ctx.save();
+                let powerupColor = '#FFFFFF'; // Default white
+                let powerupSymbol = '?';
+
+                switch(powerup.type) {
+                    case POWERUP_TYPES.WEAPON_UPGRADE:
+                        powerupColor = '#FFFF00'; // Yellow
+                        powerupSymbol = 'P';
+                        break;
+                    case POWERUP_TYPES.EXTRA_LIFE:
+                        powerupColor = '#00FF00'; // Green
+                        powerupSymbol = 'L';
+                        break;
+                    case POWERUP_TYPES.SHIELD:
+                        powerupColor = '#00FFFF'; // Cyan
+                        powerupSymbol = 'S';
+                        break;
+                    case POWERUP_TYPES.SPECIAL_WEAPON:
+                        powerupColor = '#FF00FF'; // Magenta
+                        powerupSymbol = 'W';
+                        break;
+                     case POWERUP_TYPES.SPEED_UP:
+                        powerupColor = '#FFA500'; // Orange
+                        powerupSymbol = '>';
+                        break;
+                }
+
+                // Pulsating effect based on lifespan
+                const pulse = Math.sin(powerup.lifespan / 10);
+                const size = powerup.width * (0.8 + pulse * 0.2);
+                const offsetX = (powerup.width - size) / 2;
+                const offsetY = (powerup.height - size) / 2;
+
+                ctx.fillStyle = powerupColor;
+                ctx.fillRect(powerup.x + offsetX, powerup.y + offsetY, size, size);
+
+                // Draw symbol inside
+                ctx.fillStyle = '#000000';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(powerupSymbol, powerup.x + powerup.width / 2, powerup.y + powerup.height / 2 + 1);
+
+                ctx.restore();
+            }
+        }
+
+        // Update and draw explosions
+        function updateExplosions() {
+            for (let i = gameState.explosions.length - 1; i >= 0; i--) {
+                const explosion = gameState.explosions[i];
+                if (drawExplosion(explosion)) {
+                    // Remove explosion if it's finished
+                    gameState.explosions.splice(i, 1);
+                }
+            }
+        }
+
+        // Check for collisions
+        function checkCollisions() {
+            // 1. Player bullets vs Enemies
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                    const enemy = gameState.enemies[j];
+                    if (checkCollision(bullet, enemy)) {
+                        const destroyed = enemy.takeDamage(bullet.damage);
+                        if (destroyed && enemy.isBoss) {
+                           gameState.bossActive = false; // Boss defeated
+                        }
+                        // Remove bullet on hit
+                        gameState.bullets.splice(i, 1);
+                        break; // Bullet can only hit one enemy
+                    }
+                }
+            }
+
+            // 2. Enemy bullets vs Players
+            for (let i = gameState.enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.enemyBullets[i];
+                for (let j = gameState.players.length - 1; j >= 0; j--) {
+                    const player = gameState.players[j];
+                    if (checkCollision(bullet, player)) {
+                        const playerDestroyed = player.takeDamage();
+                        // Remove bullet on hit (except maybe lasers, handled by lifespan)
+                        if (bullet.type !== 'laser') {
+                            gameState.enemyBullets.splice(i, 1);
+                            break; // Bullet hits one player
+                        } else {
+                            // Laser hits continuously, damage handled in player.takeDamage invulnerability check
+                        }
+                    }
+                }
+            }
+
+            // 3. Players vs Enemies (Collision damage)
+            for (let i = gameState.players.length - 1; i >= 0; i--) {
+                const player = gameState.players[i];
+                for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                    const enemy = gameState.enemies[j];
+                    // Only check collision if player is not invulnerable
+                    if (!player.invulnerable && checkCollision(player, enemy)) {
+                        player.takeDamage(); // Player takes damage
+                        enemy.takeDamage(5);  // Enemy takes significant damage from collision
+                    }
+                }
+            }
+
+            // 4. Players vs Powerups
+            for (let i = gameState.players.length - 1; i >= 0; i--) {
+                const player = gameState.players[i];
+                for (let j = gameState.powerups.length - 1; j >= 0; j--) {
+                    const powerup = gameState.powerups[j];
+                    if (checkCollision(player, powerup)) {
+                        player.collectPowerup(powerup.type);
+                        gameState.powerups.splice(j, 1); // Remove collected powerup
+                    }
+                }
+            }
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keyState[e.key] = true;
+             // Prevent default browser behavior for spacebar and arrow keys
+            if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keyState[e.key] = false;
+        });
+
+        helicopterBtn.addEventListener('click', () => {
+            initGame('helicopter');
+        });
+
+        jeepBtn.addEventListener('click', () => {
+            initGame('jeep');
+        });
+
+        twoPlayerBtn.addEventListener('click', () => {
+            initGame('two-player');
+        });
+
+        restartBtn.addEventListener('click', () => {
+            gameStartDiv.style.display = 'block'; // Show start options again
+            gameOverDiv.style.display = 'none';
+        });
+
+        // Start the game initially (shows the start screen)
+        // (No need to call initGame here, the buttons will do it)
+
+    </script>
+</body>
+</html>
