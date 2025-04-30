@@ -1,3 +1,8 @@
+# The First CPU
+
+<BR>
+
+
 The Intel 4004, released in 1971, was the first CPU to truly change computers forever. Developed by Intel, it was the first commercially available microprocessor, integrating the central processing unit onto a single chip. This innovation enabled smaller, more affordable, and powerful computers, paving the way for the personal computer revolution.
 Tell me more about the Intel 4004
 
