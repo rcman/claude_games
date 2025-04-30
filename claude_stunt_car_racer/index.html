@@ -1,1276 +1,939 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Stunt Car Racer - BabylonJS Clone</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stunt Car Racer</title>
     <style>
-        html, body {
-            overflow: hidden;
-            width: 100%;
-            height: 100%;
+        body {
             margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background-color: #333; /* Dark background */
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            user-select: none;
         }
-        #renderCanvas {
+        #gameCanvas {
+            display: block;
             width: 100%;
-            height: 100%;
-            touch-action: none;
+            height: 100vh;
+            image-rendering: pixelated;
         }
-        #gameUI {
+        #ui {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            text-shadow: 2px 2px 4px #000000;
-            font-size: 18px;
-            z-index: 5;
+            top: 0;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
         }
         #speedometer {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 120px; /* Wider for MPH */
-            height: 120px;
-            border-radius: 50%;
-            background-color: rgba(0, 0, 0, 0.6);
-            color: white;
-            text-align: center;
-            line-height: 120px;
-            font-size: 24px;
-            font-weight: bold;
-            border: 3px solid #555;
-            z-index: 5;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            text-align: right;
         }
-        #timer {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            color: white;
-            text-shadow: 2px 2px 4px #000000;
-            font-size: 24px;
-            z-index: 5;
+        #damageBar {
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border: 2px solid #777;
         }
-        #startScreen {
+        #damageLevel {
+            height: 100%;
+            width: 0;
+            background-color: #f00;
+            transition: width 0.3s ease;
+        }
+        #menu, #gameOverScreen, #startScreen {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.85);
-            color: white;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.8);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 10;
+            color: #fff;
+        }
+        .menuItem, button {
+            background-color: #444;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+            border: 2px solid #777;
+            width: 200px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            color: #fff;
+        }
+        .menuItem:hover, button:hover {
+            background-color: #555;
+        }
+        .selected {
+            background-color: #666;
+            border-color: #aaa;
+        }
+        #leagueTable {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 80%;
+            max-width: 500px;
+        }
+        #leagueTable th, #leagueTable td {
+            border: 1px solid #555;
+            padding: 8px;
             text-align: center;
         }
-        #startScreen h1 {
-            font-size: 48px;
-            margin-bottom: 20px;
-            color: #ff8800;
-            text-shadow: 3px 3px 6px #000;
+        #leagueTable th {
+            background-color: #333;
         }
-        #startScreen p {
-            font-size: 18px;
-            margin-bottom: 30px;
-            max-width: 600px;
+        .hidden {
+            display: none !important;
         }
-        #startScreen button {
-            padding: 12px 24px;
-            font-size: 20px;
-            background-color: #ff6600;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 10px;
-            transition: background-color 0.2s;
-        }
-        #startScreen button:hover {
-            background-color: #ff8800;
-        }
-        #damageBar {
-            position: absolute;
-            top: 60px; /* Below Score/Lap */
-            left: 20px;
-            width: 200px;
-            height: 20px;
-            background-color: rgba(50, 50, 50, 0.7);
-            border: 1px solid white;
-            z-index: 5;
-            padding: 1px; /* Add padding for indicator */
-        }
-        #damageIndicator {
-            width: 100%;
-            height: 100%;
-            background-color: #00ff00; /* Start green */
-            transition: width 0.3s ease-out, background-color 0.3s ease-out;
-        }
-        #messageDisplay {
+        #countdown {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: yellow;
-            font-size: 36px;
-            font-weight: bold;
-            text-shadow: 3px 3px 6px #000;
-            z-index: 6;
-            display: none; /* Hidden by default */
-            text-align: center;
+            font-size: 64px;
+            color: #ff0;
         }
-        #trackSelector {
-             margin-top: 20px;
-             font-size: 16px;
+        #lap {
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
         }
-         #trackSelector label {
-             margin-right: 10px;
-         }
-         #trackSelector select {
-             padding: 5px;
-             font-size: 16px;
-         }
+        #trackInfo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.13.0/babylon.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-loaders/6.13.0/babylonjs.loaders.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
-    <!-- Note: Serializers might not be needed for this specific implementation -->
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-serializers/6.13.0/babylonjs.serializers.min.js"></script> -->
 </head>
 <body>
-    <canvas id="renderCanvas"></canvas>
-    <div id="gameUI">
-        <div id="score">Score: 0</div>
-        <div id="lap">Lap: 0 / 3</div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div id="damageBar"><div id="damageLevel"></div></div>
+        <div id="lap">LAP: 1/3</div>
+        <div id="speedometer">0 MPH</div>
     </div>
-    <div id="speedometer">0 mph</div>
-    <div id="timer">00:00.00</div>
-    <div id="damageBar"><div id="damageIndicator"></div></div>
-    <div id="messageDisplay"></div>
-
+    
+    <div id="trackInfo">TRACK: LITTLE RAMP</div>
+    
+    <div id="countdown" class="hidden">3</div>
+    
     <div id="startScreen">
         <h1>STUNT CAR RACER</h1>
-        <p>A BabylonJS tribute. Use Arrow Keys to drive, Space to reset if stuck.</p>
-        <div id="trackSelector">
-             <label for="trackSelectDropdown">Select Track:</label>
-             <select id="trackSelectDropdown"></select>
-        </div>
+        <p>HTML5 CLONE</p>
         <button id="startButton">START GAME</button>
+    </div>
+    
+    <div id="menu" class="hidden">
+        <h2>DIVISION 4</h2>
+        <div class="menuItem selected" data-track="little-ramp">LITTLE RAMP</div>
+        <div class="menuItem" data-track="stepping-stones">STEPPING STONES</div>
+        <div class="menuItem" data-track="hump-back">HUMP BACK</div>
+        <table id="leagueTable">
+            <tr>
+                <th>POS</th>
+                <th>DRIVER</th>
+                <th>PTS</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>PLAYER</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>CPU 1</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>CPU 2</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>CPU 3</td>
+                <td>0</td>
+            </tr>
+        </table>
+        <button id="raceButton">RACE</button>
+    </div>
+    
+    <div id="gameOverScreen" class="hidden">
+        <h2 id="raceResult">RACE COMPLETE</h2>
+        <p id="raceStats">TIME: 0:00:00<br>DAMAGE: 0%</p>
+        <button id="continueButton">CONTINUE</button>
     </div>
 
     <script>
-        // --- DOM Elements ---
-        const canvas = document.getElementById("renderCanvas");
-        const scoreEl = document.getElementById("score");
-        const lapEl = document.getElementById("lap");
-        const speedometerEl = document.getElementById("speedometer");
-        const timerEl = document.getElementById("timer");
-        const damageIndicatorEl = document.getElementById("damageIndicator");
-        const startScreenEl = document.getElementById("startScreen");
-        const startButton = document.getElementById("startButton");
-        const messageDisplayEl = document.getElementById("messageDisplay");
-        const trackSelectDropdown = document.getElementById("trackSelectDropdown");
-
-        // --- Game Variables ---
-        let gameStarted = false;
-        let score = 0;
-        let lap = 0;
-        let maxLaps = 3;
-        let speed = 0;
-        let gameTime = 0; // In seconds
-        let damage = 0;
-        const maxDamage = 100;
-        let currentTrack = 0;
-        let crashed = false;
-        let crashResetTimer = 0;
-        const CRASH_RESET_DELAY = 2.0; // seconds
-        let lastFrameTime = 0;
-
-        // --- Track Definitions ---
-        const tracks = [
-            { name: "The Hump Back", difficulty: 1, creator: createHumpBackTrack },
-            { name: "The Step", difficulty: 2, creator: createStepTrack },
-            { name: "The Big Ramp", difficulty: 3, creator: createBigRampTrack },
-            { name: "The Bridge", difficulty: 4, creator: createBridgeTrack },
-            { name: "The High Jump", difficulty: 5, creator: createHighJumpTrack },
-            { name: "The Roller Coaster", difficulty: 6, creator: createRollerCoasterTrack },
-            { name: "The Loop", difficulty: 7, creator: createLoopTrack },
-            { name: "The Draw Bridge", difficulty: 8, creator: createDrawBridgeTrack }
-        ];
-
-        // --- BabylonJS Engine Setup ---
-        const engine = new BABYLON.Engine(canvas, true, { stencil: true, preserveDrawingBuffer: true }, true);
-        let scene, camera, car, chassis, wheels = [], ground;
-        let trackMeshes = []; // Store all track parts
-        let checkpointMeshes = [];
-        let nextCheckpointIndex = 0;
-        let startPosition = BABYLON.Vector3.Zero();
-        let startRotation = BABYLON.Vector3.Zero();
-
-        // --- Physics Variables ---
-        let physicsPlugin;
-        let cannonWorld; // Direct access if needed, but try to use Babylon's API
-        const gravity = -15; // Increased gravity for more "weight"
-        const CAR_MASS = 800;
-        const WHEEL_MASS = 10;
-
-        // --- Control States ---
-        const keysPressed = {
-            ArrowUp: false,
-            ArrowDown: false,
-            ArrowLeft: false,
-            ArrowRight: false,
-            " ": false // Space bar for manual reset
-        };
-
-        // --- Engine Power Constants ---
-        const maxEngineForce = 2500; // Increased force
-        const maxBrakeForce = 100;
-        const maxSteeringAngle = Math.PI / 7; // ~25 degrees
-        const steeringSpeed = 1.5; // How quickly steering reacts
-        const friction = 0.6; // Ground friction
-        const restitution = 0.1; // Bounciness
-        const airControlFactor = 0.1; // How much control in the air
-
-        let currentSteering = 0;
-        let inAir = false;
-        let lastGroundContactTime = 0;
-        let wheelRadius = 0.5; // Made global for access in updateCarPhysics
-
-        // --- Helper Functions ---
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            const hundreths = Math.floor((seconds * 100) % 100);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${hundreths.toString().padStart(2, '0')}`;
-        }
-
-        function showMessage(text, duration = 2000) {
-            messageDisplayEl.textContent = text;
-            messageDisplayEl.style.display = 'block';
-            if (duration > 0) {
-                setTimeout(() => {
-                    messageDisplayEl.style.display = 'none';
-                }, duration);
+        // Game engine
+        class StuntCarRacer {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.setCanvasSize();
+                
+                // Game states
+                this.gameState = 'start'; // start, menu, countdown, race, gameOver
+                this.countdown = 3;
+                
+                // Input handling
+                this.keys = {};
+                this.setupInputHandlers();
+                
+                // UI elements
+                this.speedometerEl = document.getElementById('speedometer');
+                this.damageLevelEl = document.getElementById('damageLevel');
+                this.countdownEl = document.getElementById('countdown');
+                this.lapEl = document.getElementById('lap');
+                this.trackInfoEl = document.getElementById('trackInfo');
+                
+                // Menu screens
+                this.startScreenEl = document.getElementById('startScreen');
+                this.menuEl = document.getElementById('menu');
+                this.gameOverScreenEl = document.getElementById('gameOverScreen');
+                
+                // Buttons
+                this.startButtonEl = document.getElementById('startButton');
+                this.raceButtonEl = document.getElementById('raceButton');
+                this.continueButtonEl = document.getElementById('continueButton');
+                this.trackMenuItems = document.querySelectorAll('.menuItem');
+                
+                // Track and physics
+                this.currentTrack = null;
+                this.tracks = {};
+                
+                // Player state
+                this.car = {
+                    position: { x: 0, y: 0, z: 0 },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    velocity: { x: 0, y: 0, z: 0 },
+                    acceleration: { x: 0, y: 0, z: 0 },
+                    speed: 0,
+                    onGround: true,
+                    steeringAngle: 0,
+                    maxSteeringAngle: Math.PI / 6, // 30 degrees
+                    enginePower: 0,
+                    maxEnginePower: 0.02,
+                    brakePower: 0.03,
+                    drag: 0.98,
+                    gravity: 0.01,
+                    damage: 0
+                };
+                
+                // Camera
+                this.camera = {
+                    position: { x: 0, y: -5, z: 2 },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    distance: 10,
+                    height: 3,
+                    fov: 90 * Math.PI / 180
+                };
+                
+                // Race info
+                this.lap = 1;
+                this.totalLaps = 3;
+                this.raceStartTime = 0;
+                this.raceFinishTime = 0;
+                this.checkpoints = [];
+                this.currentCheckpoint = 0;
+                
+                // League info
+                this.division = 4;
+                this.playerPoints = 0;
+                this.cpuPoints = [0, 0, 0];
+                
+                // Initialize tracks AFTER UI elements
+                this.initTracks();
+                
+                this.setupButtonHandlers();
+                
+                // Start the game loop
+                this.lastTime = 0;
+                window.requestAnimationFrame(this.gameLoop.bind(this));
             }
-        }
-
-        // --- Scene Creation ---
-        const createScene = function() {
-            scene = new BABYLON.Scene(engine);
-            scene.clearColor = new BABYLON.Color3(0.5, 0.7, 0.8); // Sky blue
-
-            // Enable Physics
-            // Use Oimo.js if Cannon causes instability, otherwise Cannon is fine
-            // physicsPlugin = new BABYLON.OimoJSPlugin();
-            physicsPlugin = new BABYLON.CannonJSPlugin(true, 10, CANNON);
-            scene.enablePhysics(new BABYLON.Vector3(0, gravity, 0), physicsPlugin);
-            if (physicsPlugin.world) { // Check if world exists (Cannon specific)
-                 cannonWorld = physicsPlugin.world;
+            
+            setCanvasSize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.aspectRatio = this.canvas.width / this.canvas.height;
             }
-
-
-            // Camera setup
-            camera = new BABYLON.FollowCamera("camera", new BABYLON.Vector3(0, 10, -20), scene);
-            camera.radius = 18; // Distance from target
-            camera.heightOffset = 6; // Height above target
-            camera.rotationOffset = 180; // Behind the car
-            camera.cameraAcceleration = 0.05; // Smoother camera movement
-            camera.maxCameraSpeed = 20;
-            camera.lowerRadiusLimit = 10;
-            camera.upperRadiusLimit = 30;
-            camera.lowerHeightOffsetLimit = 2;
-            camera.upperHeightOffsetLimit = 15;
-
-            // Lighting
-            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-            light.intensity = 0.8;
-
-            const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
-            dirLight.position = new BABYLON.Vector3(50, 100, 50);
-            dirLight.intensity = 0.6;
-
-            // Create Ground (Fall Plane)
-            ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 1000, height: 1000}, scene);
-            ground.position.y = -50; // Well below the track
-            ground.material = new BABYLON.StandardMaterial("ground_mat", scene);
-            ground.material.diffuseColor = new BABYLON.Color3(0.3, 0.2, 0.1); // Dark earth
-            ground.material.alpha = 0.5; // Make it semi-transparent or invisible if preferred
-            ground.physicsImpostor = new BABYLON.PhysicsImpostor(
-                ground,
-                BABYLON.PhysicsImpostor.BoxImpostor,
-                {mass: 0, friction: 0.5, restitution: 0.1},
-                scene
-            );
-
-            // Initial Track and Car Creation (will be done in startGame initially)
-            // tracks[currentTrack].creator(scene); // Create the selected track
-            // createCar(scene);
-
-            // Set up inputs
-            setupInputs(scene);
-
-            // Collision listeners will be registered in startGame after car/track are created
-
-            return scene;
-        };
-
-        // --- Car Creation ---
-        const createCar = function(scene) {
-             // --- Dispose of old car if exists ---
-            if (car) {
-                if(camera) camera.lockedTarget = null; // Detach camera first
-                wheels.forEach(w => w.dispose());
-                if (chassis) chassis.dispose(); // Check if chassis exists before disposing
-                wheels = [];
-                car = null;
-                chassis = null;
+            
+            setupInputHandlers() {
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                });
+                
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.setCanvasSize();
+                });
             }
-
-            // --- Chassis ---
-            chassis = BABYLON.MeshBuilder.CreateBox("chassis", {width: 2.2, height: 0.8, depth: 4.5}, scene);
-            chassis.position = startPosition.clone(); // Use start pos defined by track
-            chassis.rotation = startRotation.clone(); // Use start rotation defined by track
-            chassis.material = new BABYLON.StandardMaterial("chassis_mat", scene);
-            chassis.material.diffuseColor = new BABYLON.Color3(0.9, 0.1, 0.1); // Red car
-            chassis.material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
-
-            // Physics Impostor for Chassis
-            chassis.physicsImpostor = new BABYLON.PhysicsImpostor(
-                chassis,
-                BABYLON.PhysicsImpostor.BoxImpostor,
-                {mass: CAR_MASS, friction: 0.05, restitution: restitution }, // Low friction on chassis itself
-                scene
-            );
-             // Increase angular damping to prevent excessive spinning
-            chassis.physicsImpostor.setAngularDamping(0.5);
-            chassis.physicsImpostor.setLinearDamping(0.1);
-
-
-            // Keep track of the main car object
-            car = chassis;
-
-             // --- Cockpit ---
-            const cockpit = BABYLON.MeshBuilder.CreateBox("cockpit", {width: 1.6, height: 0.7, depth: 1.6}, scene);
-            cockpit.position = new BABYLON.Vector3(0, 0.6, -0.4); // Relative to chassis center
-            cockpit.material = new BABYLON.StandardMaterial("cockpit_mat", scene);
-            cockpit.material.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.4); // Dark blueish
-            cockpit.parent = chassis; // Attach to chassis
-
-            // --- Wheels ---
-            // wheelRadius = 0.5; // Already defined globally
-            const wheelWidth = 0.4;
-            const wheelPositions = [
-                new BABYLON.Vector3(-1.1, -0.1, 1.6),  // Front Left (X, Y, Z relative to chassis center)
-                new BABYLON.Vector3( 1.1, -0.1, 1.6),  // Front Right
-                new BABYLON.Vector3(-1.1, -0.1, -1.6), // Rear Left
-                new BABYLON.Vector3( 1.1, -0.1, -1.6)  // Rear Right
-            ];
-            const wheelMaterial = new BABYLON.StandardMaterial("wheel_mat", scene);
-            // Simple color, texture can be added later if needed
-            wheelMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-            // wheelMaterial.diffuseTexture = new BABYLON.Texture("textures/wheel.png", scene); // Example texture path
-            // wheelMaterial.diffuseTexture.uScale = 2;
-            // wheelMaterial.diffuseTexture.vScale = 2;
-            wheelMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-
-            wheels = []; // Clear previous wheels if any
-            for (let i = 0; i < 4; i++) {
-                const wheel = BABYLON.MeshBuilder.CreateCylinder(
-                    "wheel" + i,
-                    {height: wheelWidth, diameter: wheelRadius * 2, tessellation: 16}, // Reduced tessellation slightly
-                    scene
-                );
-                wheel.material = wheelMaterial;
-                wheel.rotation.x = Math.PI / 2; // Rotate cylinder to be a wheel
-                wheel.position = wheelPositions[i];
-                wheel.parent = chassis; // Attach visually
-
-                // Physics Impostor for Wheels
-                wheel.physicsImpostor = new BABYLON.PhysicsImpostor(
-                    wheel,
-                    BABYLON.PhysicsImpostor.SphereImpostor, // Use Sphere for more stable rolling
-                    { mass: WHEEL_MASS, friction: friction, restitution: restitution },
-                    scene
-                );
-                 // Set damping for wheels too
-                 wheel.physicsImpostor.setAngularDamping(0.3);
-                 wheel.physicsImpostor.setLinearDamping(0.1);
-
-                 wheels.push(wheel);
-
-                 // --- Wheel Constraints (Joints) --- REMOVED ---
-                 // The Hinge2Joints were defined here but not used for control.
-                 // Removed to avoid confusion and rely solely on the impulse-based control method.
-                 // If implementing joint-based physics later, the code would go here.
-                 // console.log("Joints removed - using impulse method for car control.");
-                 // --- End of REMOVED Joint Code ---
+            
+            setupButtonHandlers() {
+                this.startButtonEl.addEventListener('click', () => {
+                    this.gameState = 'menu';
+                    this.startScreenEl.classList.add('hidden');
+                    this.menuEl.classList.remove('hidden');
+                });
+                
+                this.raceButtonEl.addEventListener('click', () => {
+                    this.startRace();
+                });
+                
+                this.continueButtonEl.addEventListener('click', () => {
+                    this.gameState = 'menu';
+                    this.gameOverScreenEl.classList.add('hidden');
+                    this.menuEl.classList.remove('hidden');
+                    this.updateLeagueTable();
+                });
+                
+                this.trackMenuItems.forEach(item => {
+                    item.addEventListener('click', () => {
+                        this.trackMenuItems.forEach(i => i.classList.remove('selected'));
+                        item.classList.add('selected');
+                        this.loadTrack(item.dataset.track);
+                    });
+                });
             }
-
-             // Set up camera to follow the car
-             if(camera) camera.lockedTarget = chassis;
-
-            // Reset damage and crash state for new car
-            damage = 0;
-            crashed = false;
-            updateDamageUI();
-
-            // --- Exhaust ---
-            // Optional: Re-add particle system if desired
-        };
-
-        // --- Track Creation ---
-        const clearTrack = function() {
-            // Dispose physics impostors first if they exist
-            trackMeshes.forEach(mesh => {
-                if (mesh.physicsImpostor) mesh.physicsImpostor.dispose();
-                mesh.dispose();
-            });
-            trackMeshes = [];
-            checkpointMeshes.forEach(mesh => mesh.dispose()); // Checkpoints don't have impostors usually
-            checkpointMeshes = [];
-            nextCheckpointIndex = 0;
-        }
-
-        // --- Common Track Building Elements ---
-        const createTrackSegment = function(name, path, width, material, scene, physicsProps = { mass: 0, friction: friction, restitution: restitution }) {
-            const trackSegment = BABYLON.MeshBuilder.CreateRibbon(name, {
-                pathArray: [path],
-                sideOrientation: BABYLON.Mesh.DOUBLESIDE,
-                width: width,
-                closePath: false,
-                closeArray: false,
-                updatable: false // Set to false if geometry won't change, improves performance
-            }, scene);
-            trackSegment.material = material;
-            // Create impostor AFTER mesh is finalized
-             trackSegment.physicsImpostor = new BABYLON.PhysicsImpostor(
-                 trackSegment,
-                 BABYLON.PhysicsImpostor.MeshImpostor, // Use MeshImpostor for ribbons/complex shapes
-                 physicsProps,
-                 scene
-             );
-             trackMeshes.push(trackSegment);
-             return trackSegment;
-         }
-
-        const createBarriers = function(path, width, height, material, scene, physicsProps = { mass: 0, friction: 0.1, restitution: 0.9 }) {
-            const leftBarrierPoints = [];
-            const rightBarrierPoints = [];
-
-            // Pre-calculate tangents and normals for efficiency
-            const tangents = [];
-            const normals = [];
-            for (let i = 0; i < path.length; i++) {
-                let tangent;
-                if (i === 0) { // First point
-                    tangent = path[1].subtract(path[0]);
-                } else if (i === path.length - 1) { // Last point
-                    tangent = path[i].subtract(path[i - 1]);
-                } else { // Middle points - average
-                    const dirToNext = path[i + 1].subtract(path[i]);
-                    const dirFromPrev = path[i].subtract(path[i - 1]);
-                    tangent = dirToNext.add(dirFromPrev).scale(0.5); // Average direction
-                }
-                tangent.normalize();
-                tangents.push(tangent);
-                normals.push(new BABYLON.Vector3(-tangent.z, 0, tangent.x).normalize()); // Normalized normal
+            
+            initTracks() {
+                // Little Ramp
+                this.tracks['little-ramp'] = {
+                    name: 'LITTLE RAMP',
+                    difficulty: 1,
+                    segments: []
+                };
+                
+                // Initialize with a simple track for demonstration
+                // In a full implementation, each track would have detailed segment definitions
+                const createRampTrack = () => {
+                    const segments = [];
+                    const trackLength = 100;
+                    const trackWidth = 6;
+                    
+                    // Start segment (flat)
+                    for (let i = 0; i < 10; i++) {
+                        segments.push({
+                            points: [
+                                { x: -trackWidth/2, y: i * 5, z: 0 },
+                                { x: trackWidth/2, y: i * 5, z: 0 },
+                                { x: trackWidth/2, y: (i+1) * 5, z: 0 },
+                                { x: -trackWidth/2, y: (i+1) * 5, z: 0 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    // Ramp up
+                    for (let i = 0; i < 5; i++) {
+                        const height = i * 1;
+                        segments.push({
+                            points: [
+                                { x: -trackWidth/2, y: (i+10) * 5, z: (i) * 1 },
+                                { x: trackWidth/2, y: (i+10) * 5, z: (i) * 1 },
+                                { x: trackWidth/2, y: (i+11) * 5, z: (i+1) * 1 },
+                                { x: -trackWidth/2, y: (i+11) * 5, z: (i+1) * 1 }
+                            ],
+                            color: '#a55'
+                        });
+                    }
+                    
+                    // Flat top
+                    for (let i = 0; i < 5; i++) {
+                        segments.push({
+                            points: [
+                                { x: -trackWidth/2, y: (i+15) * 5, z: 5 },
+                                { x: trackWidth/2, y: (i+15) * 5, z: 5 },
+                                { x: trackWidth/2, y: (i+16) * 5, z: 5 },
+                                { x: -trackWidth/2, y: (i+16) * 5, z: 5 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    // Ramp down
+                    for (let i = 0; i < 5; i++) {
+                        const height = 5 - i * 1;
+                        segments.push({
+                            points: [
+                                { x: -trackWidth/2, y: (i+20) * 5, z: (5-i) },
+                                { x: trackWidth/2, y: (i+20) * 5, z: (5-i) },
+                                { x: trackWidth/2, y: (i+21) * 5, z: (5-i-1) },
+                                { x: -trackWidth/2, y: (i+21) * 5, z: (5-i-1) }
+                            ],
+                            color: '#a55'
+                        });
+                    }
+                    
+                    // End segment (flat)
+                    for (let i = 0; i < 10; i++) {
+                        segments.push({
+                            points: [
+                                { x: -trackWidth/2, y: (i+25) * 5, z: 0 },
+                                { x: trackWidth/2, y: (i+25) * 5, z: 0 },
+                                { x: trackWidth/2, y: (i+26) * 5, z: 0 },
+                                { x: -trackWidth/2, y: (i+26) * 5, z: 0 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    // Create a corner segment
+                    const cornerSegmentCount = 10;
+                    const cornerRadius = 20;
+                    for (let i = 0; i < cornerSegmentCount; i++) {
+                        const angle1 = (i / cornerSegmentCount) * Math.PI / 2;
+                        const angle2 = ((i + 1) / cornerSegmentCount) * Math.PI / 2;
+                        
+                        const x1 = cornerRadius * Math.cos(angle1);
+                        const y1 = cornerRadius * Math.sin(angle1);
+                        const x2 = cornerRadius * Math.cos(angle2);
+                        const y2 = cornerRadius * Math.sin(angle2);
+                        
+                        segments.push({
+                            points: [
+                                { x: x1 - trackWidth/2, y: (35) * 5 + y1, z: 0 },
+                                { x: x1 + trackWidth/2, y: (35) * 5 + y1, z: 0 },
+                                { x: x2 + trackWidth/2, y: (35) * 5 + y2, z: 0 },
+                                { x: x2 - trackWidth/2, y: (35) * 5 + y2, z: 0 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    // Return to start - horizontal path
+                    for (let i = 0; i < 15; i++) {
+                        segments.push({
+                            points: [
+                                { x: cornerRadius + i * 5, y: (35) * 5 + cornerRadius, z: 0 },
+                                { x: cornerRadius + i * 5, y: (35) * 5 + cornerRadius - trackWidth, z: 0 },
+                                { x: cornerRadius + (i+1) * 5, y: (35) * 5 + cornerRadius - trackWidth, z: 0 },
+                                { x: cornerRadius + (i+1) * 5, y: (35) * 5 + cornerRadius, z: 0 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    // Another corner to get back to start
+                    for (let i = 0; i < cornerSegmentCount; i++) {
+                        const angle1 = Math.PI/2 + (i / cornerSegmentCount) * Math.PI / 2;
+                        const angle2 = Math.PI/2 + ((i + 1) / cornerSegmentCount) * Math.PI / 2;
+                        
+                        const x1 = cornerRadius * Math.cos(angle1);
+                        const y1 = cornerRadius * Math.sin(angle1);
+                        const x2 = cornerRadius * Math.cos(angle2);
+                        const y2 = cornerRadius * Math.sin(angle2);
+                        
+                        segments.push({
+                            points: [
+                                { x: cornerRadius + 15 * 5 + x1, y: (35) * 5 + y1, z: 0 },
+                                { x: cornerRadius + 15 * 5 + x1, y: (35) * 5 + y1 - trackWidth, z: 0 },
+                                { x: cornerRadius + 15 * 5 + x2, y: (35) * 5 + y2 - trackWidth, z: 0 },
+                                { x: cornerRadius + 15 * 5 + x2, y: (35) * 5 + y2, z: 0 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    // Vertical path back to start
+                    for (let i = 0; i < 35; i++) {
+                        segments.push({
+                            points: [
+                                { x: cornerRadius + 15 * 5, y: (35 - i) * 5, z: 0 },
+                                { x: cornerRadius + 15 * 5 - trackWidth, y: (35 - i) * 5, z: 0 },
+                                { x: cornerRadius + 15 * 5 - trackWidth, y: (35 - i - 1) * 5, z: 0 },
+                                { x: cornerRadius + 15 * 5, y: (35 - i - 1) * 5, z: 0 }
+                            ],
+                            color: '#666'
+                        });
+                    }
+                    
+                    return segments;
+                };
+                
+                this.tracks['little-ramp'].segments = createRampTrack();
+                
+                // Create simplified versions of the other tracks
+                this.tracks['stepping-stones'] = {
+                    name: 'STEPPING STONES',
+                    difficulty: 2,
+                    segments: createRampTrack() // Placeholder - would be different for actual implementation
+                };
+                
+                this.tracks['hump-back'] = {
+                    name: 'HUMP BACK',
+                    difficulty: 3,
+                    segments: createRampTrack() // Placeholder - would be different for actual implementation
+                };
+                
+                // Set up checkpoints for each track
+                this.setupCheckpoints();
+                
+                // Load the default track
+                this.loadTrack('little-ramp');
             }
-
-
-            path.forEach((p, i) => {
-                const normal = normals[i]; // Use pre-calculated normal
-
-                const leftBase = p.add(normal.scale(-width / 2));
-                const rightBase = p.add(normal.scale(width / 2));
-
-                leftBarrierPoints.push(leftBase.clone());
-                leftBarrierPoints.push(leftBase.add(new BABYLON.Vector3(0, height, 0)));
-
-                rightBarrierPoints.push(rightBase.clone());
-                rightBarrierPoints.push(rightBase.add(new BABYLON.Vector3(0, height, 0)));
-            });
-
-             // Ensure pathArray has only one path
-             const leftBarrier = BABYLON.MeshBuilder.CreateRibbon("leftBarrier_" + path.length, { pathArray: [leftBarrierPoints], sideOrientation: BABYLON.Mesh.DOUBLESIDE, updatable: false }, scene);
-             const rightBarrier = BABYLON.MeshBuilder.CreateRibbon("rightBarrier_" + path.length, { pathArray: [rightBarrierPoints], sideOrientation: BABYLON.Mesh.DOUBLESIDE, updatable: false }, scene);
-
-
-             leftBarrier.material = material;
-             rightBarrier.material = material;
-
-             leftBarrier.physicsImpostor = new BABYLON.PhysicsImpostor(leftBarrier, BABYLON.PhysicsImpostor.MeshImpostor, physicsProps, scene);
-             rightBarrier.physicsImpostor = new BABYLON.PhysicsImpostor(rightBarrier, BABYLON.PhysicsImpostor.MeshImpostor, physicsProps, scene);
-
-
-             trackMeshes.push(leftBarrier, rightBarrier);
-         }
-
-        const createCheckpoints = function(path, scene, interval = 5) {
-            checkpointMeshes.forEach(m => m.dispose()); // Clear old ones
-            checkpointMeshes = [];
-            nextCheckpointIndex = 0;
-
-            const checkpointHeight = 15; // Make taller to ensure intersection
-            const checkpointWidth = 12; // Slightly wider than track
-            const checkpointDepth = 0.5;
-
-            for (let i = interval; i < path.length; i += interval) { // Start from interval, not 0
-                 const pos = path[i];
-                 const checkpoint = BABYLON.MeshBuilder.CreateBox("checkpoint" + checkpointMeshes.length, {width: checkpointWidth, height: checkpointHeight, depth: checkpointDepth}, scene);
-                 checkpoint.position = pos.add(new BABYLON.Vector3(0, checkpointHeight / 2 - 1, 0)); // Position centered vertically slightly above track
-
-                 // Orient the checkpoint perpendicular to the track direction
-                 const direction = path[i].subtract(path[i-1]).normalize(); // Direction from previous point
-                 const targetPos = pos.add(direction); // Look slightly ahead along the track
-                 checkpoint.lookAt(targetPos);
-
-
-                 checkpoint.isPickable = false;
-                 checkpoint.isVisible = false; // Make invisible for gameplay
-                 checkpoint.checkCollisions = false; // No physics collision needed, only intersection
-
-                 // Optional: Add semi-transparent material for debugging
-                 // const mat = new BABYLON.StandardMaterial("cpMat" + checkpointMeshes.length, scene);
-                 // mat.diffuseColor = new BABYLON.Color3(1, 1, 0); // Yellow
-                 // mat.alpha = 0.3;
-                 // checkpoint.material = mat;
-
-                 checkpointMeshes.push(checkpoint);
-            }
-             // Add the first point as the final (start/finish line) checkpoint
-            if (path.length > 1) {
-                const firstPos = path[0];
-                const finishLine = BABYLON.MeshBuilder.CreateBox("checkpoint_finish", {width: checkpointWidth, height: checkpointHeight, depth: checkpointDepth}, scene);
-                finishLine.position = firstPos.add(new BABYLON.Vector3(0, checkpointHeight / 2 -1, 0));
-
-                const direction = path[1].subtract(path[0]).normalize(); // Direction towards second point
-                finishLine.lookAt(firstPos.add(direction));
-
-                finishLine.isPickable = false;
-                finishLine.isVisible = false;
-                finishLine.checkCollisions = false;
-
-                 // Optional Debug Material
-                 const mat = new BABYLON.StandardMaterial("cpMatFinish", scene);
-                 mat.diffuseColor = new BABYLON.Color3(0, 1, 0); // Green for start/finish
-                 mat.alpha = 0.3;
-                 // finishLine.material = mat; // Uncomment to see finish line
-                 checkpointMeshes.push(finishLine); // Add it to the end of the array
-            }
-
-            console.log("Created checkpoints:", checkpointMeshes.length);
-        }
-
-
-        // --- Individual Track Creators ---
-        function createHumpBackTrack(scene) {
-            clearTrack();
-            console.log("Creating Hump Back Track");
-            const trackWidth = 10;
-            const trackRadius = 60;
-            const points = [];
-            const barrierHeight = 2;
-
-            const trackMaterial = new BABYLON.StandardMaterial("track_mat", scene);
-            trackMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
-            trackMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-
-            const barrierMaterial = new BABYLON.StandardMaterial("barrier_mat", scene);
-            barrierMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.2, 0.2); // Red/White barriers
-
-            for (let i = 0; i <= 360; i += 5) { // Increased points for smoother curve
-                const angle = i * Math.PI / 180;
-                const x = trackRadius * Math.cos(angle);
-                const z = trackRadius * Math.sin(angle);
-                let y = 0;
-                // Create a smoother hump using cosine
-                if (i >= 90 && i <= 270) {
-                    const humpAngle = (i - 90) * Math.PI / 180; // Angle within the hump (0 to PI)
-                    y = 15 * (1 - Math.cos(humpAngle)) / 2; // Cosine-based rise (max height 15)
-                }
-                points.push(new BABYLON.Vector3(x, y, z));
-            }
-
-            // Create the main track ribbon
-            createTrackSegment("humpTrack", points, trackWidth, trackMaterial, scene);
-
-            // Create Barriers along the path
-            createBarriers(points, trackWidth, barrierHeight, barrierMaterial, scene);
-
-            // Set starting position and rotation for the car
-            startPosition = points[0].add(new BABYLON.Vector3(0, 1, 0)); // Start slightly above track
-            // Calculate initial rotation based on the first segment's direction
-            const lookAtPoint = points[1];
-            const direction = lookAtPoint.subtract(startPosition);
-            startRotation = BABYLON.Vector3.Zero(); // Reset
-            startRotation.y = Math.atan2(direction.x, direction.z); // Calculate Yaw
-
-            createCheckpoints(points, scene, 8); // Checkpoints every 8 points
-        }
-
-        function createStepTrack(scene) {
-            clearTrack();
-            console.log("Creating Step Track");
-            const trackWidth = 10;
-            const sectionLength = 80; // Length of straight sections
-            const turnRadius = 30;
-            const stepHeight = 1.5;
-            const stepLength = 10;
-            const numSteps = 5;
-            const barrierHeight = 2;
-
-            const trackMaterial = new BABYLON.StandardMaterial("track_mat", scene);
-            trackMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
-            const barrierMaterial = new BABYLON.StandardMaterial("barrier_mat", scene);
-            barrierMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.8, 0.2); // Green/White barriers
-
-            const points = [];
-            const segmentResolution = 2; // Distance between points on straight sections
-
-            // 1. First straight section (flat)
-            for (let z = 0; z < sectionLength; z += segmentResolution) {
-                points.push(new BABYLON.Vector3(turnRadius, 0, z));
-            }
-
-            // 2. First turn (180 degrees)
-            const turnCenter1 = new BABYLON.Vector3(0, 0, sectionLength);
-            for (let angle = 5; angle <= 180; angle += 10) { // Start slightly into turn
-                const rad = angle * Math.PI / 180;
-                const x = turnCenter1.x - turnRadius * Math.cos(rad);
-                const z = turnCenter1.z + turnRadius * Math.sin(rad);
-                points.push(new BABYLON.Vector3(x, 0, z));
-            }
-
-            // 3. Second straight section (with steps UP)
-            const stepSectionStartZ = sectionLength;
-            const stepSectionEndZ = sectionLength - sectionLength * 0.75; // Steps occupy 3/4 of the length
-             let currentY = 0;
-             for (let z = stepSectionStartZ; z > stepSectionEndZ; z -= segmentResolution) {
-                 const relativeZ = stepSectionStartZ - z;
-                 // Calculate target Y based on step progression
-                 const stepNum = Math.floor(relativeZ / stepLength);
-                 const targetY = Math.min(numSteps * stepHeight, stepNum * stepHeight);
-                  // Simple step transition (could be smoothed)
-                  currentY = targetY;
-                 points.push(new BABYLON.Vector3(-turnRadius, currentY, z));
-             }
-             // Continue flat at the top
-             for (let z = stepSectionEndZ; z > 0; z -= segmentResolution) {
-                 points.push(new BABYLON.Vector3(-turnRadius, numSteps * stepHeight, z));
-             }
-
-
-            // 4. Second turn (180 degrees at high level)
-            const turnCenter2 = new BABYLON.Vector3(0, numSteps * stepHeight, 0);
-            for (let angle = 185; angle <= 360; angle += 10) { // Start slightly into turn
-                const rad = angle * Math.PI / 180;
-                const x = turnCenter2.x - turnRadius * Math.cos(rad);
-                const z = turnCenter2.z + turnRadius * Math.sin(rad);
-                points.push(new BABYLON.Vector3(x, numSteps * stepHeight, z));
-            }
-
-            // Create track segments and barriers
-            createTrackSegment("stepTrack", points, trackWidth, trackMaterial, scene);
-            createBarriers(points, trackWidth, barrierHeight, barrierMaterial, scene);
-
-            // Set Start Position/Rotation
-            startPosition = points[0].add(new BABYLON.Vector3(0, 1, 0));
-            const lookAtPoint = points[1];
-            const direction = lookAtPoint.subtract(startPosition);
-            startRotation = BABYLON.Vector3.Zero();
-            startRotation.y = Math.atan2(direction.x, direction.z);
-
-            createCheckpoints(points, scene, 10);
-        }
-
-        function createBigRampTrack(scene) {
-             clearTrack();
-             console.log("Creating Big Ramp Track");
-             const trackWidth = 10;
-             const sectionLength = 100;
-             const turnRadius = 40;
-             const rampHeight = 25;
-             const barrierHeight = 2.5;
-             const segmentResolution = 2; // Distance between points
-
-             const trackMaterial = new BABYLON.StandardMaterial("track_mat", scene);
-             trackMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
-             const barrierMaterial = new BABYLON.StandardMaterial("barrier_mat", scene);
-             barrierMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.8); // Blue/White barriers
-
-             const points = [];
-
-             // 1. First straight section (leading to ramp)
-             for (let z = 0; z < sectionLength; z += segmentResolution) {
-                 points.push(new BABYLON.Vector3(turnRadius, 0, z));
-             }
-
-             // 2. First turn (180 degrees)
-             const turnCenter1 = new BABYLON.Vector3(0, 0, sectionLength);
-             for (let angle = 5; angle <= 180; angle += 10) {
-                 const rad = angle * Math.PI / 180;
-                 const x = turnCenter1.x - turnRadius * Math.cos(rad);
-                 const z = turnCenter1.z + turnRadius * Math.sin(rad);
-                 points.push(new BABYLON.Vector3(x, 0, z));
-             }
-
-             // 3. Second straight section (with the RAMP)
-             const rampStartZ = sectionLength;
-             const rampEndZ = 0; // Ramp goes from z=sectionLength down to z=0
-             const rampLength = sectionLength;
-             for (let z = rampStartZ; z >= rampEndZ; z -= segmentResolution) {
-                 let y = 0;
-                 // Create a parabolic ramp shape y = h * (1 - ( (2x/L) - 1)^2 )
-                 const rampProgress = (rampStartZ - z) / rampLength; // 0 at start, 1 at end
-                 y = rampHeight * (1 - Math.pow((2 * rampProgress) - 1, 2)); // Parabola peaking at rampHeight in middle
-                 points.push(new BABYLON.Vector3(-turnRadius, y, z));
-             }
-
-             // 4. Second turn (180 degrees back to start)
-             const turnCenter2 = new BABYLON.Vector3(0, 0, 0);
-             for (let angle = 185; angle <= 360; angle += 10) {
-                 const rad = angle * Math.PI / 180;
-                 const x = turnCenter2.x - turnRadius * Math.cos(rad);
-                 const z = turnCenter2.z + turnRadius * Math.sin(rad);
-                 points.push(new BABYLON.Vector3(x, 0, z));
-             }
-
-             // Create track segments and barriers
-             createTrackSegment("rampTrack", points, trackWidth, trackMaterial, scene);
-             createBarriers(points, trackWidth, barrierHeight, barrierMaterial, scene);
-
-             // Set Start Position/Rotation
-             startPosition = points[0].add(new BABYLON.Vector3(0, 1, 0));
-             const lookAtPoint = points[1];
-             const direction = lookAtPoint.subtract(startPosition);
-             startRotation = BABYLON.Vector3.Zero();
-             startRotation.y = Math.atan2(direction.x, direction.z);
-
-             createCheckpoints(points, scene, 10); // Checkpoints every 10 points seems reasonable
-         }
-
-        // --- Placeholder Track Creators ---
-        // TODO: Implement these tracks with their unique features
-        function createBridgeTrack(scene) { console.warn("Track creator not implemented: Bridge"); createBigRampTrack(scene); } // Default
-        function createHighJumpTrack(scene) { console.warn("Track creator not implemented: High Jump"); createBigRampTrack(scene); } // Default
-        function createRollerCoasterTrack(scene) { console.warn("Track creator not implemented: Roller Coaster"); createHumpBackTrack(scene); } // Default
-        function createLoopTrack(scene) { console.warn("Track creator not implemented: Loop"); createHumpBackTrack(scene); } // Default
-        function createDrawBridgeTrack(scene) { console.warn("Track creator not implemented: Draw Bridge"); createBridgeTrack(scene); } // Default
-
-
-        // --- Input Handling ---
-        const setupInputs = function(scene) {
-            scene.onKeyboardObservable.add((kbInfo) => {
-                switch (kbInfo.type) {
-                    case BABYLON.KeyboardEventTypes.KEYDOWN:
-                        if (keysPressed[kbInfo.event.key] !== undefined) {
-                            keysPressed[kbInfo.event.key] = true;
-                        }
-                        // Manual reset only if game started and not already resetting
-                        if (kbInfo.event.key === " " && gameStarted && !crashed && crashResetTimer <= 0) {
-                            showMessage("Resetting!", 1000);
-                            resetCar();
-                        }
-                        break;
-                    case BABYLON.KeyboardEventTypes.KEYUP:
-                         if (keysPressed[kbInfo.event.key] !== undefined) {
-                            keysPressed[kbInfo.event.key] = false;
-                        }
-                        break;
-                }
-            });
-        };
-
-        // --- Car Physics Update ---
-        const updateCarPhysics = function(deltaTime) {
-            if (!car || !chassis || !chassis.physicsImpostor || crashed) return;
-
-            const body = chassis.physicsImpostor;
-            const forward = chassis.forward.normalize(); // Ensure normalized
-            const right = chassis.right.normalize();
-            const up = chassis.up.normalize();
-
-            let engineForceApplied = 0;
-            let brakeForceApplied = 0;
-
-            // --- Acceleration / Braking ---
-            if (keysPressed["ArrowUp"]) {
-                engineForceApplied = maxEngineForce;
-            } else if (keysPressed["ArrowDown"]) {
-                const currentSpeedMag = body.getLinearVelocity().length();
-                 if (currentSpeedMag > 0.5) { // Apply brakes if moving
-                     brakeForceApplied = maxBrakeForce;
-                     // Apply some reverse force as brake too (optional, adjust multiplier)
-                     engineForceApplied = -maxEngineForce / 8;
-                 } else {
-                     // Apply reverse force if slow or stopped
-                     engineForceApplied = -maxEngineForce / 2; // Slower reverse
-                 }
-            }
-
-            // --- Steering ---
-            const targetSteering = (keysPressed["ArrowLeft"] ? maxSteeringAngle : 0) + (keysPressed["ArrowRight"] ? -maxSteeringAngle : 0);
-            // Smoothly interpolate current steering towards target
-            currentSteering = BABYLON.Scalar.Lerp(currentSteering, targetSteering, steeringSpeed * deltaTime * 10); // Faster steering reaction
-
-            // --- Check if Car is on Ground (Raycast Down) ---
-            // Shorten ray slightly to be less likely to hit edges unintentionally
-            const rayLength = 1.1; // wheelRadius + chassis height offset + small buffer
-            const rayOrigin = chassis.position.add(up.scale(0.2)); // Start ray slightly above chassis center
-            const rayDirection = up.scale(-1);
-            const ray = new BABYLON.Ray(rayOrigin, rayDirection, rayLength);
-
-            // Optional: Draw ray for debugging
-            // const rayHelper = new BABYLON.RayHelper(ray);
-            // rayHelper.show(scene, new BABYLON.Color3(1,1,0));
-            // setTimeout(()=> { if(rayHelper) rayHelper.dispose(); }, 50); // Dispose helper
-
-            const pickInfo = scene.pickWithRay(ray, (mesh) => {
-                 // Only collide with meshes that are part of the track or ground and have impostors
-                 return (trackMeshes.includes(mesh) || mesh === ground) && mesh.physicsImpostor != null;
-             }, true); // Fast check = true
-
-
-            inAir = !pickInfo.hit;
-
-            if (!inAir) {
-                 lastGroundContactTime = gameTime;
-                 // --- Apply Engine Force ---
-                 // Apply force at the rear axle position (approximately) for better realism
-                 const forcePosition = chassis.position.add(forward.scale(-1.5)); // Apply force behind center of mass
-                 const forceVector = forward.scale(engineForceApplied * deltaTime);
-                 body.applyImpulse(forceVector, forcePosition);
-
-                 // --- Apply Braking Force (as opposing impulse) ---
-                 if (brakeForceApplied > 0) {
-                     const currentVelocity = body.getLinearVelocity();
-                     // Don't brake if moving very slowly
-                     if (currentVelocity.lengthSquared() > 0.1) {
-                          const brakeVector = currentVelocity.normalize().scale(-brakeForceApplied * deltaTime);
-                          body.applyImpulse(brakeVector, chassis.position); // Apply brake at center of mass
-                     }
-                 }
-
-                 // --- Apply Steering Torque ---
-                 // Higher torque for more responsive steering on ground
-                 const steeringTorque = up.scale(currentSteering * CAR_MASS * 3.0 * deltaTime);
-                 body.applyAngularImpulse(steeringTorque, chassis.position);
-
-
-            } else {
-                // --- Limited Air Control ---
-                if (Math.abs(currentSteering) > 0.01) {
-                     const airSteeringTorque = up.scale(currentSteering * CAR_MASS * airControlFactor * deltaTime);
-                     body.applyAngularImpulse(airSteeringTorque, chassis.position);
+            
+            setupCheckpoints() {
+                // For simplicity, create checkpoints at regular intervals
+                // In a full implementation, these would be carefully placed
+                this.checkpoints = [];
+                const segmentCount = this.tracks['little-ramp'].segments.length;
+                const checkpointCount = 8;
+                
+                for (let i = 0; i < checkpointCount; i++) {
+                    const segmentIndex = Math.floor(i * segmentCount / checkpointCount);
+                    this.checkpoints.push(segmentIndex);
                 }
             }
-
-             // --- Apply Drag (Linear and Angular Damping is handled by impostor.set...Damping) ---
-             // We use impostor damping now, so manual drag might not be needed unless more control is desired.
-             /*
-             const linearVel = body.getLinearVelocity();
-             const angularVel = body.getAngularVelocity();
-             const linearDrag = inAir ? 0.01 : 0.1; // Less drag in air
-             const angularDrag = inAir ? 0.05: 0.3;
-
-             body.applyImpulse(linearVel.scale(-linearDrag * deltaTime), car.position);
-             body.applyAngularImpulse(angularVel.scale(-angularDrag * deltaTime), car.position);
-             */
-
-             // --- Update Wheel Rotation/Steering Visuals (Approximation) ---
-             const currentSpeed = body.getLinearVelocity().length();
-             const wheelCircumference = Math.PI * 2 * wheelRadius;
-             // Avoid division by zero, provide non-zero rotation even at low speed if moving slightly
-             const wheelRotationSpeed = wheelCircumference > 0.1 ? currentSpeed / wheelCircumference : (currentSpeed > 0.1 ? 1 : 0);
-
-             wheels.forEach((wheel, index) => {
-                 // Rotate wheels based on car speed - check direction visually! May need sign change.
-                 wheel.rotate(BABYLON.Axis.X, wheelRotationSpeed * deltaTime * 50, BABYLON.Space.LOCAL); // Increased multiplier for visual effect
-
-                 // Steer front wheels visually
-                 if (index < 2) { // Front wheels (indices 0 and 1)
-                      // Smoothly interpolate visual steer? Or direct? Direct for now.
-                     wheel.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(0, currentSteering, Math.PI / 2);
-                 } else {
-                     // Ensure rear wheels are straight visually (relative to initial rotation)
-                     wheel.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(0, 0, Math.PI / 2);
-                 }
-             });
-
-        };
-
-        // --- Collision Handling ---
-        const handleCollision = (myImpostor, collidedWithImpostor, contact) => {
-             // Ensure we are colliding with the chassis and not a wheel causing damage
-            if (!gameStarted || crashed || myImpostor !== chassis.physicsImpostor) return;
-
-            // Calculate impact force/speed more accurately using contact point velocity if possible
-            let impactSpeed = 0;
-            const contactPoint = contact?.point || chassis.position; // Fallback to chassis position
-
-            try {
-                 const myVelocityAtContact = myImpostor.getLinearVelocityFromWorldPoint(contactPoint);
-                 const otherVelocityAtContact = collidedWithImpostor.getLinearVelocityFromWorldPoint(contactPoint) || BABYLON.Vector3.Zero(); // Ground might not have velocity method/data
-                 const relativeVelocity = myVelocityAtContact.subtract(otherVelocityAtContact);
-                 impactSpeed = relativeVelocity.length();
-            } catch(e) {
-                 // Fallback if getLinearVelocityFromWorldPoint fails (e.g., ground impostor)
-                 const myVelocity = myImpostor.getLinearVelocity();
-                 const otherVelocity = collidedWithImpostor.getLinearVelocity() || BABYLON.Vector3.Zero();
-                 const relativeVelocity = myVelocity.subtract(otherVelocity);
-                 impactSpeed = relativeVelocity.length();
-                 // console.warn("Collision speed fallback used.");
+            
+            loadTrack(trackId) {
+                this.currentTrack = this.tracks[trackId];
+                this.trackInfoEl.textContent = `TRACK: ${this.currentTrack.name}`;
             }
-
-
-            // console.log(`Collision Speed: ${impactSpeed.toFixed(2)} with ${collidedWithImpostor.object.name}`);
-
-            const damageThreshold = 8; // Minimum speed for damage (lower slightly)
-            const crashThreshold = 30; // Speed likely to cause a 'crash' state
-            const damageMultiplier = 0.6; // How much damage per unit of speed over threshold
-
-            if (impactSpeed > damageThreshold) {
-                let impactDamage = (impactSpeed - damageThreshold) * damageMultiplier;
-
-                // Higher damage for hitting ground after falling significantly
-                 const fallDuration = gameTime - lastGroundContactTime;
-                 if (collidedWithImpostor === ground.physicsImpostor && fallDuration > 0.4) {
-                     impactDamage *= (1.0 + fallDuration * 1.5); // Increase damage based on fall time
-                     console.log(`Hard Landing! Fall: ${fallDuration.toFixed(2)}s, Damage: ${impactDamage.toFixed(1)}`);
-                 } else if (collidedWithImpostor === ground.physicsImpostor) {
-                     // Reduce damage significantly for minor ground scrapes
-                     impactDamage *= 0.1;
-                 }
-
-                // Reduce damage for barrier scrapes vs hard hits
-                 if (trackMeshes.map(m=>m.physicsImpostor).includes(collidedWithImpostor)) {
-                     // Check normal of impact? Simplified: reduce if impact is glancing
-                     // This requires contact normal analysis which is more complex.
-                     // Simple approach: reduce damage slightly for all barrier hits?
-                     impactDamage *= 0.8;
-                 }
-
-
-                damage = Math.min(maxDamage, damage + impactDamage);
-                updateDamageUI();
-
-                if (damage >= maxDamage && !crashed) {
-                     triggerCrash("Max Damage");
-                 } else if (impactSpeed > crashThreshold && !crashed && fallDuration > 0.1 && collidedWithImpostor !== ground.physicsImpostor) {
-                     // Trigger crash on very high impact (not minor ground bumps)
-                     console.log("High Impact Crash!");
-                     triggerCrash("High Impact");
-                 }
-            }
-        };
-
-         function triggerCrash(reason = "Unknown") {
-             if (crashed) return; // Already crashed
-             console.log(`CRASHED! Reason: ${reason}`);
-             crashed = true;
-             crashResetTimer = CRASH_RESET_DELAY; // Start timer for auto-reset
-             showMessage("CRASH!", (CRASH_RESET_DELAY - 0.1) * 1000); // Show slightly less than delay
-
-             // Optional: Add visual/audio feedback for crash
-             // Make car non-responsive to input immediately
-             keysPressed.ArrowUp = false;
-             keysPressed.ArrowDown = false;
-             keysPressed.ArrowLeft = false;
-             keysPressed.ArrowRight = false;
-
-             // Apply a small upward impulse to stop sliding? (optional)
-             // chassis.physicsImpostor.applyImpulse(new BABYLON.Vector3(0, 50, 0), chassis.position);
-         }
-
-        // --- Game Logic Update ---
-        const updateGameLogic = function(deltaTime) {
-            if (!gameStarted || !car || !chassis || !chassis.physicsImpostor) return;
-
-            // --- Timer ---
-            gameTime += deltaTime;
-
-            // --- Crash Reset Timer ---
-            if (crashed) {
-                 crashResetTimer -= deltaTime;
-                 if (crashResetTimer <= 0) {
-                     resetCar();
-                 }
-                 return; // Don't run other logic while crashed/resetting
-            }
-
-            // --- Checkpoints ---
-            if (checkpointMeshes.length > 0 && nextCheckpointIndex < checkpointMeshes.length) {
-                const nextCP = checkpointMeshes[nextCheckpointIndex];
-                if (chassis.intersectsMesh(nextCP, false)) { // Use chassis for intersection
-                    console.log(`Hit Checkpoint ${nextCheckpointIndex}`);
-
-                    // Optional: Visual feedback for hitting checkpoint
-                    // nextCP.material.emissiveColor = new BABYLON.Color3(0,1,0);
-                    // setTimeout(() => nextCP.material.emissiveColor = new BABYLON.Color3(0,0,0), 500);
-
-                    score += 100; // Award points per checkpoint
-                    nextCheckpointIndex++;
-
-                    if (nextCheckpointIndex >= checkpointMeshes.length) {
-                        // Completed a lap (hit the finish line which is the last checkpoint)
-                        lap++;
-                        nextCheckpointIndex = 0; // Reset for next lap (index 0 is first CP after start)
-                        score += 1000; // Bonus for completing lap
-                        showMessage(`Lap ${lap} / ${maxLaps}`, 2000);
-                        if (lap >= maxLaps) {
-                            endGame(true); // Player wins
-                        }
+            
+            startRace() {
+                this.gameState = 'countdown';
+                this.menuEl.classList.add('hidden');
+                this.countdownEl.classList.remove('hidden');
+                this.countdown = 3;
+                this.countdownEl.textContent = this.countdown;
+                
+                // Reset car and race data
+                this.car.position = { x: 0, y: 0, z: 0.5 }; // Slightly above ground to start
+                this.car.rotation = { x: 0, y: 0, z: 0 };
+                this.car.velocity = { x: 0, y: 0, z: 0 };
+                this.car.speed = 0;
+                this.car.damage = 0;
+                this.car.onGround = true;
+                
+                this.currentCheckpoint = 0;
+                this.lap = 1;
+                this.lapEl.textContent = `LAP: ${this.lap}/${this.totalLaps}`;
+                this.updateDamageDisplay();
+                
+                // Start countdown
+                const countdownInterval = setInterval(() => {
+                    this.countdown--;
+                    if (this.countdown > 0) {
+                        this.countdownEl.textContent = this.countdown;
                     } else {
-                         // Show message for regular checkpoint? (optional)
-                         // showMessage(`Checkpoint ${nextCheckpointIndex} / ${checkpointMeshes.length}`, 1000);
+                        clearInterval(countdownInterval);
+                        this.countdownEl.textContent = 'GO!';
+                        
+                        // Start the race
+                        this.raceStartTime = Date.now();
+                        
+                        setTimeout(() => {
+                            this.gameState = 'race';
+                            this.countdownEl.classList.add('hidden');
+                        }, 1000);
+                    }
+                }, 1000);
+            }
+            
+            endRace(crashed = false) {
+                this.gameState = 'gameOver';
+                this.raceFinishTime = Date.now();
+                
+                const raceTime = this.raceFinishTime - this.raceStartTime;
+                const minutes = Math.floor(raceTime / 60000);
+                const seconds = Math.floor((raceTime % 60000) / 1000);
+                const millis = Math.floor((raceTime % 1000) / 10);
+                
+                const timeFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}:${millis.toString().padStart(2, '0')}`;
+                
+                let result;
+                let points = 0;
+                
+                if (crashed) {
+                    result = 'CAR CRASHED';
+                    points = 0;
+                } else {
+                    result = 'RACE COMPLETE';
+                    // Award points based on finish time
+                    if (raceTime < 60000) { // Under 1 minute
+                        points = 10;
+                    } else if (raceTime < 90000) { // Under 1:30
+                        points = 8;
+                    } else if (raceTime < 120000) { // Under 2 minutes
+                        points = 6;
+                    } else {
+                        points = 4;
+                    }
+                }
+                
+                // Update league points
+                this.playerPoints += points;
+                
+                // Generate random points for CPU drivers
+                for (let i = 0; i < this.cpuPoints.length; i++) {
+                    this.cpuPoints[i] += Math.floor(Math.random() * 6) + 1;
+                }
+                
+                // Show end race screen
+                document.getElementById('raceResult').textContent = result;
+                document.getElementById('raceStats').innerHTML = `TIME: ${timeFormatted}<br>DAMAGE: ${Math.round(this.car.damage * 100)}%<br>POINTS: +${points}`;
+                this.gameOverScreenEl.classList.remove('hidden');
+            }
+            
+            updateLeagueTable() {
+                // Calculate current standings
+                let standings = [
+                    { name: 'PLAYER', points: this.playerPoints },
+                    { name: 'CPU 1', points: this.cpuPoints[0] },
+                    { name: 'CPU 2', points: this.cpuPoints[1] },
+                    { name: 'CPU 3', points: this.cpuPoints[2] }
+                ];
+                
+                // Sort by points
+                standings.sort((a, b) => b.points - a.points);
+                
+                // Update table
+                const table = document.getElementById('leagueTable');
+                const rows = table.getElementsByTagName('tr');
+                
+                for (let i = 0; i < standings.length; i++) {
+                    const cells = rows[i+1].getElementsByTagName('td');
+                    cells[1].textContent = standings[i].name;
+                    cells[2].textContent = standings[i].points;
+                }
+            }
+            
+            updateDamageDisplay() {
+                const damagePercent = this.car.damage * 100;
+                this.damageLevelEl.style.width = `${damagePercent}%`;
+                
+                // Change color based on damage level
+                if (damagePercent < 50) {
+                    this.damageLevelEl.style.backgroundColor = '#f00';
+                } else if (damagePercent < 80) {
+                    this.damageLevelEl.style.backgroundColor = '#f70';
+                } else {
+                    this.damageLevelEl.style.backgroundColor = '#ff0';
+                }
+                
+                // Check for too much damage
+                if (this.car.damage >= 1) {
+                    this.endRace(true);
+                }
+            }
+            
+            updateCheckpoints() {
+                // Get current segment
+                const segmentIndex = Math.floor(this.car.position.y / 5) % this.currentTrack.segments.length;
+                
+                // Check if we've crossed the next checkpoint
+                if (this.checkpoints.includes(segmentIndex) && 
+                    this.checkpoints.indexOf(segmentIndex) === this.currentCheckpoint) {
+                    this.currentCheckpoint = (this.currentCheckpoint + 1) % this.checkpoints.length;
+                    
+                    // Check for lap completion
+                    if (this.currentCheckpoint === 0) {
+                        this.lap++;
+                        this.lapEl.textContent = `LAP: ${this.lap}/${this.totalLaps}`;
+                        
+                        // Check for race completion
+                        if (this.lap > this.totalLaps) {
+                            this.endRace();
+                        }
                     }
                 }
             }
-
-            // --- Fall Detection ---
-            if (chassis.position.y < -40) { // Adjusted threshold based on ground plane Y
-                if (!crashed) { // Only trigger if not already crashed
-                     console.log("Fallen off track!");
-                     damage = maxDamage; // Max damage on fall
-                     updateDamageUI();
-                     triggerCrash("Fell Off Track");
+            
+            handleInput() {
+                if (this.gameState !== 'race') return;
+                
+                // Accelerate
+                if (this.keys['w'] || this.keys['arrowup']) {
+                    this.car.enginePower = this.car.maxEnginePower;
+                } else {
+                    this.car.enginePower = 0;
+                }
+                
+                // Brake
+                if (this.keys['s'] || this.keys['arrowdown']) {
+                    this.car.enginePower = -this.car.brakePower;
+                }
+                
+                // Steering
+                if (this.keys['a'] || this.keys['arrowleft']) {
+                    this.car.steeringAngle = Math.min(this.car.steeringAngle + 0.02, this.car.maxSteeringAngle);
+                } else if (this.keys['d'] || this.keys['arrowright']) {
+                    this.car.steeringAngle = Math.max(this.car.steeringAngle - 0.02, -this.car.maxSteeringAngle);
+                } else {
+                    // Return to center
+                    if (this.car.steeringAngle > 0) {
+                        this.car.steeringAngle = Math.max(0, this.car.steeringAngle - 0.01);
+                    } else if (this.car.steeringAngle < 0) {
+                        this.car.steeringAngle = Math.min(0, this.car.steeringAngle + 0.01);
+                    }
                 }
             }
-        };
-
-        // --- UI Update ---
-        const updateUI = function() {
-            if (!gameStarted || !car || !chassis || !chassis.physicsImpostor) {
-                 // Hide or show default values if game not running
-                 speedometerEl.textContent = `0 mph`;
-                 timerEl.textContent = formatTime(0);
-                 lapEl.textContent = `Lap: 0 / ${maxLaps}`;
-                 scoreEl.textContent = `Score: 0`;
-                 updateDamageUI(); // Ensure damage bar is reset visually
-                 return;
-            }
-
-            // Speedometer
-            const velocity = chassis.physicsImpostor.getLinearVelocity();
-            speed = velocity.length();
-            const speedMPH = Math.floor(speed * 2.23694); // m/s to mph approx
-            speedometerEl.textContent = `${speedMPH} mph`;
-
-            // Timer
-            timerEl.textContent = formatTime(gameTime);
-
-            // Lap Counter
-            lapEl.textContent = `Lap: ${lap} / ${maxLaps}`;
-
-            // Score
-            scoreEl.textContent = `Score: ${score}`;
-        };
-
-         const updateDamageUI = function() {
-            const damagePercent = Math.max(0, Math.min(100, (damage / maxDamage) * 100));
-            // Clamp width between 0 and 100
-            const displayWidth = Math.max(0, Math.min(100, 100 - damagePercent));
-            damageIndicatorEl.style.width = `${displayWidth}%`; // Decrease width as damage increases
-
-            // Change color based on damage level
-            if (damagePercent > 80) {
-                damageIndicatorEl.style.backgroundColor = '#ff0000'; // Red (Critical)
-            } else if (damagePercent > 50) {
-                damageIndicatorEl.style.backgroundColor = '#ffcc00'; // Yellow (Damaged)
-            } else {
-                damageIndicatorEl.style.backgroundColor = '#00ff00'; // Green (Good)
-            }
-         }
-
-        // --- Game State Functions ---
-        function startGame() {
-            console.log("Starting Game on Track:", tracks[currentTrack].name);
-            startScreenEl.style.display = 'none'; // Hide start screen
-
-             // Ensure scene exists
-            if (!scene) {
-                console.error("Scene not initialized before starting game!");
-                scene = createScene(); // Attempt to create scene if missing
-            }
-
-            // Clear old track and create new one
-            clearTrack();
-            tracks[currentTrack].creator(scene); // Recreate selected track (defines startPos/Rot)
-
-            // Create/Recreate car at the track's defined start position
-            createCar(scene);
-
-            // --- CRITICAL: Register Collision Listeners AFTER Car and Track exist ---
-             if (chassis && chassis.physicsImpostor && ground && ground.physicsImpostor) {
-                  const trackImpostors = trackMeshes
-                        .map(m => m.physicsImpostor)
-                        .filter(p => p != null); // Ensure only valid impostors
-
-                  // Clear previous listeners if any (important for track switching)
-                  chassis.physicsImpostor.unregisterOnPhysicsCollide(chassis.physicsImpostor.getRegisteredCollisions());
-
-                  // Register new listeners
-                  console.log(`Registering collision against ${trackImpostors.length} track impostors.`);
-                  trackImpostors.forEach(impostor => {
-                      chassis.physicsImpostor.registerOnPhysicsCollide(impostor, handleCollision);
-                  });
-                  // Register collision with the ground separately
-                  chassis.physicsImpostor.registerOnPhysicsCollide(ground.physicsImpostor, handleCollision);
-                  console.log("Collision listeners registered.");
-             } else {
-                  console.error("Cannot register collision listeners: Car, Track or Ground impostor missing after creation.");
-             }
-             // --- End Collision Listener Registration ---
-
-            // Reset Game Variables
-            gameStarted = true;
-            score = 0;
-            lap = 0;
-            gameTime = 0;
-            damage = 0;
-            nextCheckpointIndex = 0;
-            crashed = false;
-            crashResetTimer = 0;
-            currentSteering = 0;
-
-            resetCar(); // Position car correctly and reset physics state
-            updateUI(); // Update UI immediately
-            lastFrameTime = performance.now(); // Initialize frame time
-
-            // Ensure render loop isn't already running
-            engine.stopRenderLoop();
-            engine.runRenderLoop(gameLoop); // Start the main game loop
-        }
-
-        function endGame(playerWon) {
-            gameStarted = false;
-            engine.stopRenderLoop(gameLoop); // Stop the main loop
-
-            if (playerWon) {
-                showMessage(`FINISHED!\nTime: ${formatTime(gameTime)}\nScore: ${score}`, 0); // Show indefinitely
-            } else {
-                showMessage(`GAME OVER\nFinal Score: ${score}`, 0);
-            }
-
-            // Show start screen again after a delay
-            setTimeout(() => {
-                startScreenEl.style.display = 'flex';
-                messageDisplayEl.style.display = 'none'; // Hide final message
-            }, 5000); // Show start screen after 5 seconds
-        }
-
-        function resetCar() {
-            if (!car || !chassis || !chassis.physicsImpostor) {
-                 console.error("Cannot reset car: No valid car/chassis/impostor.");
-                 return;
-            }
-
-            console.log("Resetting Car to:", startPosition, startRotation);
-
-            const body = chassis.physicsImpostor;
-
-            // Force sleep state then wake up to ensure stability after teleport
-            // body.sleep(); // May need Cannon specific call if using cannon directly
-
-            // Reset position and orientation
-            body.setLinearVelocity(BABYLON.Vector3.Zero()); // Zero velocity BEFORE teleporting
-            body.setAngularVelocity(BABYLON.Vector3.Zero());
-            chassis.position = startPosition.clone();
-            const qRotation = BABYLON.Quaternion.FromEulerVector(startRotation); // Use FromEulerVector
-            chassis.rotationQuaternion = qRotation.clone(); // Update mesh rotation via quaternion
-            body.setAngularVelocity(BABYLON.Vector3.Zero()); // Zero velocity AGAIN AFTER setting rotation
-
-            // body.wakeUp(); // Wake up physics body
-
-            // Reset state variables
-            crashed = false;
-            crashResetTimer = 0;
-            currentSteering = 0;
-            inAir = false; // Assume reset puts car on ground initially
-            lastGroundContactTime = gameTime; // Reset last ground contact
-
-            // Reset damage slightly? (Optional)
-            // damage = Math.max(0, damage - 10);
-            updateDamageUI();
-            showMessage("", 1); // Clear any existing messages quickly
-        }
-
-        // --- Main Game Loop ---
-        const gameLoop = function() {
-            if (!gameStarted && engine.activeRenderLoops.length === 0) { // Safety check to prevent loop running when stopped
-                 console.warn("Game loop called but game not started. Stopping.");
-                 return;
-            }
-            if (!gameStarted) return; // Don't run logic if paused/ended
-
-            const now = performance.now();
-            // Calculate deltaTime, ensuring it's not excessively large
-            const rawDeltaTime = (now - lastFrameTime) / 1000.0;
-            lastFrameTime = now;
-            const deltaTime = Math.min(rawDeltaTime, 0.05); // Clamp delta time (e.g., max 50ms step)
-
-            // Update game components only if deltaTime is positive
-            if (deltaTime > 0) {
-                updateCarPhysics(deltaTime);
-                updateGameLogic(deltaTime);
-                updateUI();
-            }
-
-            // Render the scene
-            if (scene && scene.isReady()) {
-                 scene.render();
-            }
-        };
-
-        // --- Initialization ---
-        // Populate Track Selector
-        tracks.forEach((track, index) => {
-            const option = document.createElement('option');
-            option.value = index;
-            option.textContent = `${track.name} (Diff: ${track.difficulty})`;
-            trackSelectDropdown.appendChild(option);
-        });
-
-        // Event Listener for Track Selection Change
-        trackSelectDropdown.addEventListener('change', (event) => {
-            currentTrack = parseInt(event.target.value, 10);
-            console.log("Selected track index:", currentTrack);
-            // No need to recreate scene here, just update the index for when Start is pressed
-        });
-
-
-        // Event Listener for Start Button
-        startButton.addEventListener('click', startGame);
-
-        // Create the initial scene (but don't start the loop yet)
-        scene = createScene();
-
-        // Handle window resize
-        window.addEventListener("resize", function () {
-            engine.resize();
-        });
-
-        // Show start screen initially
-        startScreenEl.style.display = 'flex';
-        // Hide game UI elements initially
-        updateUI(); // Set initial UI state (like 0 mph)
-
-        // Initial render to show something while waiting for start
-        if (scene) {
-            engine.runRenderLoop(() => {
-                if (scene && !gameStarted) { // Only render if scene exists and game hasn't started
-                    scene.render();
-                } else if (!gameStarted) {
-                     engine.stopRenderLoop(); // Stop this initial loop if game starts or scene disappears
+            
+            updatePhysics() {
+                if (this.gameState !== 'race') return;
+                
+                // Apply engine power
+                const forwardVector = {
+                    x: Math.sin(this.car.rotation.y),
+                    y: Math.cos(this.car.rotation.y),
+                    z: 0
+                };
+                
+                this.car.velocity.x += forwardVector.x * this.car.enginePower;
+                this.car.velocity.y += forwardVector.y * this.car.enginePower;
+                
+                // Apply steering
+                if (Math.abs(this.car.speed) > 0.01) {
+                    this.car.rotation.y += this.car.steeringAngle * (this.car.speed / 2);
                 }
-            });
+                
+                // Apply gravity if not on ground
+                if (!this.car.onGround) {
+                    this.car.velocity.z -= this.car.gravity;
+                }
+                
+                // Calculate current speed
+                this.car.speed = Math.sqrt(
+                    this.car.velocity.x * this.car.velocity.x + 
+                    this.car.velocity.y * this.car.velocity.y
+                );
+                
+                // Apply drag
+                this.car.velocity.x *= this.car.drag;
+                this.car.velocity.y *= this.car.drag;
+                this.car.velocity.z *= this.car.drag;
+                
+                // Update position
+                this.car.position.x += this.car.velocity.x;
+                this.car.position.y += this.car.velocity.y;
+                this.car.position.z += this.car.velocity.z;
+                
+                // Check track collision
+                this.checkTrackCollision();
+                
+                // Update speedometer
+                const speedMph = Math.round(this.car.speed * 100);
+                this.speedometerEl.textContent = `${speedMph} MPH`;
+                
+                // Update checkpoints
+                this.updateCheckpoints();
+            }
+            
+            checkTrackCollision() {
+                // Find current segment
+                const currentSegmentIndex = Math.floor(this.car.position.y / 5) % this.currentTrack.segments.length;
+                const nextSegmentIndex = (currentSegmentIndex + 1) % this.currentTrack.segments.length;
+                
+                const currentSegment = this.currentTrack.segments[currentSegmentIndex];
+                const nextSegment = this.currentTrack.segments[nextSegmentIndex];
+                
+                // Check if car is within track width
+                const halfTrackWidth = 3; // Half the track width
+                if (Math.abs(this.car.position.x) > halfTrackWidth) {
+                    // Car is off the track horizontally
+                    this.car.damage += 0.01; // Slight damage
+                    this.updateDamageDisplay();
+                    
+                    // Bounce back
+                    this.car.velocity.x *= -0.5;
+                    this.car.position.x = Math.sign(this.car.position.x) * halfTrackWidth;
+                }
+                
+                // Interpolate between segments to find track height at car position
+                const segmentLength = 5;
+                const segmentProgress = (this.car.position.y % segmentLength) / segmentLength;
+                
+                // Calculate track height at car position using linear interpolation between segments
+                const p1 = currentSegment.points[0];
+                const p2 = currentSegment.points[3];
+                const p3 = nextSegment.points[0];
+                const p4 = nextSegment.points[3];
+                
+                const h1 = (p1.z + p2.z) / 2;
+                const h2 = (p3.z + p4.z) / 2;
+                
+                const trackHeight = h1 + segmentProgress * (h2 - h1);
+                
+                // Check if car is on the track
+                const heightDifference = this.car.position.z - trackHeight;
+                
+                if (heightDifference <= 0.1 && this.car.velocity.z <= 0) {
+                    // Car is on the ground
+                    this.car.position.z = trackHeight + 0.1;
+                    this.car.velocity.z = 0;
+                    this.car.onGround = true;
+                    
+                    // Calculate impact force if landing hard
+                    if (this.car.velocity.z < -0.2) {
+                        const impactForce = Math.abs(this.car.velocity.z);
+                        this.car.damage += impactForce * 0.1;
+                        this.updateDamageDisplay();
+                    }
+                } else {
+                    // Car is in the air
+                    this.car.onGround = false;
+                }
+            }
+            
+            render() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Sky
+                const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height/2);
+                gradient.addColorStop(0, '#00a');
+                gradient.addColorStop(1, '#88f');
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height/2);
+                
+                // Ground
+                this.ctx.fillStyle = '#3a3';
+                this.ctx.fillRect(0, this.canvas.height/2, this.canvas.width, this.canvas.height/2);
+                
+                // Render track
+                this.renderTrack();
+            }
+            
+            renderTrack() {
+                if (!this.currentTrack) return;
+                
+                // Sort segments by distance from car for painter's algorithm
+                const sortedSegments = [...this.currentTrack.segments];
+                const carSegmentIndex = Math.floor(this.car.position.y / 5) % sortedSegments.length;
+                
+                // Rearrange array to start with segments behind the car
+                const reorderedSegments = [
+                    ...sortedSegments.slice(carSegmentIndex + 50),
+                    ...sortedSegments.slice(0, carSegmentIndex + 50)
+                ];
+                
+                // Render segments from far to near
+                for (let i = 0; i < reorderedSegments.length; i++) {
+                    const segment = reorderedSegments[i];
+                    this.renderSegment(segment);
+                }
+            }
+            
+            renderSegment(segment) {
+                // Transform segment points to camera space
+                const transformedPoints = segment.points.map(point => this.transformPoint(point));
+                
+                // Check if segment is visible
+                const isVisible = transformedPoints.some(p => p.z > 0);
+                if (!isVisible) return;
+                
+                // Project points to 2D screen space
+                const screenPoints = transformedPoints.map(point => this.projectPoint(point));
+                
+                // Check if all points are within view
+                const allPointsInView = screenPoints.every(p => 
+                    p.x >= 0 && p.x <= this.canvas.width && 
+                    p.y >= 0 && p.y <= this.canvas.height
+                );
+                
+                // Draw segment
+                this.ctx.beginPath();
+                this.ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+                
+                for (let i = 1; i < screenPoints.length; i++) {
+                    this.ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+                }
+                
+                this.ctx.closePath();
+                
+                // Fill with track color
+                this.ctx.fillStyle = segment.color;
+                this.ctx.fill();
+                
+                // Draw wireframe outline for the classic Stunt Car Racer look
+                this.ctx.strokeStyle = '#000';
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+            }
+            
+            transformPoint(point) {
+                // Translate relative to car
+                const translatedPoint = {
+                    x: point.x - this.car.position.x,
+                    y: point.y - this.car.position.y,
+                    z: point.z - this.car.position.z
+                };
+                
+                // Rotate around Y axis (car steering)
+                const rotY = -this.car.rotation.y;
+                const cosY = Math.cos(rotY);
+                const sinY = Math.sin(rotY);
+                
+                const rotatedPoint = {
+                    x: translatedPoint.x * cosY - translatedPoint.y * sinY,
+                    y: translatedPoint.x * sinY + translatedPoint.y * cosY,
+                    z: translatedPoint.z
+                };
+                
+                // Adjust for camera position
+                const cameraPoint = {
+                    x: rotatedPoint.x,
+                    y: rotatedPoint.y - this.camera.distance,
+                    z: rotatedPoint.z - this.camera.height
+                };
+                
+                return cameraPoint;
+            }
+            
+            projectPoint(point) {
+                // Avoid division by zero
+                const z = Math.max(0.1, point.z);
+                
+                // Calculate perspective projection
+                const scale = this.camera.fov / z;
+                
+                // Project to screen coordinates
+                return {
+                    x: this.canvas.width / 2 + point.x * scale * this.canvas.height,
+                    y: this.canvas.height / 2 - point.y * scale * this.canvas.height
+                };
+            }
+            
+            gameLoop(timestamp) {
+                // Calculate delta time
+                const deltaTime = timestamp - (this.lastTime || timestamp);
+                this.lastTime = timestamp;
+                
+                // Handle input
+                this.handleInput();
+                
+                // Update physics
+                this.updatePhysics();
+                
+                // Render scene
+                this.render();
+                
+                // Continue game loop
+                window.requestAnimationFrame(this.gameLoop.bind(this));
+            }
         }
-
-
+        
+        // Initialize game when page loads
+        window.addEventListener('load', () => {
+            const game = new StuntCarRacer();
+        });
     </script>
 </body>
 </html>
