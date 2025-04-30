@@ -1,0 +1,182 @@
+// core/setup.js - Handles initialization and scene setup
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import SimplexNoise from 'simplex-noise';
+import { gameState, initModules } from '../main.js';
+import { setupInput } from './input.js';
+import { setupLightingAndEnvironment } from '../world/environment.js';
+import { generateTerrain, getTerrainHeight } from '../world/terrain.js';
+import { generateResources, resources, clearResources } from '../world/resources.js';
+import { generateEnemies, enemies, clearEnemies } from '../world/enemies.js';
+import { buildings, clearBuildings } from '../building/building.js';
+import { setupUI } from './ui.js';
+import { selectTool } from '../player/inventory.js';
+
+// Global variables that need to be accessible across modules
+export let scene, camera, renderer, controls, clock;
+export let terrain;
+export let terrainNoise, biomeNoise, detailNoise;
+
+// Constants
+export const PLAYER_HEIGHT = 1.7; // Approximate eye height
+export const PLAYER_RADIUS = 0.4; // For simple collision checks
+export const WALK_SPEED = 5.0;
+export const RUN_SPEED = 10.0;
+export const JUMP_FORCE = 8.0;
+export const GRAVITY = 20.0;
+export const STAMINA_SPRINT_COST = 10; // Per second
+export const STAMINA_JUMP_COST = 15;
+export const STAMINA_ATTACK_COST = 8;
+export const STAMINA_REGEN = 8; // Per second when not using stamina
+
+// --- Initialization Function ---
+export function init() {
+    console.log("Initializing game...");
+    clock = new THREE.Clock();
+
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Will be replaced by Sky
+    scene.fog = new THREE.Fog(0x87CEEB, 100, gameState.settings.renderDistance);
+
+    // Camera (Perspective, controlled by PointerLockControls)
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, gameState.settings.renderDistance * 1.2);
+
+    // Renderer
+    const canvas = document.getElementById('gameCanvas');
+    if (!canvas) {
+        console.error("Game canvas not found!");
+        return;
+    }
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Make renderer globally accessible
+    window.renderer = renderer;
+
+    // Noise Generators
+    try {
+        terrainNoise = new SimplexNoise(gameState.world.seed);
+        biomeNoise = new SimplexNoise(gameState.world.seed + 1);
+        detailNoise = new SimplexNoise(gameState.world.seed + 2);
+    } catch(e) {
+        console.error("Failed to initialize SimplexNoise. Ensure library is loaded correctly.", e);
+        alert("Error initializing noise generators. Game cannot start.");
+        return;
+    }
+
+    // Lighting, Sky, Water
+    setupLightingAndEnvironment();
+
+    // Terrain
+    generateTerrain();
+
+    // PointerLockControls
+    controls = new PointerLockControls(camera, renderer.domElement);
+    // Set initial position using the controls object
+    controls.getObject().position.copy(gameState.player.position);
+    controls.getObject().position.y = getTerrainHeight(gameState.player.position.x, gameState.player.position.z) + PLAYER_HEIGHT;
+    scene.add(controls.getObject());
+
+    // Initialize building/inventory modules with terrain reference
+    initModules(terrain);
+
+    // Initial World Objects (Optional simple ones)
+    addDebugObjects();
+
+    // Generate procedural resources and enemies
+    generateResources();
+    generateEnemies();
+
+    // Setup Input Listeners
+    setupInput();
+
+    // Setup UI Listeners and Initial State
+    setupUI();
+
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize, false);
+
+    // Hide loading/menu, show instructions to click
+    document.getElementById('loading-screen')?.remove(); // Remove if exists
+    document.getElementById('main-menu').style.display = 'none';
+    const instructions = document.getElementById('instructions');
+    if (instructions) instructions.style.display = 'block';
+
+    console.log("Game Initialized! Click screen to control.");
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function addDebugObjects() {
+    // Example: Add simple boxes for spatial reference
+    const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+    for (let i = 0; i < 10; i++) {
+        const boxMaterial = new THREE.MeshStandardMaterial({
+            color: Math.random() * 0xffffff,
+            roughness: 0.5,
+            metalness: 0.1
+        });
+        const box = new THREE.Mesh(boxGeometry, boxMaterial);
+        const x = (Math.random() - 0.5) * 50;
+        const z = (Math.random() - 0.5) * 50;
+        const y = getTerrainHeight(x, z) + 1; // Place on terrain
+        box.position.set(x, y, z);
+        box.castShadow = true;
+        box.receiveShadow = true;
+        scene.add(box);
+    }
+}
+
+export function resetGameStateForNewGame() {
+    console.log("Resetting game state for new game...");
+    // Reset player stats
+    gameState.player.health = gameState.player.maxHealth;
+    gameState.player.stamina = gameState.player.maxStamina;
+    gameState.player.inventory = Array(gameState.player.inventory.length).fill(null);
+    gameState.player.position.set(0, 10, 5);
+    gameState.player.velocity.set(0, 0, 0);
+    gameState.player.onGround = false;
+    gameState.player.isAttacking = false;
+    gameState.player.isRunning = false;
+    gameState.player.selectedTool = 'hand';
+
+    // Reset world time
+    gameState.world.time = 9000;
+
+    // Clear existing dynamic objects from previous games
+    clearDynamicObjects();
+
+    // Regenerate dynamic world elements
+    generateResources();
+    generateEnemies();
+
+    // Position player at spawn
+    const spawnPoint = new THREE.Vector3(0, 10, 5);
+    controls.getObject().position.copy(spawnPoint);
+    controls.getObject().position.y = getTerrainHeight(spawnPoint.x, spawnPoint.z) + PLAYER_HEIGHT;
+    gameState.player.position.copy(controls.getObject().position);
+
+    // Ensure default tool is selected
+    selectTool('hand');
+
+    // Reset UI elements
+    document.getElementById('game-messages').innerHTML = '';
+    document.getElementById('build-mode-indicator').style.display = 'none';
+}
+
+function clearDynamicObjects() {
+    console.log("Clearing dynamic objects...");
+    
+    clearResources();
+    clearEnemies();
+    clearBuildings();
+    
+    console.log("Dynamic objects cleared.");
+}

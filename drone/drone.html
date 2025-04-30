@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Space Mining Game</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        #dronePanel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        .resource {
+            margin-bottom: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="hud">
+        <h3>Resources</h3>
+        <div class="resource">Iron: <span id="ironCount">0</span></div>
+        <div class="resource">Copper: <span id="copperCount">0</span></div>
+        <div class="resource">Zinc: <span id="zincCount">0</span></div>
+        <h3>Base</h3>
+        <div class="resource">Storage Capacity: <span id="storageCapacity">1000</span></div>
+        <div class="resource">Current Storage: <span id="currentStorage">0</span></div>
+        <button id="buildDroneBtn" disabled>Build Drone (50 Iron, 30 Copper, 20 Zinc)</button>
+    </div>
+    <div id="dronePanel">
+        <h3>Drones: <span id="droneCount">0</span></h3>
+        <div id="droneList"></div>
+    </div>
+
+    <script src="babylon.js"></script>
+    <script>
+        // Game variables
+        const resources = {
+            iron: 0,
+            copper: 0,
+            zinc: 0
+        };
+        
+        let baseCapacity = 1000;
+        let currentStorage = 0;
+        let drones = [];
+        let planets = [];
+        let droneId = 0;
+        
+        // Initialize BabylonJS
+        const canvas = document.getElementById("renderCanvas");
+        const engine = new BABYLON.Engine(canvas, true);
+        
+        // Create scene
+        const createScene = function() {
+            const scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color3(0.02, 0.02, 0.05);
+            
+            // Camera setup - orthographic camera for 2D view
+            const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, 0, 25, BABYLON.Vector3.Zero(), scene);
+            camera.setPosition(new BABYLON.Vector3(0, 15, 0));
+            camera.attachControl(canvas, true);
+            camera.upperBetaLimit = 0.1;
+            camera.lowerBetaLimit = 0;
+            
+            // Lighting
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.7;
+            
+            // Skybox
+            const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size: 1000.0}, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial("skyBoxMaterial", scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://playground.babylonjs.com/textures/skybox", scene);
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
+            
+            // Create base
+            const base = BABYLON.MeshBuilder.CreateCylinder("base", {diameter: 3, height: 0.5}, scene);
+            base.position = new BABYLON.Vector3(0, 0, 0);
+            const baseMaterial = new BABYLON.StandardMaterial("baseMaterial", scene);
+            baseMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.7);
+            base.material = baseMaterial;
+            
+            // Create player ship
+            const ship = BABYLON.MeshBuilder.CreateCylinder("ship", {diameterTop: 0, diameterBottom: 1, height: 1.5}, scene);
+            ship.position = new BABYLON.Vector3(0, 0.5, 3);
+            ship.rotation.x = Math.PI / 2;
+            const shipMaterial = new BABYLON.StandardMaterial("shipMaterial", scene);
+            shipMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.8, 0.2);
+            ship.material = shipMaterial;
+            
+            // Mining beam
+            const beam = BABYLON.MeshBuilder.CreateCylinder("beam", {diameter: 0.1, height: 10}, scene);
+            beam.position = new BABYLON.Vector3(0, 0.5, 8);
+            beam.rotation.x = Math.PI / 2;
+            const beamMaterial = new BABYLON.StandardMaterial("beamMaterial", scene);
+            beamMaterial.diffuseColor = new BABYLON.Color3(0, 1, 0);
+            beamMaterial.alpha = 0.6;
+            beamMaterial.emissiveColor = new BABYLON.Color3(0, 1, 0);
+            beam.material = beamMaterial;
+            beam.setEnabled(false);
+
+            // Create planets with resources
+            createPlanets(scene);
+            
+            // Player ship controls
+            let moveForward = false;
+            let moveBackward = false;
+            let rotateLeft = false;
+            let rotateRight = false;
+            let isMining = false;
+            let targetPlanet = null;
+            
+            // Input handling
+            scene.onKeyboardObservable.add((kbInfo) => {
+                switch (kbInfo.type) {
+                    case BABYLON.KeyboardEventTypes.KEYDOWN:
+                        switch (kbInfo.event.key) {
+                            case "w":
+                            case "ArrowUp":
+                                moveForward = true;
+                                break;
+                            case "s":
+                            case "ArrowDown":
+                                moveBackward = true;
+                                break;
+                            case "a":
+                            case "ArrowLeft":
+                                rotateLeft = true;
+                                break;
+                            case "d":
+                            case "ArrowRight":
+                                rotateRight = true;
+                                break;
+                            case " ":
+                                isMining = true;
+                                beam.setEnabled(true);
+                                break;
+                        }
+                        break;
+                    case BABYLON.KeyboardEventTypes.KEYUP:
+                        switch (kbInfo.event.key) {
+                            case "w":
+                            case "ArrowUp":
+                                moveForward = false;
+                                break;
+                            case "s":
+                            case "ArrowDown":
+                                moveBackward = false;
+                                break;
+                            case "a":
+                            case "ArrowLeft":
+                                rotateLeft = false;
+                                break;
+                            case "d":
+                            case "ArrowRight":
+                                rotateRight = false;
+                                break;
+                            case " ":
+                                isMining = false;
+                                beam.setEnabled(false);
+                                break;
+                        }
+                        break;
+                }
+            });
+            
+            // Game loop
+            scene.registerBeforeRender(() => {
+                // Ship movement
+                const SPEED = 0.1;
+                const ROTATION_SPEED = 0.03;
+                
+                if (rotateLeft) {
+                    ship.rotation.y -= ROTATION_SPEED;
+                    beam.rotation.y -= ROTATION_SPEED;
+                }
+                
+                if (rotateRight) {
+                    ship.rotation.y += ROTATION_SPEED;
+                    beam.rotation.y += ROTATION_SPEED;
+                }
+                
+                if (moveForward) {
+                    const direction = new BABYLON.Vector3(
+                        Math.sin(ship.rotation.y), 
+                        0, 
+                        Math.cos(ship.rotation.y)
+                    );
+                    ship.position.addInPlace(direction.scale(SPEED));
+                }
+                
+                if (moveBackward) {
+                    const direction = new BABYLON.Vector3(
+                        Math.sin(ship.rotation.y), 
+                        0, 
+                        Math.cos(ship.rotation.y)
+                    );
+                    ship.position.subtractInPlace(direction.scale(SPEED));
+                }
+                
+                // Update beam position and orientation
+                const direction = new BABYLON.Vector3(
+                    Math.sin(ship.rotation.y), 
+                    0, 
+                    Math.cos(ship.rotation.y)
+                );
+                
+                beam.position = ship.position.clone();
+                beam.position.addInPlace(direction.scale(5));
+                beam.rotation.y = ship.rotation.y;
+                
+                // Mining logic
+                if (isMining) {
+                    // Check if beam hits any planet
+                    for (let i = 0; i < planets.length; i++) {
+                        const planet = planets[i];
+                        const distance = BABYLON.Vector3.Distance(beam.position, planet.position);
+                        
+                        if (distance < planet.scaling.x * 2) {
+                            targetPlanet = planet;
+                            mineResource(targetPlanet);
+                            break;
+                        } else {
+                            targetPlanet = null;
+                        }
+                    }
+                }
+                
+                // Handle drones
+                for (let i = 0; i < drones.length; i++) {
+                    updateDrone(drones[i], scene);
+                }
+                
+                // Update HUD
+                updateHUD();
+                
+                // Check for build drone button
+                checkDroneButton();
+            });
+            
+            return scene;
+        };
+        
+        // Create planets with different resources
+        function createPlanets(scene) {
+            const planetTypes = [
+                { type: "iron", color: new BABYLON.Color3(0.6, 0.3, 0.3) },
+                { type: "copper", color: new BABYLON.Color3(0.8, 0.5, 0.2) },
+                { type: "zinc", color: new BABYLON.Color3(0.7, 0.7, 0.7) }
+            ];
+            
+            for (let i = 0; i < 15; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 5 + Math.random() * 15;
+                const x = Math.sin(angle) * distance;
+                const z = Math.cos(angle) * distance;
+                
+                const planetType = planetTypes[Math.floor(Math.random() * planetTypes.length)];
+                const planet = BABYLON.MeshBuilder.CreateSphere("planet_" + i, {diameter: 1 + Math.random()}, scene);
+                planet.position = new BABYLON.Vector3(x, 0, z);
+                
+                const planetMaterial = new BABYLON.StandardMaterial("planetMaterial_" + i, scene);
+                planetMaterial.diffuseColor = planetType.color;
+                planet.material = planetMaterial;
+                
+                // Store resource type and amount in the planet object
+                planet.resourceType = planetType.type;
+                planet.resourceAmount = 200 + Math.floor(Math.random() * 300);
+                
+                planets.push(planet);
+            }
+        }
+        
+        // Mining function
+        function mineResource(planet) {
+            if (planet && planet.resourceAmount > 0 && currentStorage < baseCapacity) {
+                const miningRate = 0.5;
+                let amountToMine = Math.min(miningRate, planet.resourceAmount, baseCapacity - currentStorage);
+                
+                planet.resourceAmount -= amountToMine;
+                resources[planet.resourceType] += amountToMine;
+                currentStorage += amountToMine;
+                
+                // Visual feedback for mining
+                planet.scaling = new BABYLON.Vector3(
+                    Math.max(0.2, planet.scaling.x - 0.0001),
+                    Math.max(0.2, planet.scaling.y - 0.0001),
+                    Math.max(0.2, planet.scaling.z - 0.0001)
+                );
+                
+                // If planet is depleted
+                if (planet.resourceAmount <= 0) {
+                    planet.setEnabled(false);
+                    // Remove from active planets list
+                    const index = planets.indexOf(planet);
+                    if (index > -1) {
+                        planets.splice(index, 1);
+                    }
+                }
+            }
+        }
+        
+        // Create a drone
+        function createDrone(scene) {
+            if (resources.iron >= 50 && resources.copper >= 30 && resources.zinc >= 20) {
+                resources.iron -= 50;
+                resources.copper -= 30;
+                resources.zinc -= 20;
+                currentStorage -= 100; // 50 + 30 + 20 = 100
+                
+                const drone = BABYLON.MeshBuilder.CreateBox("drone_" + droneId, {width: 0.8, height: 0.3, depth: 0.8}, scene);
+                const droneMaterial = new BABYLON.StandardMaterial("droneMaterial_" + droneId, scene);
+                droneMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.9);
+                drone.material = droneMaterial;
+                
+                // Position drone near base
+                const angle = Math.random() * Math.PI * 2;
+                drone.position = new BABYLON.Vector3(
+                    Math.sin(angle) * 2,
+                    0.5,
+                    Math.cos(angle) * 2
+                );
+                
+                // Drone properties
+                drone.id = droneId++;
+                drone.targetPlanet = null;
+                drone.targetBase = false;
+                drone.carryingResource = null;
+                drone.carryingAmount = 0;
+                drone.maxCarry = 50;
+                drone.state = "idle"; // idle, mining, returning
+                
+                drones.push(drone);
+                
+                // Add to drone list in UI
+                updateDroneList();
+                
+                // Assign task to drone
+                assignDroneTask(drone);
+                
+                return drone;
+            }
+            return null;
+        }
+        
+        // Update drone behavior
+        function updateDrone(drone, scene) {
+            const DRONE_SPEED = 0.05;
+            
+            switch (drone.state) {
+                case "idle":
+                    assignDroneTask(drone);
+                    break;
+                    
+                case "movingToPlanet":
+                    if (drone.targetPlanet) {
+                        const direction = BABYLON.Vector3.Normalize(
+                            drone.targetPlanet.position.subtract(drone.position)
+                        );
+                        drone.position.addInPlace(direction.scale(DRONE_SPEED));
+                        
+                        // Check if reached planet
+                        const distance = BABYLON.Vector3.Distance(drone.position, drone.targetPlanet.position);
+                        if (distance < drone.targetPlanet.scaling.x * 1.5) {
+                            drone.state = "mining";
+                        }
+                    } else {
+                        drone.state = "idle";
+                    }
+                    break;
+                    
+                case "mining":
+                    if (drone.targetPlanet && drone.targetPlanet.resourceAmount > 0 && drone.carryingAmount < drone.maxCarry) {
+                        const miningRate = 0.3;
+                        let amountToMine = Math.min(miningRate, drone.targetPlanet.resourceAmount, drone.maxCarry - drone.carryingAmount);
+                        
+                        drone.targetPlanet.resourceAmount -= amountToMine;
+                        drone.carryingResource = drone.targetPlanet.resourceType;
+                        drone.carryingAmount += amountToMine;
+                        
+                        // Visual feedback
+                        drone.targetPlanet.scaling = new BABYLON.Vector3(
+                            Math.max(0.2, drone.targetPlanet.scaling.x - 0.0001),
+                            Math.max(0.2, drone.targetPlanet.scaling.y - 0.0001),
+                            Math.max(0.2, drone.targetPlanet.scaling.z - 0.0001)
+                        );
+                        
+                        // If planet depleted or drone full
+                        if (drone.targetPlanet.resourceAmount <= 0 || drone.carryingAmount >= drone.maxCarry) {
+                            if (drone.targetPlanet.resourceAmount <= 0) {
+                                drone.targetPlanet.setEnabled(false);
+                                // Remove from active planets
+                                const index = planets.indexOf(drone.targetPlanet);
+                                if (index > -1) {
+                                    planets.splice(index, 1);
+                                }
+                            }
+                            drone.state = "returningToBase";
+                        }
+                    } else {
+                        drone.state = "returningToBase";
+                    }
+                    break;
+                    
+                case "returningToBase":
+                    const basePosition = new BABYLON.Vector3(0, 0.5, 0);
+                    const direction = BABYLON.Vector3.Normalize(
+                        basePosition.subtract(drone.position)
+                    );
+                    drone.position.addInPlace(direction.scale(DRONE_SPEED));
+                    
+                    // Check if reached base
+                    const distanceToBase = BABYLON.Vector3.Distance(drone.position, basePosition);
+                    if (distanceToBase < 2) {
+                        // Deposit resources
+                        if (drone.carryingAmount > 0 && currentStorage + drone.carryingAmount <= baseCapacity) {
+                            resources[drone.carryingResource] += drone.carryingAmount;
+                            currentStorage += drone.carryingAmount;
+                            drone.carryingAmount = 0;
+                            drone.carryingResource = null;
+                        }
+                        drone.state = "idle";
+                    }
+                    break;
+            }
+        }
+        
+        // Assign task to drone
+        function assignDroneTask(drone) {
+            if (planets.length > 0 && currentStorage < baseCapacity) {
+                // Find closest planet that still has resources
+                let closestPlanet = null;
+                let closestDistance = Infinity;
+                
+                for (let i = 0; i < planets.length; i++) {
+                    const planet = planets[i];
+                    if (planet.resourceAmount > 0) {
+                        const distance = BABYLON.Vector3.Distance(drone.position, planet.position);
+                        if (distance < closestDistance) {
+                            closestDistance = distance;
+                            closestPlanet = planet;
+                        }
+                    }
+                }
+                
+                if (closestPlanet) {
+                    drone.targetPlanet = closestPlanet;
+                    drone.state = "movingToPlanet";
+                }
+            }
+        }
+        
+        // Update HUD
+        function updateHUD() {
+            document.getElementById("ironCount").textContent = Math.floor(resources.iron);
+            document.getElementById("copperCount").textContent = Math.floor(resources.copper);
+            document.getElementById("zincCount").textContent = Math.floor(resources.zinc);
+            document.getElementById("storageCapacity").textContent = baseCapacity;
+            document.getElementById("currentStorage").textContent = Math.floor(currentStorage);
+            document.getElementById("droneCount").textContent = drones.length;
+        }
+        
+        // Update drone list in UI
+        function updateDroneList() {
+            const droneList = document.getElementById("droneList");
+            droneList.innerHTML = "";
+            
+            for (let i = 0; i < drones.length; i++) {
+                const drone = drones[i];
+                const droneElement = document.createElement("div");
+                droneElement.innerHTML = `Drone ${drone.id}: ${drone.state}`;
+                if (drone.carryingResource) {
+                    droneElement.innerHTML += ` (${Math.floor(drone.carryingAmount)} ${drone.carryingResource})`;
+                }
+                droneList.appendChild(droneElement);
+            }
+        }
+        
+        // Check if drone can be built
+        function checkDroneButton() {
+            const button = document.getElementById("buildDroneBtn");
+            if (resources.iron >= 50 && resources.copper >= 30 && resources.zinc >= 20) {
+                button.disabled = false;
+            } else {
+                button.disabled = true;
+            }
+        }
+        
+        // Event listeners for UI
+        document.getElementById("buildDroneBtn").addEventListener("click", function() {
+            const scene = engine.scenes[0];
+            createDrone(scene);
+        });
+        
+        // Create and run the scene
+        const scene = createScene();
+        engine.runRenderLoop(function() {
+            scene.render();
+        });
+        
+        // Resize the engine on window resize
+        window.addEventListener("resize", function() {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viking Survival Game</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlays -->
+    <div id="game-ui">
+
+        <!-- Initial Loading / Blocker / Instructions -->
+        <div id="blocker"> <!-- Covers canvas until game loads/starts -->
+             <!-- Maybe loading indicator here -->
+             <div style="font-size: 1.2em; color: #ccc;">Loading...</div>
+        </div>
+        <div id="instructions" style="display: none;"> <!-- Click to play prompt -->
+            Click to Play
+        </div>
+
+        <!-- Main Menu -->
+        <div id="main-menu" style="display: none;"> <!-- Hidden initially, shown by JS -->
+            <div class="menu-container">
+                <h2>Viking Survival</h2>
+                <button id="start-sp-btn">Single Player</button>
+                <button id="start-mp-btn">Multiplayer</button>
+                <button id="options-btn">Options</button>
+                <button id="exit-btn">Exit</button>
+            </div>
+        </div>
+
+        <!-- Multiplayer Menu -->
+        <div id="multiplayer-menu" class="menu" style="display: none;">
+             <div class="menu-container">
+                <h2>Multiplayer</h2>
+                <button id="host-game-btn">Host Game</button>
+                <button id="join-game-btn">Join Game</button>
+                <button id="back-to-main">Back</button>
+
+                <!-- Host Config -->
+                <div id="server-config" style="display: none; margin-top: 20px; border-top: 1px solid #666; padding-top: 10px;">
+                    <h3>Host Settings</h3>
+                    <label for="server-name">Server Name:</label>
+                    <input type="text" id="server-name" value="My Viking World">
+                    <label for="server-password">Password (optional):</label>
+                    <input type="password" id="server-password">
+                    <label for="max-players">Max Players:</label>
+                    <select id="max-players">
+                        <option>2</option><option selected>4</option><option>8</option><option>10</option>
+                    </select>
+                    <button id="start-host-btn">Start Hosting</button>
+                </div>
+
+                <!-- Join Config -->
+                <div id="join-server" style="display: none; margin-top: 20px; border-top: 1px solid #666; padding-top: 10px;">
+                    <h3>Join Server</h3>
+                     <div id="server-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #555; margin-bottom: 10px; padding: 5px; text-align: left; background: rgba(0,0,0,0.2);">
+                         <!-- Server list populated by JS -->
+                         <p style="color: #aaa; text-align: center;">Searching for servers...</p>
+                     </div>
+                    <label for="server-address">Server Address/Name:</label>
+                    <input type="text" id="server-address">
+                    <label for="join-password">Password (if required):</label>
+                    <input type="password" id="join-password">
+                    <button id="connect-btn">Connect</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Options Menu -->
+        <div id="options-menu" class="menu" style="display: none;">
+            <div class="menu-container">
+                 <h2>Options</h2>
+                 <button id="close-options">X</button> <!-- Close Button -->
+                 <div class="option-group">
+                     <label for="graphics-quality">Graphics Quality</label>
+                     <select id="graphics-quality">
+                         <option value="low">Low</option>
+                         <option value="medium">Medium</option>
+                         <option value="high">High</option>
+                     </select>
+                 </div>
+                 <div class="option-group">
+                     <label for="render-distance">Render Distance: <span id="distance-value">300</span></label>
+                     <input type="range" id="render-distance" min="100" max="500" step="50">
+                 </div>
+                 <div class="option-group">
+                     <label for="sound-volume">Sound Volume</label>
+                     <input type="range" id="sound-volume" min="0" max="1" step="0.1">
+                 </div>
+                 <div class="option-group">
+                     <label for="music-volume">Music Volume</label>
+                     <input type="range" id="music-volume" min="0" max="1" step="0.1">
+                 </div>
+                 <div class="option-group">
+                     <label for="mouse-sensitivity">Mouse Sensitivity</label>
+                     <input type="range" id="mouse-sensitivity" min="0.001" max="0.005" step="0.0005">
+                 </div>
+                 <div class="option-group">
+                     <label for="invert-y">Invert Y</label>
+                     <input type="checkbox" id="invert-y">
+                 </div>
+                 <button id="apply-options">Apply</button>
+            </div>
+        </div>
+
+        <!-- Pause Menu -->
+        <div id="pause-menu" class="menu" style="display: none;">
+             <div class="menu-container">
+                <h2>Game Paused</h2>
+                <button id="resume-btn">Resume</button>
+                <button id="options-pause-btn">Options</button>
+                <button id="exit-to-menu-btn">Exit to Menu</button>
+            </div>
+        </div>
+
+        <!-- Death Screen -->
+        <div id="death-screen" class="menu"> <!-- Made class="menu" -->
+            <div class="menu-container">
+                <h2>You Died!</h2>
+                <!-- Add stats/info? -->
+                <button id="respawn-btn">Respawn</button>
+                <button id="exit-death-btn">Exit to Menu</button>
+            </div>
+        </div>
+
+
+        <!-- In-Game HUD Elements -->
+        <div id="hud">
+            <div class="hud-bar"><div id="health" style="width: 100%;"></div></div>
+            <div class="hud-bar"><div id="stamina" style="width: 100%;"></div></div>
+        </div>
+
+        <!-- Action Bar -->
+        <div id="action-bar">
+            <div class="action-slot selected" data-item="hand"><div class="action-item">✋</div></div>
+            <div class="action-slot" data-item="axe"><div class="action-item">🪓</div></div>
+            <div class="action-slot" data-item="pickaxe"><div class="action-item">⛏️</div></div>
+            <div class="action-slot" data-item="hammer"><div class="action-item">🔨</div></div>
+            <div class="action-slot" data-item="sword"><div class="action-item">⚔️</div></div>
+            <div class="action-slot" data-item="shield"><div class="action-item">🛡️</div></div>
+            <div class="action-slot" data-item="bow"><div class="action-item">🏹</div></div>
+            <div class="action-slot" data-item="food"><div class="action-item">🍖</div></div>
+        </div>
+
+        <!-- Inventory Screen -->
+        <div id="inventory">
+             <button id="close-inventory">X</button>
+             <h2>Inventory</h2>
+             <div class="inventory-sections" style="display: flex; gap: 20px;">
+                 <div class="player-inventory" style="flex: 2;">
+                     <h3>Your Items</h3>
+                     <div class="inventory-grid">
+                         <!-- Slots generated by JS -->
+                     </div>
+                 </div>
+                 <div class="player-equipment" style="flex: 1;">
+                     <h3>Equipment</h3>
+                     <!-- Equipment slots (head, chest, legs, etc.) -->
+                     <div class="equipment-slot" data-slot-type="head">Head</div>
+                     <div class="equipment-slot" data-slot-type="chest">Chest</div>
+                     <div class="equipment-slot" data-slot-type="legs">Legs</div>
+                     <div class="equipment-slot" data-slot-type="accessory">Accessory</div>
+                 </div>
+             </div>
+         </div>
+
+
+        <!-- Building Menu -->
+        <div id="building-menu">
+            <button id="close-building">X</button>
+            <h2>Building (Hammer)</h2>
+            <div class="building-categories">
+                <button class="category-btn selected" data-category="foundations">Foundations</button>
+                <button class="category-btn" data-category="walls">Walls</button>
+                <button class="category-btn" data-category="roofs">Roofs</button>
+                <button class="category-btn" data-category="doors">Doors</button>
+                 <button class="category-btn" data-category="furniture">Furniture</button>
+                <!-- <button class="category-btn" data-category="decorations">Decorations</button> -->
+            </div>
+            <div class="building-items">
+                <!-- Items generated by JS -->
+            </div>
+        </div>
+         <div id="build-mode-indicator">Hammer Equipped - Build Mode</div>
+
+        <!-- Crafting Menu -->
+        <div id="crafting">
+             <button id="close-crafting">X</button>
+             <h2>Crafting</h2> <!-- Title updated by JS -->
+             <div class="crafting-categories">
+                 <button class="category-btn selected" data-category="tools">Tools</button>
+                 <button class="category-btn" data-category="weapons">Weapons</button>
+                 <button class="category-btn" data-category="armor">Armor</button>
+                 <button class="category-btn" data-category="misc">Misc</button>
+             </div>
+             <div class="crafting-items">
+                 <!-- Items generated by JS -->
+             </div>
+         </div>
+
+        <!-- Boss Altar Menu -->
+        <div id="boss-altar" style="display: none;"> <!-- Added display:none -->
+             <button id="close-altar">X</button>
+             <h2>Ancient Altar</h2>
+             <div id="required-items">
+                 <p>Offer items to summon the ancient evil:</p>
+                 <div class="required-item">
+                     <div class="item-icon">🏆</div> <!-- Example icon -->
+                     <div class="item-name">Ancient Trophy</div>
+                     <div class="item-count">0/3</div> <!-- Updated by JS -->
+                 </div>
+                 <!-- Add more required items -->
+             </div>
+             <button id="summon-boss" disabled>Summon</button> <!-- Enabled by JS when items met -->
+         </div>
+
+
+        <!-- Time Indicator & Mini-map -->
+        <div id="time-indicator"><div id="sun-moon"></div><div id="time-progress"></div></div>
+        <div id="mini-map"><canvas id="map-canvas" width="150" height="150"></canvas></div>
+
+        <!-- Floating UI -->
+        <div id="interaction-prompt">Press E</div>
+        <div id="damage-overlay"></div>
+        <div id="game-messages"></div>
+
+        <!-- Weather Effects (Optional) -->
+        <!-- <div id="weather-effects"></div> -->
+
+    </div> <!-- End #game-ui -->
+
+    <!-- Scripts -->
+    <!-- 1. Import Map for Local Libraries -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./libs/three/three.module.js",
+                "three/addons/": "./libs/three/addons/",
+                "simplex-noise": "./libs/simplex-noise/simplex-noise.js"
+            }
+        }
+    </script>
+
+    <!-- 2. Game Scripts (modular) -->
+    <script type="module" src="js/main.js"></script>
+
+</body>
+</html>

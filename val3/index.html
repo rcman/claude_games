@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viking Survival - A Valheim-inspired Game</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="ui">
+        <div id="health-bar"><div id="health-fill" style="width: 100%;"></div></div>
+        <div id="stamina-bar"><div id="stamina-fill" style="width: 100%;"></div></div>
+        <div id="food-status">Food: 100%</div>
+    </div>
+    
+    <div id="hotbar">
+        <div class="hotbar-slot selected"></div>
+        <div class="hotbar-slot"></div>
+        <div class="hotbar-slot"></div>
+        <div class="hotbar-slot"></div>
+        <div class="hotbar-slot"></div>
+        <div class="hotbar-slot"></div>
+    </div>
+    
+    <div id="inventory">
+        <h2>Inventory</h2>
+        <div id="inventory-slots">
+            <!-- 30 inventory slots -->
+        </div>
+        <div id="equipment">
+            <h3>Equipment</h3>
+            <!-- Equipment slots -->
+        </div>
+    </div>
+    
+    <div id="crafting">
+        <h2>Crafting</h2>
+        <div id="recipe-list">
+            <!-- Recipe list will be populated dynamically -->
+        </div>
+    </div>
+    
+    <div id="building-mode">
+        <h2>Building</h2>
+        <div id="building-pieces">
+            <!-- Building pieces will be populated dynamically -->
+        </div>
+    </div>
+    
+    <div id="debug-info">
+        FPS: 60 | Position: X:0 Y:0 Z:0
+    </div>
+
+    <!-- Load Three.js -->
+    <script src="three.min.js"></script>
+    <!-- First-person controls -->
+    <script src="PointerLockControls.min.js"></script>
+    <!-- For loading 3D models -->
+    <script src="GLTFLoader.js"></script>
+    <!-- For procedural terrain -->
+    <script src="perlin.min.js"></script>
+
+    <!-- Game Scripts -->
+    <script src="js/config.js"></script>
+	<script src="js/ui.js"></script>
+    <script src="js/gameState.js"></script>
+    <script src="js/biomes.js"></script>
+    <script src="js/terrain.js"></script>
+    
+    <script src="js/player.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/building.js"></script>
+    <script src="js/enemies.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/interactable.js"></script>
+    <script src="js/environment.js"></script>
+    <script src="js/boss.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/farming.js"></script>
+    <script src="js/sailing.js"></script>
+    <script src="js/portals.js"></script>
+	<script src="js/Perlin.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

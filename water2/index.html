@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>3D Open World Survival Game</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #healthBar {
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            width: 200px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+        }
+        #healthFill {
+            width: 100%;
+            height: 100%;
+            background-color: #ff0000;
+            border-radius: 10px;
+        }
+        #inventoryPanel {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #loadingScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            color: white;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>Loading Open World Survival</h1>
+        <p>Please wait while the world generates...</p>
+    </div>
+    <canvas id="renderCanvas"></canvas>
+    <div id="healthBar"><div id="healthFill"></div></div>
+    <div id="inventoryPanel">
+        <h3>Inventory</h3>
+        <div id="inventoryItems">
+            Wood: 0<br>
+            Stone: 0<br>
+            Food: 0
+        </div>
+    </div>
+    <div id="instructions">
+        <strong>Controls:</strong><br>
+        W, A, S, D - Move<br>
+        Space - Jump<br>
+        E - Collect resource<br>
+        Shift - Run<br>
+        Mouse - Look around
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/5.0.0/babylon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-gui/5.0.0/babylonjs.gui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-materials/5.0.0/babylonjs.materials.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-procedural-textures/5.0.0/babylonjs.proceduralTextures.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-loaders/5.0.0/babylonjs.loaders.min.js"></script>
+
+    <script>
+        // Game variables
+        const WORLD_SIZE = 1000;
+        const CHUNK_SIZE = 200;
+        let health = 100;
+        let inventory = {
+            wood: 0,
+            stone: 0,
+            food: 0
+        };
+        let isNearResource = false;
+        let currentResource = null;
+        let playerSpeed = 0.5;
+        let runSpeed = 1.0;
+
+        // Main game initialization
+        window.addEventListener('DOMContentLoaded', function() {
+            // Create canvas and engine
+            const canvas = document.getElementById('renderCanvas');
+            const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+            
+            // Create the scene
+            const scene = createScene(engine, canvas);
+            
+            // Run the render loop
+            engine.runRenderLoop(() => {
+                scene.render();
+            });
+            
+            // Handle browser resize
+            window.addEventListener('resize', function() {
+                engine.resize();
+            });
+        });
+
+        // Create the game scene
+        function createScene(engine, canvas) {
+            const scene = new BABYLON.Scene(engine);
+            
+            // Setup camera
+            const camera = new BABYLON.FreeCamera('playerCamera', new BABYLON.Vector3(0, 5, -10), scene);
+            camera.setTarget(BABYLON.Vector3.Zero());
+            camera.attachControl(canvas, true);
+            camera.applyGravity = true;
+            camera.checkCollisions = true;
+            camera.ellipsoid = new BABYLON.Vector3(1, 1.5, 1);
+            camera.minZ = 0.1;
+            camera.speed = playerSpeed;
+            camera.keysUp.push(87);    // W
+            camera.keysDown.push(83);  // S
+            camera.keysLeft.push(65);  // A
+            camera.keysRight.push(68); // D
+            
+            // Setup lighting
+            const light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.7;
+            const dirLight = new BABYLON.DirectionalLight('dirLight', new BABYLON.Vector3(-1, -2, -1), scene);
+            dirLight.position = new BABYLON.Vector3(20, 40, 20);
+            dirLight.intensity = 0.8;
+            
+            // Create Sky
+            const skybox = BABYLON.MeshBuilder.CreateBox('skyBox', { size: 1000 }, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial('skyBoxMaterial', scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture('https://cdnjs.cloudflare.com/ajax/libs/babylonjs-textures/5.0.0/skyboxes/skybox', scene);
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.disableLighting = true;
+            skybox.material = skyboxMaterial;
+            skybox.infiniteDistance = true;
+            
+            // Generate terrain with heightmap
+            createGroundTerrain(scene);
+            
+            // Create water
+            createWater(scene);
+            
+            // Add resources
+            generateResources(scene);
+            
+            // Add environment elements
+            addEnvironment(scene);
+            
+            // Physics
+            scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
+            
+            // Game logic and interaction
+            setupGameLogic(scene, camera);
+            
+            // Hide loading screen when ready
+            scene.executeWhenReady(function() {
+                document.getElementById('loadingScreen').style.display = 'none';
+            });
+            
+            return scene;
+        }
+
+        // Create ground terrain with hills and valleys
+        function createGroundTerrain(scene) {
+            // Create ground material
+            const groundMaterial = new BABYLON.StandardMaterial('groundMaterial', scene);
+            groundMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.7, 0.2);
+            
+            // Create sand material
+            const sandMaterial = new BABYLON.StandardMaterial('sandMaterial', scene);
+            sandMaterial.diffuseColor = new BABYLON.Color3(0.83, 0.79, 0.57);
+            
+            // Create grass material
+            const grassMaterial = new BABYLON.StandardMaterial('grassMaterial', scene);
+            grassMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.1);
+            
+            // Create multimat for blending
+            const groundMultiMat = new BABYLON.MultiMaterial('groundMultiMat', scene);
+            groundMultiMat.subMaterials.push(sandMaterial);
+            groundMultiMat.subMaterials.push(grassMaterial);
+            
+            // Create ground mesh
+            const ground = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
+                'ground',
+                'https://cdnjs.cloudflare.com/api/placeholder/500/500', // Using placeholder as height map
+                {
+                    width: WORLD_SIZE,
+                    height: WORLD_SIZE,
+                    subdivisions: 100,
+                    minHeight: 0,
+                    maxHeight: 30,
+                    updatable: false
+                },
+                scene
+            );
+            
+            // Apply procedural texturing
+            const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+            groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.1);
+            ground.material = groundMat;
+            
+            // Set physics properties
+            ground.checkCollisions = true;
+            ground.physicsImpostor = new BABYLON.PhysicsImpostor(
+                ground,
+                BABYLON.PhysicsImpostor.HeightmapImpostor,
+                { mass: 0, restitution: 0.5 },
+                scene
+            );
+            
+            return ground;
+        }
+
+        // Create realistic water for lakes/rivers
+        function createWater(scene) {
+            // Create water material
+            const waterMaterial = new BABYLON.WaterMaterial('waterMaterial', scene);
+            waterMaterial.bumpTexture = new BABYLON.Texture('/api/placeholder/512/512', scene); // Water bump texture
+            waterMaterial.windForce = -5;
+            waterMaterial.waveHeight = 0.5;
+            waterMaterial.bumpHeight = 0.1;
+            waterMaterial.waveLength = 0.1;
+            waterMaterial.colorBlendFactor = 0;
+            waterMaterial.waterColor = new BABYLON.Color3(0, 0.3, 0.5);
+            waterMaterial.colorBlendFactor = 0.3;
+            
+            // Add skybox and ground to water reflections
+            waterMaterial.addToRenderList(scene.getMeshByName('skyBox'));
+            waterMaterial.addToRenderList(scene.getMeshByName('ground'));
+            
+            // Create lake mesh
+            const lakeSize = 150;
+            const lake1 = BABYLON.MeshBuilder.CreateGround('lake1', { width: lakeSize, height: lakeSize, subdivisions: 2 }, scene);
+            lake1.position = new BABYLON.Vector3(100, 1, 100);
+            lake1.material = waterMaterial;
+            
+            // Create another lake
+            const lake2 = BABYLON.MeshBuilder.CreateGround('lake2', { width: lakeSize * 1.5, height: lakeSize * 0.8, subdivisions: 2 }, scene);
+            lake2.position = new BABYLON.Vector3(-120, 1, -80);
+            lake2.material = waterMaterial;
+            
+            return [lake1, lake2];
+        }
+
+        // Generate collectible resources (trees, rocks, food)
+        function generateResources(scene) {
+            const resources = [];
+            
+            // Create tree material
+            const treeMaterial = new BABYLON.StandardMaterial('treeMaterial', scene);
+            treeMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.25, 0);
+            
+            // Create leaf material
+            const leafMaterial = new BABYLON.StandardMaterial('leafMaterial', scene);
+            leafMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.8, 0.1);
+            
+            // Create rock material
+            const rockMaterial = new BABYLON.StandardMaterial('rockMaterial', scene);
+            rockMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+            
+            // Create food material
+            const foodMaterial = new BABYLON.StandardMaterial('foodMaterial', scene);
+            foodMaterial.diffuseColor = new BABYLON.Color3(1, 0.1, 0.1);
+            
+            // Generate trees
+            for (let i = 0; i < 50; i++) {
+                const x = (Math.random() * WORLD_SIZE) - WORLD_SIZE/2;
+                const z = (Math.random() * WORLD_SIZE) - WORLD_SIZE/2;
+                
+                // Skip if in lake area
+                if ((Math.abs(x - 100) < 100 && Math.abs(z - 100) < 100) || 
+                    (Math.abs(x + 120) < 120 && Math.abs(z + 80) < 80)) {
+                    continue;
+                }
+                
+                // Get ground height at this position
+                const groundHeight = getGroundHeight(scene, x, z);
+                
+                // Create tree trunk
+                const trunk = BABYLON.MeshBuilder.CreateCylinder('tree' + i, { height: 6, diameter: 1 }, scene);
+                trunk.position.x = x;
+                trunk.position.y = groundHeight + 3;
+                trunk.position.z = z;
+                trunk.material = treeMaterial;
+                
+                // Create tree leaves
+                const leaves = BABYLON.MeshBuilder.CreateSphere('leaves' + i, { segments: 4, diameter: 5 }, scene);
+                leaves.position.x = x;
+                leaves.position.y = groundHeight + 7;
+                leaves.position.z = z;
+                leaves.material = leafMaterial;
+                leaves.scaling = new BABYLON.Vector3(1, 1.5, 1);
+                
+                // Create tree group
+                const tree = BABYLON.Mesh.MergeMeshes([trunk, leaves], true, true);
+                tree.name = 'resource_wood_' + i;
+                tree.isPickable = true;
+                tree.checkCollisions = true;
+                
+                resources.push(tree);
+            }
+            
+            // Generate rocks
+            for (let i = 0; i < 30; i++) {
+                const x = (Math.random() * WORLD_SIZE) - WORLD_SIZE/2;
+                const z = (Math.random() * WORLD_SIZE) - WORLD_SIZE/2;
+                
+                // Skip if in lake area
+                if ((Math.abs(x - 100) < 100 && Math.abs(z - 100) < 100) || 
+                    (Math.abs(x + 120) < 120 && Math.abs(z + 80) < 80)) {
+                    continue;
+                }
+                
+                // Get ground height at this position
+                const groundHeight = getGroundHeight(scene, x, z);
+                
+                // Create rock
+                const rock = BABYLON.MeshBuilder.CreateIcoSphere('rock' + i, { radius: 1 + Math.random() * 2, subdivisions: 1 }, scene);
+                rock.position.x = x;
+                rock.position.y = groundHeight + 1;
+                rock.position.z = z;
+                rock.material = rockMaterial;
+                rock.rotation.x = Math.random();
+                rock.rotation.y = Math.random();
+                rock.rotation.z = Math.random();
+                rock.scaling.x = 1 + Math.random();
+                rock.scaling.y = 0.8 + Math.random() * 0.5;
+                rock.scaling.z = 1 + Math.random();
+                rock.name = 'resource_stone_' + i;
+                rock.isPickable = true;
+                rock.checkCollisions = true;
+                
+                resources.push(rock);
+            }
+            
+            // Generate food (berries, etc.)
+            for (let i = 0; i < 20; i++) {
+                const x = (Math.random() * WORLD_SIZE) - WORLD_SIZE/2;
+                const z = (Math.random() * WORLD_SIZE) - WORLD_SIZE/2;
+                
+                // Skip if in lake area
+                if ((Math.abs(x - 100) < 100 && Math.abs(z - 100) < 100) || 
+                    (Math.abs(x + 120) < 120 && Math.abs(z + 80) < 80)) {
+                    continue;
+                }
+                
+                // Get ground height at this position
+                const groundHeight = getGroundHeight(scene, x, z);
+                
+                // Create food bush
+                const foodBush = BABYLON.MeshBuilder.CreateSphere('food' + i, { diameter: 1 }, scene);
+                foodBush.position.x = x;
+                foodBush.position.y = groundHeight + 0.5;
+                foodBush.position.z = z;
+                foodBush.material = foodMaterial;
+                foodBush.name = 'resource_food_' + i;
+                foodBush.isPickable = true;
+                
+                resources.push(foodBush);
+            }
+            
+            return resources;
+        }
+
+        // Add environment elements (Grass, foliage, etc.)
+        function addEnvironment(scene) {
+            // Add ambient sounds
+            // Add day/night cycle
+            // Add weather system
+            // This section would be expanded in a full implementation
+        }
+
+        // Setup game logic and interaction
+        function setupGameLogic(scene, camera) {
+            // Track player health
+            const healthBar = document.getElementById('healthFill');
+            const inventoryItems = document.getElementById('inventoryItems');
+            
+            // Keyboard handling for sprint
+            let isRunning = false;
+            scene.onKeyboardObservable.add((kbInfo) => {
+                if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+                    if (kbInfo.event.key === 'Shift') {
+                        isRunning = true;
+                        camera.speed = runSpeed;
+                    }
+                    
+                    // Collect resources with E key
+                    if (kbInfo.event.key === 'e' && isNearResource && currentResource) {
+                        collectResource(currentResource);
+                    }
+                } else if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYUP) {
+                    if (kbInfo.event.key === 'Shift') {
+                        isRunning = false;
+                        camera.speed = playerSpeed;
+                    }
+                }
+            });
+            
+            // Resource collection
+            function collectResource(resource) {
+                if (resource.name.includes('resource_wood')) {
+                    inventory.wood += 5;
+                } else if (resource.name.includes('resource_stone')) {
+                    inventory.stone += 3;
+                } else if (resource.name.includes('resource_food')) {
+                    inventory.food += 1;
+                    health = Math.min(100, health + 10);
+                    updateHealthBar();
+                }
+                
+                // Update inventory display
+                updateInventory();
+                
+                // Make resource disappear
+                resource.setEnabled(false);
+                isNearResource = false;
+                currentResource = null;
+                
+                // Respawn resource after time
+                setTimeout(() => {
+                    resource.setEnabled(true);
+                }, 60000); // 1 minute respawn
+            }
+            
+            // Update health bar
+            function updateHealthBar() {
+                healthBar.style.width = health + '%';
+            }
+            
+            // Update inventory display
+            function updateInventory() {
+                inventoryItems.innerHTML = `Wood: ${inventory.wood}<br>Stone: ${inventory.stone}<br>Food: ${inventory.food}`;
+            }
+            
+            // Resource detection
+            scene.registerBeforeRender(() => {
+                // Slowly drain health over time (survival mechanics)
+                if (scene.getMeshByName('ground') && scene.getMeshByName('ground').physicsImpostor) {
+                    health -= 0.01;
+                    if (health <= 0) {
+                        health = 0;
+                        // Game over logic would go here
+                    }
+                    
+                    // Update health bar every second
+                    if (Math.floor(scene.getEngine().getFps()) % 60 === 0) {
+                        updateHealthBar();
+                    }
+                }
+                
+                // Check for nearby resources
+                let foundResource = false;
+                scene.meshes.forEach(mesh => {
+                    if (mesh.name.includes('resource_')) {
+                        const distance = BABYLON.Vector3.Distance(camera.position, mesh.position);
+                        if (distance < 3 && mesh.isEnabled()) {
+                            foundResource = true;
+                            currentResource = mesh;
+                            
+                            // Display interaction message (would use GUI in full implementation)
+                            if (!isNearResource) {
+                                console.log("Press E to collect " + mesh.name.split('_')[1]);
+                            }
+                            
+                            isNearResource = true;
+                        }
+                    }
+                });
+                
+                if (!foundResource) {
+                    isNearResource = false;
+                    currentResource = null;
+                }
+            });
+        }
+
+        // Helper function: get ground height at position
+        function getGroundHeight(scene, x, z) {
+            // Simple estimation for this demo
+            // In a real game, you would use raycasting to get the exact height
+            return 2 + (Math.sin(x/50) + Math.cos(z/50)) * 5;
+        }
+    </script>
+</body>
+</html>

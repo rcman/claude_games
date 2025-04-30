@@ -1,0 +1,154 @@
+// main.js - Main entry point for the game
+import * as THREE from 'three';
+import { init, resetGameStateForNewGame } from './core/setup.js';
+import { startAnimationLoop } from './core/render.js';
+import { setupUI } from './core/ui.js';
+import { showGameMessage } from './utils/helpers.js';
+import { addItemToInventory, removeItemFromInventory, countItemInInventory, checkCraftingResources } from './player/inventory.js';
+import { initBuilding } from './building/building.js';
+
+// Make inventory functions globally available to resolve circular dependencies
+window.addItemToInventory = addItemToInventory;
+window.removeItemFromInventory = removeItemFromInventory;
+window.countItemInInventory = countItemInInventory;
+window.checkCraftingResources = checkCraftingResources;
+
+// Game State Object - Central state store accessed by all modules
+export const gameState = {
+    isGameActive: false,
+    settings: {
+        renderDistance: 300,
+        graphicsQuality: 'medium',
+        soundVolume: 0.8,
+        musicVolume: 0.5,
+        sensitivityX: 0.002,
+        sensitivityY: 0.002,
+        invertY: false,
+    },
+    player: {
+        position: new THREE.Vector3(0, 10, 5),
+        velocity: new THREE.Vector3(),
+        onGround: false,
+        health: 100,
+        maxHealth: 100,
+        stamina: 100,
+        maxStamina: 100,
+        isRunning: false,
+        isAttacking: false,
+        attackStartTime: 0,
+        inventory: Array(24).fill(null),
+        selectedTool: 'hand',
+        cooldowns: {
+            attack: 0,
+            jump: 0,
+        },
+    },
+    world: {
+        seed: Math.random(),
+        time: 9000, // Start morning (6 AM = 6000, Noon = 12000, 6 PM = 18000, Midnight = 0/24000)
+    },
+    multiplayer: {
+        isActive: false,
+        isHost: false,
+        playerId: null,
+        serverName: '',
+        maxPlayers: 4,
+        players: {},
+    },
+};
+
+// --- Main Menu & Game Start ---
+export function startSinglePlayer() {
+    console.log("Starting Single Player Game...");
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('blocker').style.display = 'none';
+    document.getElementById('instructions').style.display = 'block';
+
+    // Reset necessary game state for a new game
+    resetGameStateForNewGame();
+
+    // Game becomes active when pointer locks (handled by lock listener)
+    // Position player at spawn is handled in resetGameStateForNewGame
+}
+
+// --- Multiplayer Stubs ---
+export function showMultiplayerMenu() { 
+    console.warn("Multiplayer not fully implemented."); 
+    document.getElementById('multiplayer-menu').style.display = 'block'; 
+    document.getElementById('main-menu').style.display = 'none'; 
+}
+
+export function hideMultiplayerMenu() { 
+    document.getElementById('multiplayer-menu').style.display = 'none'; 
+    document.getElementById('main-menu').style.display = 'flex';
+}
+
+export function showHostConfig() { 
+    console.warn("Multiplayer not fully implemented."); 
+    document.getElementById('server-config').style.display = 'block'; 
+    document.getElementById('join-server').style.display = 'none'; 
+}
+
+export function showJoinServer() { 
+    console.warn("Multiplayer not fully implemented."); 
+    document.getElementById('server-config').style.display = 'none'; 
+    document.getElementById('join-server').style.display = 'block'; 
+}
+
+export function startHostedGame() { 
+    console.warn("Multiplayer not fully implemented."); 
+    alert("Hosting not implemented."); 
+    hideMultiplayerMenu(); 
+}
+
+export function connectToServer() { 
+    console.warn("Multiplayer not fully implemented."); 
+    alert("Connecting not implemented."); 
+    hideMultiplayerMenu(); 
+}
+
+export function exitGame() { 
+    if(confirm('Exit Game?')) { 
+        window.close(); 
+    } 
+}
+
+// Initialize building module with needed references
+export function initModules(terrain) {
+    // Pass terrain reference and inventory functions to building module
+    initBuilding(terrain, {
+        removeItemFromInventory,
+        addItemToInventory,
+        closeInventory,
+        closeCraftingMenu,
+        checkCraftingResources,
+        countItemInInventory
+    });
+}
+
+// --- Start the game ---
+// Wait for DOM load and add listener to main menu button
+document.addEventListener('DOMContentLoaded', () => {
+    // Show main menu initially
+    document.getElementById('main-menu').style.display = 'flex';
+    document.getElementById('blocker').style.display = 'flex';
+
+    // Add main menu button listeners
+    document.getElementById('start-sp-btn')?.addEventListener('click', () => {
+        // We call init() only ONCE when the game starts for the first time
+        if (!window.renderer) { // Check if init has already run
+            init(); // Initialize THREE.js, world, controls etc.
+        }
+        startSinglePlayer();
+    });
+    
+    document.getElementById('start-mp-btn')?.addEventListener('click', showMultiplayerMenu);
+    document.getElementById('options-btn')?.addEventListener('click', showOptionsMenu);
+    document.getElementById('exit-btn')?.addEventListener('click', exitGame);
+
+    // Add other essential UI listeners that need to exist early
+    setupUI();
+});
+
+// Initialize the animation loop
+startAnimationLoop();

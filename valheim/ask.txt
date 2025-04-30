@@ -1,0 +1,18 @@
+# ASK
+
+
+Make me survival and exploration game developed in html and three.js. Cooperative gameplay, and depth of content. 
+
+Core Gameplay
+Setting: Players are a procedurally generated purgatory inspired by Viking culture, where they must battle mythical creatures and bosses to prove their worth.
+
+Game Modes: Supports single-player and multiplayer modes for up to 10 players, with the option to host dedicated servers for persistent worlds.
+
+Combat System: Features stamina-based combat that rewards preparation and skill. Players can utilize various weapon types with unique attacks, blocking styles, ranged combat, dodges, and parries to fight enemies.
+
+Key Features
+Procedurally-Generated World: Explore a vast world with distinct biomes, each offering unique enemies, resources, and crafting recipes.
+
+Building System: Construct and customize Viking longhouses and bases with a detailed building system that considers structural integrity and ventilation.
+
+Crafting & Survival: Gather materials to craft weapons, armor, tools, and  defenses. Grow crops, prepare food.

@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daytona USA-inspired Racing Game</title>
+    <style>
+        /* CSS remains the same */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+            background-color: #000;
+            font-family: 'Arial', sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #speedometer {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        #gear {
+            position: absolute;
+            bottom: 70px;
+            right: 20px;
+            color: white;
+            font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        #countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 120px; /* Made bigger */
+            font-weight: bold;
+            text-shadow: 0 0 15px rgba(0, 0, 0, 1);
+            display: none;
+            z-index: 10;
+        }
+        #lap {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        #position {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        #time {
+            position: absolute;
+            top: 70px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        #gameTitle {
+            position: absolute;
+            top: 45%; /* Adjusted */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffcc00;
+            font-size: 72px;
+            font-weight: bold;
+            text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.8);
+            text-align: center;
+            font-family: 'Impact', sans-serif;
+            z-index: 5;
+        }
+        #instructions {
+            position: absolute;
+            top: 65%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 80%;
+            z-index: 5;
+        }
+        .key {
+            display: inline-block;
+            background-color: #444;
+            border: 2px solid #666;
+            border-radius: 5px;
+            padding: 2px 8px;
+            margin: 0 2px;
+        }
+        #finishMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: yellow;
+            font-size: 96px;
+            font-weight: bold;
+            text-shadow: 0 0 15px rgba(0, 0, 0, 1);
+            display: none;
+            z-index: 10;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="speedometer">Speed: 0 MPH</div>
+    <div id="gear">Gear: N</div>
+    <div id="countdown">3</div>
+    <div id="lap">Lap: 0/3</div>
+    <div id="position">Position: 8th</div>
+    <div id="time">Time: 00:00.00</div>
+    <div id="gameTitle">RACING CHAMPIONS</div>
+    <div id="instructions">
+        <p>Press <span class="key">SPACE</span> to start the game</p>
+        <p>Controls: <span class="key">↑</span> Accelerate, <span class="key">↓</span> Brake, <span class="key">←</span> <span class="key">→</span> Steer</p>
+        <p>Press <span class="key">Z</span> to shift up, <span class="key">X</span> to shift down</p>
+    </div>
+    <div id="finishMessage">FINISH!</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/5.44.0/babylon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-loaders/5.44.0/babylonjs.loaders.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-materials/5.44.0/babylonjs.materials.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-gui/5.44.0/babylon.gui.min.js"></script>
+	 <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script>
+        // Game state variables
+        let gameStarted = false;
+        let raceStarted = false; // After countdown
+        let raceFinished = false;
+        let gameTime = 0;
+        let currentLap = 0;
+        const totalLaps = 3;
+        let playerCarData; // Will hold the player car object
+        let opponentCarsData = []; // Will hold opponent car objects
+        let trackInfo; // Will hold track data
+        let lastCheckpointPassed = -1; // Track checkpoints passed in order
+
+        // Car physics variables
+        let speed = 0; // Current speed in MPH
+        let maxSpeed = 200; // Adjusted max speed
+        let acceleration = 1.5; // Faster acceleration
+        let deceleration = 0.5; // Natural drag/friction
+        let braking = 3.0; // Stronger braking
+        let handling = 0.03; // Turning sensitivity
+        let driftFactor = 0.95; // How much speed is kept when drifting sideways
+        let grip = 0.05; // How quickly car realigns to forward direction when drifting
+        let currentGear = 0; // 0 = neutral, 1-6 are gears
+        const gears = ['N', '1', '2', '3', '4', '5', '6'];
+        const gearSpeeds = [0, 40, 75, 110, 145, 180, 200]; // Max speed in each gear (MPH)
+        const gearAccelerationFactors = [0, 1.0, 0.95, 0.9, 0.85, 0.8, 0.75]; // Acceleration bonus per gear
+
+        // Input state
+        const inputState = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            shiftUp: false,
+            shiftDown: false,
+            start: false
+        };
+
+        // UI elements
+        const speedometerElement = document.getElementById('speedometer');
+        const gearElement = document.getElementById('gear');
+        const countdownElement = document.getElementById('countdown');
+        const lapElement = document.getElementById('lap');
+        const positionElement = document.getElementById('position');
+        const timeElement = document.getElementById('time');
+        const gameTitleElement = document.getElementById('gameTitle');
+        const instructionsElement = document.getElementById('instructions');
+        const finishMessageElement = document.getElementById('finishMessage');
+
+        // Canvas setup
+        const canvas = document.getElementById('renderCanvas');
+        const engine = new BABYLON.Engine(canvas, true);
+        let scene; // Make scene globally accessible
+
+        // Placeholder sounds
+        let engineSound, tireScreechSound;
+
+        // Create scene function
+        const createScene = function() {
+            scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color3(0.6, 0.8, 1); // Sky blue
+
+            // Physics Engine (basic collision, not full vehicle physics)
+            scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
+
+            // Camera setup
+            const camera = new BABYLON.FollowCamera("camera", new BABYLON.Vector3(0, 10, -20), scene);
+            camera.radius = 15; // Distance from target
+            camera.heightOffset = 6; // Height above target
+            camera.rotationOffset = 180; // View from behind
+            camera.cameraAcceleration = 0.03; // Smoothing
+            camera.maxCameraSpeed = 20; // Max speed of camera movement
+            camera.attachControl(canvas, true); // Needed for FollowCamera updates
+
+            // Light setup
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.8;
+
+            const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(0.5, -1, 0.5), scene);
+            dirLight.intensity = 0.8;
+            // Add shadows
+            const shadowGenerator = new BABYLON.ShadowGenerator(1024, dirLight);
+            shadowGenerator.useBlurExponentialShadowMap = true;
+            shadowGenerator.blurKernel = 32;
+
+            // Load sounds (using placeholders - replace URLs with actual files if available)
+            engineSound = new BABYLON.Sound("engineSound", "engine_loop.wav", scene, null, { loop: true, autoplay: false, volume: 0 }); // Start silent
+            tireScreechSound = new BABYLON.Sound("tireScreech", "screech.wav", scene, null, { loop: true, autoplay: false, volume: 0 }); // Start silent
+
+
+            // Create the track with checkpoints
+            trackInfo = createTrack(scene);
+
+            // Create the player car
+            playerCarData = createPlayerCar(scene, shadowGenerator);
+            playerCarData.root.position = trackInfo.startPosition.clone(); // Place at start
+            playerCarData.root.rotation.y = trackInfo.startRotationY; // Orient correctly
+            camera.lockedTarget = playerCarData.root; // Target the root node
+
+            // Create opponent cars
+            opponentCarsData = createOpponentCars(scene, trackInfo, shadowGenerator);
+
+            // Create environment (mountains, trees, etc.)
+            createEnvironment(scene);
+
+            // Set up gameplay logic
+            setupGameplay(scene, playerCarData, camera, trackInfo, opponentCarsData, engineSound, tireScreechSound);
+
+            // Initial UI state
+            updateLapUI();
+            updatePositionUI(playerCarData.racePosition); // Start at 8th
+
+            return scene;
+        }
+
+        // Create track function
+        const createTrack = function(scene) {
+            // Ground
+            const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 1000, height: 1000}, scene);
+            const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
+            groundMaterial.diffuseTexture = new BABYLON.Texture("https://www.babylonjs-playground.com/textures/grass.png", scene); // Grass texture
+            groundMaterial.diffuseTexture.uScale = 50;
+            groundMaterial.diffuseTexture.vScale = 50;
+            groundMaterial.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+            ground.material = groundMaterial;
+            ground.receiveShadows = true;
+
+            // Track path (more points for smoother curves)
+            const trackRadiusX = 150; // Wider oval
+            const trackRadiusZ = 100;
+            const trackWidth = 15;
+            const trackPoints = 200;
+            const trackPath = [];
+            const bankingAngle = Math.PI / 18; // Slight banking on turns
+
+            for (let i = 0; i < trackPoints; i++) {
+                const angle = (i / trackPoints) * Math.PI * 2;
+                let x, z, bank = 0;
+
+                // Simplified Oval Shape
+                 x = Math.cos(angle) * trackRadiusX;
+                 z = Math.sin(angle) * trackRadiusZ;
+
+                 // Add banking on curves (approximate)
+                 if (Math.abs(Math.cos(angle)) < 0.8) { // If on the curved parts
+                     bank = Math.sin(angle) > 0 ? bankingAngle : -bankingAngle; // Bank inwards
+                 }
+
+                trackPath.push({ point: new BABYLON.Vector3(x, 0.1, z), bank: bank });
+            }
+
+            // Create the ribbon mesh with banking
+            const trackPaths = [];
+            const pathCount = 5; // Subdivisions for smooth banking
+            for(let p=0; p<pathCount; p++) {
+                const path = [];
+                const offset = (p - Math.floor(pathCount/2)) * (trackWidth / pathCount);
+                for (let i = 0; i < trackPoints; i++) {
+                    const currentPoint = trackPath[i];
+                    const nextPoint = trackPath[(i + 1) % trackPoints];
+
+                    const direction = nextPoint.point.subtract(currentPoint.point).normalize();
+                    const normal = new BABYLON.Vector3(-direction.z, 0, direction.x); // Perpendicular to path
+
+                    // Apply banking rotation and offset
+                    const bankedPosition = currentPoint.point
+                        .add(normal.scale(offset * Math.cos(currentPoint.bank)))
+                        .add(BABYLON.Vector3.Up().scale(offset * Math.sin(currentPoint.bank)));
+
+                    path.push(bankedPosition);
+                }
+                path.push(path[0].clone()); // Close loop
+                trackPaths.push(path);
+            }
+
+            const track = BABYLON.MeshBuilder.CreateRibbon("track", { pathArray: trackPaths, closeArray: true }, scene);
+            const trackMaterial = new BABYLON.StandardMaterial("trackMaterial", scene);
+            trackMaterial.diffuseTexture = new BABYLON.Texture("https://www.babylonjs-playground.com/textures/asphalt.jpg", scene);
+            trackMaterial.diffuseTexture.uScale = 50;
+            trackMaterial.diffuseTexture.vScale = 5;
+            trackMaterial.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+            track.material = trackMaterial;
+            track.receiveShadows = true;
+
+            // Determine start position and rotation
+             const startPointIndex = 0; // Start on the straight
+             const startPos = trackPath[startPointIndex].point.clone();
+             startPos.y = 0.5; // Slightly above track
+             const nextPos = trackPath[startPointIndex + 1].point;
+             const startDir = nextPos.subtract(startPos).normalize();
+             const startRotY = Math.atan2(startDir.x, startDir.z);
+
+            // Start/Finish Line Visuals
+            const startLinePos = startPos.add(new BABYLON.Vector3(0, -0.39, 0)); // On track surface
+            const finishLinePlane = BABYLON.MeshBuilder.CreatePlane("finishLine", {width: trackWidth, height: 3}, scene);
+            finishLinePlane.material = new BABYLON.StandardMaterial("finishMat", scene);
+            finishLinePlane.material.diffuseTexture = new BABYLON.Texture("https://www.babylonjs-playground.com/textures/checkered.png", scene);
+            finishLinePlane.material.diffuseTexture.vScale = 1;
+            finishLinePlane.material.diffuseTexture.uScale = 5;
+            finishLinePlane.position = startLinePos;
+            finishLinePlane.rotation.x = Math.PI / 2;
+            finishLinePlane.rotation.z = startRotY; // Align with track direction
+
+            // Create checkpoints (invisible)
+            const checkpoints = [];
+            const numCheckpoints = 8;
+            for (let i = 0; i < numCheckpoints; i++) {
+                const checkpointIndex = Math.floor((i / numCheckpoints) * trackPoints);
+                const checkpointPos = trackPath[checkpointIndex].point.clone();
+                checkpointPos.y = 1; // Raise slightly
+
+                const checkpointTrigger = BABYLON.MeshBuilder.CreateBox(`checkpointTrigger${i}`, { width: trackWidth * 1.2, height: 5, depth: 1 }, scene);
+                checkpointTrigger.position = checkpointPos;
+                // Align trigger across the track
+                const nextCheckpointPos = trackPath[(checkpointIndex + 1) % trackPoints].point;
+                const dir = nextCheckpointPos.subtract(checkpointPos).normalize();
+                checkpointTrigger.rotation.y = Math.atan2(dir.x, dir.z);
+                checkpointTrigger.isVisible = false; // Make invisible
+                checkpointTrigger.isPickable = false;
+
+                checkpoints.push({
+                    index: i,
+                    triggerMesh: checkpointTrigger,
+                    position: checkpointPos // Store original position for distance calcs if needed
+                });
+            }
+
+            // Simplify trackPath for AI (just Vector3 points)
+            const simpleTrackPath = trackPath.map(p => p.point);
+
+
+            return {
+                trackMesh: track,
+                trackPath: simpleTrackPath, // Simplified path for AI
+                checkpoints: checkpoints,
+                startPosition: startPos,
+                startRotationY: startRotY,
+                trackLength: BABYLON.Curve3.CreateFromPoints(simpleTrackPath).length() // Approx length
+            };
+        }
+
+        // Create player car function
+        const createPlayerCar = function(scene, shadowGenerator) {
+            // Root node for transformations
+            const carRoot = new BABYLON.TransformNode("playerCarRoot", scene);
+            carRoot.position.y = 0.3; // Adjust base height
+
+            // Car body
+            const carBody = BABYLON.MeshBuilder.CreateBox("playerCarBody", { width: 2, height: 0.8, depth: 4.2 }, scene);
+            carBody.parent = carRoot;
+            carBody.position.y = 0.4;
+
+            const carMaterial = new BABYLON.StandardMaterial("playerCarMaterial", scene);
+            carMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.1, 0.1); // Red
+            carMaterial.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+            carMaterial.specularPower = 64;
+            carBody.material = carMaterial;
+            shadowGenerator.addShadowCaster(carBody);
+            carBody.receiveShadows = true;
+
+            // Car roof
+            const carRoof = BABYLON.MeshBuilder.CreateBox("playerCarRoof", { width: 1.8, height: 0.6, depth: 2.2 }, scene);
+            carRoof.position = new BABYLON.Vector3(0, 0.9, -0.3); // Adjusted position
+            carRoof.parent = carRoot;
+            carRoof.material = carMaterial;
+            shadowGenerator.addShadowCaster(carRoof);
+
+            // Windshield
+            const windshield = BABYLON.MeshBuilder.CreatePlane("playerWindshield", {width: 1.7, height: 0.6}, scene);
+            windshield.position = new BABYLON.Vector3(0, 0.9, 0.8);
+            windshield.rotation.x = -Math.PI / 12; // Slanted
+            windshield.parent = carRoot;
+            const glassMaterial = new BABYLON.StandardMaterial("glassMat", scene);
+            glassMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.6, 0.8);
+            glassMaterial.alpha = 0.6;
+            windshield.material = glassMaterial;
+
+             // Wheels
+            const wheelMaterial = new BABYLON.StandardMaterial("wheelMat", scene);
+            wheelMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+            const wheelPositions = [
+                new BABYLON.Vector3(-0.9, 0, 1.5), // Front left
+                new BABYLON.Vector3(0.9, 0, 1.5),  // Front right
+                new BABYLON.Vector3(-0.9, 0, -1.5), // Rear left
+                new BABYLON.Vector3(0.9, 0, -1.5)  // Rear right
+            ];
+            const wheels = [];
+             for (let i = 0; i < 4; i++) {
+                const wheel = BABYLON.MeshBuilder.CreateCylinder(`playerWheel${i}`, { height: 0.5, diameter: 0.8, tessellation: 16 }, scene);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position = wheelPositions[i];
+                wheel.material = wheelMaterial;
+                wheel.parent = carRoot;
+                wheels.push(wheel);
+                shadowGenerator.addShadowCaster(wheel);
+            }
+
+            // Car Object Structure
+            const car = {
+                root: carRoot,
+                mesh: carBody, // Reference to main mesh
+                wheels: wheels,
+                velocity: new BABYLON.Vector3(0, 0, 0),
+                angularVelocity: 0, // For rotation
+                steerAngle: 0, // Current steering angle
+
+                // Race data
+                lap: 0,
+                lastCheckpointPassed: -1,
+                currentLapTime: 0,
+                lastLapTime: 0,
+                bestLapTime: Infinity,
+                racePosition: 8, // Start in last place
+                distanceCovered: 0 // Simple progress metric
+            };
+
+            return car;
+        }
+
+        // Create opponent cars function
+        const createOpponentCars = function(scene, trackInfo, shadowGenerator) {
+            const opponents = [];
+            const colors = [
+                new BABYLON.Color3(0, 0, 1),    // Blue
+                new BABYLON.Color3(0, 1, 0),    // Green
+                new BABYLON.Color3(1, 1, 0),    // Yellow
+                new BABYLON.Color3(1, 0, 1),    // Purple
+                new BABYLON.Color3(0, 1, 1),    // Cyan
+                new BABYLON.Color3(1, 0.5, 0),  // Orange
+                new BABYLON.Color3(0.5, 0.5, 0.5) // Gray
+            ];
+
+            const numOpponents = 7;
+            const startOffset = 8; // Distance behind player start
+            const spacing = 5; // Distance between opponent cars
+
+            for (let i = 0; i < numOpponents; i++) {
+                // Create a simplified opponent car mesh (similar structure to player)
+                const oppRoot = new BABYLON.TransformNode(`opponentRoot${i}`, scene);
+                oppRoot.position.y = 0.3;
+
+                const oppBody = BABYLON.MeshBuilder.CreateBox(`opponentBody${i}`, { width: 2, height: 0.8, depth: 4.2 }, scene);
+                oppBody.parent = oppRoot;
+                oppBody.position.y = 0.4;
+
+                const oppMaterial = new BABYLON.StandardMaterial(`opponentMaterial${i}`, scene);
+                oppMaterial.diffuseColor = colors[i];
+                oppMaterial.specularColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+                oppBody.material = oppMaterial;
+                shadowGenerator.addShadowCaster(oppBody);
+
+                // Simplified wheels
+                const oppWheelMat = new BABYLON.StandardMaterial(`oppWheelMat${i}`, scene);
+                oppWheelMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                const oppWheelPositions = [
+                    new BABYLON.Vector3(-0.9, 0, 1.5), new BABYLON.Vector3(0.9, 0, 1.5),
+                    new BABYLON.Vector3(-0.9, 0, -1.5), new BABYLON.Vector3(0.9, 0, -1.5)
+                ];
+                 const oppWheels = [];
+                 for (let j = 0; j < 4; j++) {
+                    const wheel = BABYLON.MeshBuilder.CreateCylinder(`oppWheel${i}_${j}`, { height: 0.5, diameter: 0.8, tessellation: 8 }, scene);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position = oppWheelPositions[j];
+                    wheel.material = oppWheelMat;
+                    wheel.parent = oppRoot;
+                    oppWheels.push(wheel);
+                    shadowGenerator.addShadowCaster(wheel);
+                 }
+
+                // Position opponents behind the player start line
+                const forwardDir = new BABYLON.Vector3(Math.sin(trackInfo.startRotationY), 0, Math.cos(trackInfo.startRotationY));
+                const sideDir = new BABYLON.Vector3(Math.cos(trackInfo.startRotationY), 0, -Math.sin(trackInfo.startRotationY));
+                const row = Math.floor(i / 2);
+                const col = i % 2;
+                const lateralOffset = (col === 0 ? -1 : 1) * (trackInfo.trackMesh.scaling.x / 4); // Place side-by-side
+
+                oppRoot.position = trackInfo.startPosition
+                    .subtract(forwardDir.scale(startOffset + row * spacing))
+                    .add(sideDir.scale(lateralOffset));
+                oppRoot.rotation.y = trackInfo.startRotationY;
+
+
+                opponents.push({
+                    id: i,
+                    root: oppRoot,
+                    mesh: oppBody,
+                    wheels: oppWheels,
+                    speed: (150 + Math.random() * 30), // Base speed MPH, randomized slightly
+                    targetSpeed: (150 + Math.random() * 30),
+                    currentTrackIndex: 0, // Where on the path array are they aiming
+                    lookAheadDistance: 15 + Math.random() * 10, // How far ahead to look on the path
+                    aggression: 0.5 + Math.random() * 0.4, // How sharply they turn
+                    lap: 0,
+                    lastCheckpointPassed: -1,
+                    distanceCovered: 0,
+                    racePosition: i + 1 // Initial position
+                });
+            }
+
+            return opponents;
+        }
+
+        // Create environment function (simplified)
+        const createEnvironment = function(scene) {
+             // Skybox
+            const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", { size: 1000.0 }, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://www.babylonjs-playground.com/textures/skybox", scene); // Use a skybox texture
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
+
+             // Add some simple grandstands
+             createGrandstand(scene, new BABYLON.Vector3(trackInfo.startPosition.x + 30, 0, trackInfo.startPosition.z - 50), 80, 15, trackInfo.startRotationY);
+             createGrandstand(scene, new BABYLON.Vector3(trackInfo.startPosition.x + 30, 0, trackInfo.startPosition.z + 50), 80, 15, trackInfo.startRotationY);
+        }
+
+        // Create grandstand function
+        const createGrandstand = function(scene, position, width, depth, rotationY) {
+            const standRoot = new BABYLON.TransformNode("standRoot", scene);
+            standRoot.position = position;
+            standRoot.rotation.y = rotationY; // Align with track
+
+            // Base structure (slanted box)
+            const baseShape = [
+                new BABYLON.Vector3(-width/2, 0, -depth/2),
+                new BABYLON.Vector3(width/2, 0, -depth/2),
+                new BABYLON.Vector3(width/2, 10, depth/2), // Higher at the back
+                new BABYLON.Vector3(-width/2, 10, depth/2),
+            ];
+            const base = BABYLON.MeshBuilder.CreatePolygon("standBase", {shape: baseShape, depth: depth, sideOrientation: BABYLON.Mesh.DOUBLESIDE}, scene);
+            base.rotation.x = Math.PI / 2; // Rotate to stand up
+            base.scaling.z = 1; // Use depth property instead
+             // Manual adjustment as CreatePolygon's depth works differently
+            base.position = new BABYLON.Vector3(0, 5, 0); // Center it vertically
+
+
+            const standMaterial = new BABYLON.StandardMaterial("standMaterial", scene);
+            standMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.7);
+            base.material = standMaterial;
+            base.parent = standRoot;
+            base.receiveShadows = true;
+
+
+            // Roof
+            const roof = BABYLON.MeshBuilder.CreateBox("standRoof", { width: width + 2, height: 1, depth: depth + 4 }, scene);
+            roof.position = new BABYLON.Vector3(0, 11, 1); // Position above the back
+            const roofMaterial = new BABYLON.StandardMaterial("roofMaterial", scene);
+            roofMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.2, 0.2); // Red roof
+            roof.material = roofMaterial;
+            roof.parent = standRoot;
+            roof.receiveShadows = true;
+        }
+
+        // --- Gameplay Logic ---
+
+        // Start game function
+        const startGame = function() {
+            if (gameStarted) return;
+
+            gameTitleElement.style.display = 'none';
+            instructionsElement.style.display = 'none';
+            countdownElement.style.display = 'block';
+
+            let count = 3;
+            countdownElement.textContent = count;
+
+            const countdownInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownElement.textContent = count;
+                } else if (count === 0) {
+                    countdownElement.textContent = "GO!";
+                     // Start engine sound here or slightly before
+                    if (engineSound && !engineSound.isPlaying) {
+                        engineSound.setVolume(0.1); // Start quiet
+                        engineSound.play();
+                    }
+                } else {
+                    clearInterval(countdownInterval);
+                    countdownElement.style.display = 'none';
+                    gameStarted = true; // Allow input processing
+                    raceStarted = true; // Start race logic (timer, AI)
+                    gameTime = 0; // Reset timer precisely at GO
+                    currentLap = 1; // Start lap 1
+                    updateLapUI();
+                }
+            }, 1000); // 1 second interval
+        }
+
+        // Setup gameplay function
+        const setupGameplay = function(scene, playerCar, camera, trackData, opponents, engineSound, tireScreechSound) {
+            // Input handlers
+            document.addEventListener("keydown", function(event) {
+                // Start game on Space only if not started
+                if (!gameStarted && event.code === "Space") {
+                    event.preventDefault(); // Prevent page scroll
+                    inputState.start = true;
+                    startGame();
+                    return;
+                }
+
+                // Only process game controls if race has started
+                if (!raceStarted || raceFinished) return;
+
+                switch (event.code) {
+                    case "ArrowUp": inputState.up = true; break;
+                    case "ArrowDown": inputState.down = true; break;
+                    case "ArrowLeft": inputState.left = true; break;
+                    case "ArrowRight": inputState.right = true; break;
+                    case "KeyZ":
+                        if (!inputState.shiftUp) {
+                            shiftGear(1); // Shift up
+                            inputState.shiftUp = true;
+                        }
+                        break;
+                    case "KeyX":
+                        if (!inputState.shiftDown) {
+                            shiftGear(-1); // Shift down
+                            inputState.shiftDown = true;
+                        }
+                        break;
+                }
+            });
+
+            document.addEventListener("keyup", function(event) {
+                // Always allow space release detection
+                if (event.code === "Space") {
+                    inputState.start = false;
+                    return;
+                }
+
+                if (!raceStarted || raceFinished) return;
+
+                switch (event.code) {
+                    case "ArrowUp": inputState.up = false; break;
+                    case "ArrowDown": inputState.down = false; break;
+                    case "ArrowLeft": inputState.left = false; break;
+                    case "ArrowRight": inputState.right = false; break;
+                    case "KeyZ": inputState.shiftUp = false; break;
+                    case "KeyX": inputState.shiftDown = false; break;
+                }
+            });
+
+            // Main game loop
+            scene.registerBeforeRender(function() {
+                if (!gameStarted || raceFinished) return; // Only run physics/updates after GO and before finish
+
+                const deltaTime = engine.getDeltaTime() / 1000.0; // Time in seconds
+
+                 if (raceStarted) {
+                    // Update player car
+                    updateCarPhysics(playerCar, deltaTime);
+
+                    // Update Opponent Cars
+                    updateOpponentCars(opponents, trackData, deltaTime);
+
+                    // Update Checkpoints and Lap for Player
+                    updateLapAndCheckpoints(playerCar, trackData.checkpoints, deltaTime);
+
+                    // Update Checkpoints and Lap for Opponents
+                     opponents.forEach(opp => updateLapAndCheckpoints(opp, trackData.checkpoints, deltaTime));
+
+                    // Update Race Positions
+                    updateRacePosition(playerCar, opponents);
+
+                    // Update Sounds
+                    updateSounds(playerCar, engineSound, tireScreechSound);
+
+                    // Update UI
+                    updateUI(playerCar);
+
+                    // Update game time
+                    gameTime += deltaTime;
+                    updateTimeDisplay();
+
+                     // Check for race finish
+                     if (playerCar.lap > totalLaps && !raceFinished) {
+                         finishRace();
+                     }
+                 }
+
+                 // Camera update happens automatically via lockedTarget
+            });
+        }
+
+        // Update car physics function (More detailed)
+        const updateCarPhysics = function(car, deltaTime) {
+            // 1. Calculate Target Speed based on Gear and Input
+            let targetSpeed = 0;
+            let effectiveAcceleration = 0;
+            let isBraking = false;
+
+            if (inputState.up && currentGear > 0) {
+                targetSpeed = gearSpeeds[currentGear];
+                effectiveAcceleration = acceleration * gearAccelerationFactors[currentGear];
+            }
+            if (inputState.down) {
+                effectiveAcceleration = -braking; // Apply braking force
+                isBraking = true;
+                targetSpeed = 0; // Target is to stop
+            }
+
+            // 2. Apply Acceleration/Deceleration towards Target Speed
+            if (!isBraking && speed < targetSpeed) {
+                 // Accelerate faster at lower speeds within the gear range
+                 let gearRange = gearSpeeds[currentGear] - (currentGear > 1 ? gearSpeeds[currentGear - 1] : 0);
+                 let speedInGear = speed - (currentGear > 1 ? gearSpeeds[currentGear - 1] : 0);
+                 let accelFactor = Math.max(0.2, 1 - (speedInGear / gearRange)); // Diminishing returns in gear
+                 speed += effectiveAcceleration * accelFactor * deltaTime * 60; // Scale to 60fps baseline
+            } else if (isBraking && speed > 0) {
+                 speed += effectiveAcceleration * deltaTime * 60; // Braking force
+            } else if (!inputState.up && !isBraking) {
+                 // Natural deceleration (drag/friction)
+                 speed -= deceleration * (speed / maxSpeed) * deltaTime * 60;
+            }
+
+            // Clamp speed
+             speed = Math.max(0, Math.min(speed, maxSpeed));
+
+             // 3. Calculate Steering
+            let steerInput = 0;
+            if (inputState.left) steerInput = -1;
+            if (inputState.right) steerInput = 1;
+
+            // Reduce handling at very low speeds, increase slightly at high speed
+            let speedFactorForHandling = Math.min(1.0, Math.max(0.1, speed / 80));
+            car.steerAngle = steerInput * handling * speedFactorForHandling;
+
+
+            // 4. Calculate Velocity and Rotation (Simplified Drift Model)
+            const forwardVector = car.root.forward.normalize(); // Current forward direction
+            const rightVector = car.root.right.normalize(); // Current right direction
+
+            // Calculate target velocity based on speed and forward direction
+            let targetVelocity = forwardVector.scale(speed / 3.6); // Convert MPH to m/s approx for physics calcs
+
+            // Introduce drift: Interpolate current velocity towards target velocity based on grip
+            car.velocity = BABYLON.Vector3.Lerp(car.velocity, targetVelocity, grip * deltaTime * 60);
+
+             // Apply sideways drag (driftFactor simulation)
+             let sidewaysVelocity = BABYLON.Vector3.Dot(car.velocity, rightVector);
+             car.velocity = car.velocity.subtract(rightVector.scale(sidewaysVelocity * (1-driftFactor))); // Reduce sideways speed
+
+            // 5. Update Rotation based on Steering and Velocity
+            // Calculate the angle the car wants to turn based on steering
+            car.angularVelocity = car.steerAngle * (speed / maxSpeed) * 5; // Rotation speed based on steer & car speed
+
+            // Dampen rotation quickly
+             car.angularVelocity *= 0.9;
+
+            // Apply rotation
+            car.root.rotation.y += car.angularVelocity * deltaTime;
+
+            // 6. Update Position
+            car.root.position.addInPlace(car.velocity.scale(deltaTime));
+
+            // Keep car on the ground (simple raycast down) - Optional but good
+            // let ray = new BABYLON.Ray(car.root.position.add(new BABYLON.Vector3(0, 1, 0)), new BABYLON.Vector3(0, -1, 0), 2);
+            // let hit = scene.pickWithRay(ray, (mesh) => mesh.name === "track" || mesh.name === "ground");
+            // if (hit && hit.pickedPoint) {
+            //     car.root.position.y = hit.pickedPoint.y + 0.3; // Adjust offset based on car model base
+            // }
+
+
+            // 7. Rotate Wheels
+            const wheelRotationSpeed = speed / (0.8 * Math.PI) * deltaTime; // Relate to wheel circumference
+            car.wheels.forEach((wheel, i) => {
+                wheel.rotation.x -= wheelRotationSpeed; // Rotate along their local X
+
+                // Apply steering rotation to front wheels (local Y axis)
+                if (i < 2) { // Front wheels
+                    wheel.rotation.y = car.steerAngle * 3; // Exaggerate visual steering
+                } else {
+                     wheel.rotation.y = 0; // Rear wheels don't steer visually
+                 }
+            });
+
+            // Update player distance covered (simple approximation)
+            car.distanceCovered += speed * deltaTime / 3.6; // meters covered this frame
+        }
+
+        // Update Opponent Cars AI (Simple Path Following)
+        const updateOpponentCars = function(opponents, trackData, deltaTime) {
+            opponents.forEach(opp => {
+                const carPos = opp.root.position;
+                const path = trackData.trackPath;
+
+                // Find the closest point on the path to the car
+                let closestDistSq = Infinity;
+                let closestIndex = opp.currentTrackIndex; // Start search from current
+                const searchRange = 20; // How many points forward/backward to check
+                for (let i = -searchRange; i <= searchRange; i++) {
+                    let checkIndex = (opp.currentTrackIndex + i + path.length) % path.length;
+                    let distSq = BABYLON.Vector3.DistanceSquared(carPos, path[checkIndex]);
+                    if (distSq < closestDistSq) {
+                        closestDistSq = distSq;
+                        closestIndex = checkIndex;
+                    }
+                }
+                opp.currentTrackIndex = closestIndex;
+
+                // Find a target point ahead on the path
+                let targetIndex = (closestIndex + Math.floor(opp.lookAheadDistance / (trackData.trackLength / path.length))) % path.length;
+                let targetPos = path[targetIndex].clone();
+
+                // Add some lateral variation to make them less robotic
+                let nextIndex = (targetIndex + 1) % path.length;
+                let pathDir = path[nextIndex].subtract(path[targetIndex]).normalize();
+                let pathNormal = new BABYLON.Vector3(-pathDir.z, 0, pathDir.x); // Perpendicular
+                targetPos.addInPlace(pathNormal.scale((Math.random() - 0.5) * 3)); // Random offset +/- 1.5m
+
+
+                // Steer towards the target point
+                let directionToTarget = targetPos.subtract(carPos).normalize();
+                let desiredRotationY = Math.atan2(directionToTarget.x, directionToTarget.z);
+
+                // Smoothly turn towards the desired rotation
+                let currentRotationY = opp.root.rotation.y;
+                let deltaRotation = BABYLON.Angle.ShortestAngleBetween(currentRotationY * (180 / Math.PI), desiredRotationY * (180 / Math.PI)) * (Math.PI / 180); // Delta in radians
+
+                // Adjust speed based on how sharp the turn is
+                 let turnFactor = Math.max(0.3, 1.0 - Math.abs(deltaRotation) * 2); // Slow down for sharp turns
+                 opp.speed = BABYLON.Scalar.Lerp(opp.speed, opp.targetSpeed * turnFactor, deltaTime * 2); // Smooth speed change
+
+
+                // Apply rotation change
+                let maxTurnRate = opp.aggression * Math.PI * deltaTime; // Max turn radians per second
+                let turnAmount = BABYLON.Scalar.Clamp(deltaRotation, -maxTurnRate, maxTurnRate);
+                opp.root.rotation.y += turnAmount;
+
+                // Move the car forward
+                let moveVector = opp.root.forward.scale(opp.speed / 3.6 * deltaTime); // MPH to m/s * dt
+                opp.root.position.addInPlace(moveVector);
+
+                // Rotate opponent wheels
+                const wheelRotationSpeed = opp.speed / (0.8 * Math.PI) * deltaTime;
+                opp.wheels.forEach(wheel => wheel.rotation.x -= wheelRotationSpeed);
+
+                 // Update opponent distance covered
+                 opp.distanceCovered += opp.speed * deltaTime / 3.6;
+            });
+        }
+
+        // Update Lap and Checkpoints
+        const updateLapAndCheckpoints = function(car, checkpoints, deltaTime) {
+            const carPos = car.root.position;
+            const nextCheckpointIndex = (car.lastCheckpointPassed + 1) % checkpoints.length;
+            const nextCheckpoint = checkpoints[nextCheckpointIndex];
+
+            // Check if the car's collider intersects with the next checkpoint trigger
+             if (car.mesh.intersectsMesh(nextCheckpoint.triggerMesh, false)) { // Use mesh intersection
+                car.lastCheckpointPassed = nextCheckpointIndex;
+
+                // Check for Lap Completion
+                if (nextCheckpointIndex === 0) { // Passed the start/finish line checkpoint
+                     if (car.lap > 0) { // Don't record lap time for the very first pass
+                         car.lastLapTime = car.currentLapTime;
+                         car.bestLapTime = Math.min(car.bestLapTime, car.lastLapTime);
+                         console.log(`${car.root.name} Lap ${car.lap} completed: ${formatTime(car.lastLapTime)}, Best: ${formatTime(car.bestLapTime)}`);
+                     }
+                    car.lap++;
+                    car.currentLapTime = 0; // Reset timer for the new lap
+
+                     // Update UI only for player
+                     if (car.root.name === "playerCarRoot") {
+                         updateLapUI();
+                         if (car.lap > totalLaps) {
+                             // Race finished for this car - handled in main loop check
+                         }
+                     }
+                 }
+            }
+
+             // Update current lap time if the race is ongoing for this car
+             if (car.lap > 0 && car.lap <= totalLaps) {
+                 car.currentLapTime += deltaTime;
+             }
+        }
+
+        // Update Race Position
+        const updateRacePosition = function(playerCar, opponents) {
+            const allCars = [playerCar, ...opponents];
+
+            // Calculate progress metric for each car
+            allCars.forEach(car => {
+                 // More robust progress: Lap + Checkpoint + Distance to next checkpoint (inverted)
+                 let distToNextSq = Infinity;
+                 if (car.lastCheckpointPassed >= 0) {
+                     const nextCheckpointIndex = (car.lastCheckpointPassed + 1) % trackInfo.checkpoints.length;
+                     distToNextSq = BABYLON.Vector3.DistanceSquared(car.root.position, trackInfo.checkpoints[nextCheckpointIndex].triggerMesh.position);
+                 }
+                // Progress: Higher is better. Large number for lap, medium for checkpoint, small inverse distance
+                 car.raceProgress = (car.lap * 100000) + (car.lastCheckpointPassed * 1000) + (10000 - Math.sqrt(distToNextSq));
+            });
+
+            // Sort cars by progress (descending)
+            allCars.sort((a, b) => b.raceProgress - a.raceProgress);
+
+            // Assign positions
+            allCars.forEach((car, index) => {
+                car.racePosition = index + 1;
+            });
+
+            // Update UI only for player
+             updatePositionUI(playerCar.racePosition);
+        }
+
+        // Update Sounds
+        const updateSounds = function(car, engineSound, tireScreechSound) {
+            if (!engineSound || !tireScreechSound) return;
+
+            // Engine sound volume and pitch based on speed/gear
+             let engineVolume = 0.1 + (speed / maxSpeed) * 0.6; // Volume ramps up
+             let playbackRate = 0.8 + (speed / maxSpeed) * 1.2; // Pitch increases
+             // Add extra revving if accelerating hard in low gear
+             if (inputState.up && currentGear > 0 && speed < gearSpeeds[currentGear] * 0.8) {
+                 playbackRate += 0.2;
+                 engineVolume = Math.min(1.0, engineVolume + 0.1);
+             }
+             engineSound.setVolume(engineVolume, 0.1); // Smooth volume change
+             engineSound.updateOptions({ playbackRate: playbackRate });
+
+             // Tire screech based on sharp turning / braking
+             let lateralVelocity = Math.abs(BABYLON.Vector3.Dot(car.velocity, car.root.right.normalize()));
+             let isScreeching = (Math.abs(car.angularVelocity) > 0.08 && speed > 30) || // Sharp turn at speed
+                               (inputState.down && speed > 20) || // Braking hard
+                               (lateralVelocity > 5 && speed > 40); // Drifting sideways
+
+             let targetScreechVolume = isScreeching ? Math.min(0.8, (speed / maxSpeed) * 0.8 + lateralVelocity * 0.1) : 0;
+
+             if (targetScreechVolume > 0.05 && !tireScreechSound.isPlaying) {
+                 tireScreechSound.setVolume(0); // Start quiet
+                 tireScreechSound.play();
+             } else if (targetScreechVolume < 0.05 && tireScreechSound.isPlaying) {
+                 tireScreechSound.setVolume(0, 0.2); // Fade out quickly
+                 setTimeout(() => { if (tireScreechSound.getVolume() < 0.05) tireScreechSound.stop(); }, 200);
+             }
+
+             if (tireScreechSound.isPlaying) {
+                  tireScreechSound.setVolume(targetScreechVolume, 0.1); // Adjust volume smoothly
+             }
+        }
+
+
+        // Shift gear function
+        const shiftGear = function(direction) {
+            if (!raceStarted || raceFinished) return;
+
+            const newGear = Math.max(0, Math.min(6, currentGear + direction));
+
+            if (newGear !== currentGear) {
+                // Basic check: Allow upshift only if speed is near top of current gear range
+                // Allow downshift freely (or with speed check if desired)
+                 let allowShift = true;
+                 if (direction > 0 && currentGear > 0 && speed < gearSpeeds[currentGear] * 0.7) {
+                     // Prevent upshifting too early (revving sound instead?)
+                     // allowShift = false;
+                 }
+                 if (direction < 0 && speed > gearSpeeds[newGear] * 1.1 && newGear > 0) {
+                     // Prevent downshifting if speed is way too high for the lower gear (engine damage?)
+                     // allowShift = false;
+                 }
+
+                if(allowShift) {
+                    currentGear = newGear;
+                    gearElement.textContent = `Gear: ${gears[currentGear]}`;
+
+                    // Simulate gear shift effect (slight pause/dip in power)
+                    // if (direction > 0) speed *= 0.98; // Slight dip on upshift
+                }
+            }
+        }
+
+        // Update UI function
+        const updateUI = function(playerCar) {
+            // Speedometer is updated continuously
+            speedometerElement.textContent = `Speed: ${Math.round(speed)} MPH`;
+            // Gear is updated on shiftGear
+            // Lap and Position are updated in their respective functions
+            // Time is updated in the main loop
+        }
+
+        // Format time helper
+        const formatTime = function(timeInSeconds) {
+             if (timeInSeconds === Infinity) return "--:--.--";
+             const minutes = Math.floor(timeInSeconds / 60);
+             const seconds = Math.floor(timeInSeconds % 60);
+             const milliseconds = Math.floor((timeInSeconds % 1) * 100);
+             return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+         }
+
+        // Update time display
+        const updateTimeDisplay = function() {
+            timeElement.textContent = `Time: ${formatTime(gameTime)}`;
+        }
+
+        // Update Lap UI
+         const updateLapUI = function() {
+             lapElement.textContent = `Lap: ${Math.min(currentLap, totalLaps)}/${totalLaps}`;
+         }
+
+         // Update Position UI
+         const updatePositionUI = function(position) {
+             let suffix = "th";
+             if (position === 1) suffix = "st";
+             else if (position === 2) suffix = "nd";
+             else if (position === 3) suffix = "rd";
+             positionElement.textContent = `Position: ${position}${suffix}`;
+         }
+
+         // Finish Race
+         const finishRace = function() {
+             if (raceFinished) return;
+             raceFinished = true;
+             console.log("Race Finished!");
+             finishMessageElement.innerHTML = `FINISH!<br/>Position: ${playerCarData.racePosition}${getPositionSuffix(playerCarData.racePosition)}<br/>Best Lap: ${formatTime(playerCarData.bestLapTime)}`;
+             finishMessageElement.style.display = 'block';
+
+             // Fade out engine sound
+             if (engineSound && engineSound.isPlaying) {
+                  engineSound.setVolume(0, 1.0); // Fade out over 1 second
+                 setTimeout(() => engineSound.stop(), 1000);
+             }
+             if (tireScreechSound && tireScreechSound.isPlaying) {
+                  tireScreechSound.setVolume(0, 0.5);
+                 setTimeout(() => tireScreechSound.stop(), 500);
+             }
+
+             // Maybe disable input further
+             inputState.up = inputState.down = inputState.left = inputState.right = false;
+         }
+
+          // Helper for position suffix
+         const getPositionSuffix = (pos) => {
+             if (pos % 10 === 1 && pos % 100 !== 11) return "st";
+             if (pos % 10 === 2 && pos % 100 !== 12) return "nd";
+             if (pos % 10 === 3 && pos % 100 !== 13) return "rd";
+             return "th";
+         }
+
+        // Create the scene
+        scene = createScene();
+
+        // Run the render loop
+        engine.runRenderLoop(function() {
+            if (scene) {
+                scene.render();
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            engine.resize();
+        });
+
+    </script>
+</body>
+</html>

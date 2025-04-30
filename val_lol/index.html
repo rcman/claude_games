@@ -1,0 +1,2108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valheim - HTML5</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #000;
+            color: #fff;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #ui-overlay {
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            height: 100%;
+        }
+        #stats-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+        .stat {
+            display: flex;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 20px;
+            pointer-events: auto; /* Allow interaction if needed later */
+        }
+        .stat-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            border-radius: 50%; /* Make icons round */
+        }
+        .health-icon { background-color: #f44336; }
+        .stamina-icon { background-color: #4CAF50; }
+        .hunger-icon { background-color: #FF9800; }
+        .stat-bar {
+            width: 100px;
+            height: 10px;
+            background-color: #555;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .stat-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .health-fill { background-color: #f44336; }
+        .stamina-fill { background-color: #4CAF50; }
+        .hunger-fill { background-color: #FF9800; }
+
+        #inventory-bar {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            pointer-events: auto;
+        }
+        .inventory-slot {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            position: relative;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .inventory-slot.selected {
+            border-color: #fff;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        .slot-number {
+            position: absolute;
+            top: 2px;
+            left: 5px;
+            font-size: 10px;
+            opacity: 0.8;
+        }
+        .slot-item {
+            width: 32px;
+            height: 32px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            border-radius: 3px;
+            color: #fff;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.8);
+        }
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 5px;
+            font-size: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 1px 3px;
+            border-radius: 10px;
+        }
+
+        /* Crafting menu */
+        #crafting-menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            background-color: rgba(30, 30, 30, 0.9);
+            border: 2px solid #666;
+            border-radius: 5px;
+            padding: 20px;
+            display: none;
+            pointer-events: auto;
+            z-index: 80;
+        }
+        #crafting-menu h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #ddd;
+        }
+        .crafting-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .crafting-tab {
+            padding: 5px 15px;
+            background-color: #333;
+            border-radius: 15px;
+            cursor: pointer;
+        }
+        .crafting-tab.active {
+            background-color: #666;
+        }
+        .crafting-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* Responsive grid */
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .crafting-item {
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 10px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .crafting-item:hover {
+            background-color: rgba(80, 80, 80, 0.3);
+        }
+        .crafting-item.unavailable {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .crafting-item-image {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 5px;
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 32px;
+            border-radius: 5px;
+            color: #fff;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.8);
+        }
+        .requirements {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+            text-align: left; /* Align requirements left */
+        }
+        .requirement-met {
+            color: #ddd;
+        }
+        .requirement-missing {
+            color: #f77;
+        }
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #ddd;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* Building system */
+        #building-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        .building-button {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .building-button:hover {
+            background-color: rgba(80, 80, 80, 0.5);
+        }
+
+        /* Loading screen */
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        #loading-screen h1 {
+            font-size: 48px;
+            margin-bottom: 40px;
+            color: #ddd;
+            font-family: 'Times New Roman', serif;
+            letter-spacing: 5px;
+        }
+        #loading-bar-container {
+            width: 400px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #loading-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #567c73;
+            transition: width 0.5s;
+        }
+        #loading-text {
+            margin-top: 20px;
+            color: #999;
+        }
+
+        /* Start menu */
+        #start-menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" seed="5"/><feBlend in="SourceGraphic" mode="multiply"/></filter><rect width="800" height="600" fill="#1E3B4A" filter="url(%23noise)"/></svg>');
+            background-size: cover;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 90;
+        }
+        #start-menu h1 {
+            font-size: 72px;
+            margin-bottom: 60px;
+            color: #ddd;
+            font-family: 'Times New Roman', serif;
+            letter-spacing: 10px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        .menu-button {
+            width: 300px;
+            padding: 15px 0;
+            margin: 10px 0;
+            background-color: rgba(70, 85, 90, 0.8);
+            color: #ddd;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .menu-button:hover {
+            background-color: rgba(100, 115, 120, 0.8);
+            transform: scale(1.05);
+        }
+
+        /* Death screen */
+        #death-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(110, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 95;
+            display: none; /* Initially hidden */
+        }
+        #death-screen h1 {
+            font-size: 72px;
+            margin-bottom: 40px;
+            color: #ddd;
+            font-family: 'Times New Roman', serif;
+        }
+
+        /* Mini-map */
+        #minimap {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 75px;
+            overflow: hidden;
+        }
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Time of day indicator */
+        #time-indicator {
+            position: absolute;
+            top: 180px;
+            right: 20px;
+            width: 150px;
+            height: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #time-fill {
+            height: 100%;
+            background: linear-gradient(to right, #1a2533, #3498db, #f1c40f, #e74c3c, #1a2533);
+            width: 200%; /* Double width to allow sliding */
+            transform: translateX(0%);
+            transition: transform 1s linear; /* Smooth transition */
+        }
+        #day-counter {
+            position: absolute;
+            top: 205px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        /* Boss powers UI */
+        #boss-powers {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .boss-power {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 20px;
+            opacity: 0.5;
+            cursor: pointer;
+        }
+        .boss-power.active {
+            opacity: 1;
+            border-color: #f5b642;
+            box-shadow: 0 0 10px #f5b642;
+        }
+
+        /* Tooltip */
+        #tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            max-width: 250px; /* Prevent tooltip from getting too wide */
+            line-height: 1.4;
+        }
+        #tooltip strong {
+            color: #f5b642; /* Valheim-like highlight color */
+        }
+
+        /* Dialog system */
+        #dialog {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #555;
+            border-radius: 5px;
+            padding: 20px;
+            color: #ddd;
+            font-size: 16px;
+            z-index: 100;
+            display: none;
+        }
+        #dialog-text {
+            margin-bottom: 15px;
+        }
+        #dialog-continue {
+            text-align: right;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        /* Weather effects */
+        .weather-particle {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        /* Status effects */
+        #status-effects {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .status-effect {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #555;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            position: relative;
+            font-size: 10px;
+            text-align: center;
+            overflow: hidden; /* Hide duration bar overflow */
+        }
+        .status-duration {
+            position: absolute;
+            bottom: 0; /* Position at bottom */
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background-color: #555;
+        }
+        .status-remaining {
+            height: 100%;
+            background-color: #fff;
+            transition: width 0.5s linear; /* Smooth duration decrease */
+        }
+
+        /* Simple Notification Area */
+        #notifications {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            pointer-events: none;
+            z-index: 110;
+        }
+        .notification {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 14px;
+            color: #ddd;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
+        }
+        .notification.fade-out {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="main-canvas"></canvas>
+
+        <div class="overlay" id="ui-overlay">
+            <div id="stats-bar">
+                <div class="stat">
+                    <div class="stat-icon health-icon"></div>
+                    <div class="stat-bar">
+                        <div class="stat-fill health-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon stamina-icon"></div>
+                    <div class="stat-bar">
+                        <div class="stat-fill stamina-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon hunger-icon"></div>
+                    <div class="stat-bar">
+                        <div class="stat-fill hunger-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="inventory-bar">
+                <!-- Inventory slots will be generated by JavaScript -->
+            </div>
+        </div>
+
+        <div id="minimap">
+            <canvas id="minimap-canvas"></canvas>
+        </div>
+
+        <div id="time-indicator">
+            <div id="time-fill"></div>
+        </div>
+        <div id="day-counter">Day 1</div>
+
+        <div id="boss-powers">
+            <div class="boss-power" id="eikthyr-power" title="Eikthyr's power">E</div>
+            <div class="boss-power" id="elder-power" title="The Elder's power">T</div>
+            <div class="boss-power" id="bonemass-power" title="Bonemass' power">B</div>
+            <div class="boss-power" id="moder-power" title="Moder's power">M</div>
+            <div class="boss-power" id="yagluth-power" title="Yagluth's power">Y</div>
+        </div>
+
+        <div id="status-effects">
+            <!-- Status effects will be added by JavaScript -->
+        </div>
+
+        <div id="building-controls">
+            <div class="building-button" id="rotate-button" title="Rotate (R)">R</div>
+            <div class="building-button" id="building-menu-button" title="Building Menu (B)">B</div>
+        </div>
+
+        <div id="crafting-menu">
+            <h2>Crafting</h2>
+            <button class="close-button" title="Close (Tab or Esc)">×</button>
+
+            <div class="crafting-tabs">
+                <div class="crafting-tab active" data-tab="tools">Tools</div>
+                <div class="crafting-tab" data-tab="weapons">Weapons</div>
+                <div class="crafting-tab" data-tab="armor">Armor</div>
+                <div class="crafting-tab" data-tab="building">Building</div>
+                <div class="crafting-tab" data-tab="furniture">Furniture</div>
+                <div class="crafting-tab" data-tab="misc">Misc</div>
+            </div>
+
+            <div class="crafting-items">
+                <!-- Crafting items will be generated by JavaScript -->
+            </div>
+        </div>
+
+        <div id="tooltip"></div>
+
+        <div id="dialog">
+            <div id="dialog-text"></div>
+            <div id="dialog-continue">Press E to continue</div>
+        </div>
+
+        <div id="notifications">
+            <!-- Notifications will appear here -->
+        </div>
+
+        <div id="loading-screen">
+            <h1>VALHEIM</h1>
+            <div id="loading-bar-container">
+                <div id="loading-bar"></div>
+            </div>
+            <div id="loading-text">Loading world...</div>
+        </div>
+
+        <div id="start-menu">
+            <h1>VALHEIM</h1>
+            <button class="menu-button" id="start-game">Start Game</button>
+            <button class="menu-button" id="options-button">Options</button>
+            <button class="menu-button" id="credits-button">Credits</button>
+        </div>
+
+        <div id="death-screen">
+            <h1>YOU DIED</h1>
+            <button class="menu-button" id="respawn-button">Respawn</button>
+        </div>
+    </div>
+
+    <script>
+    // Main game engine
+    class ValheimGame {
+        constructor() {
+            // DOM Elements
+            this.canvas = document.getElementById('main-canvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.minimapCanvas = document.getElementById('minimap-canvas');
+            this.minimapCtx = this.minimapCanvas.getContext('2d');
+            this.loadingScreen = document.getElementById('loading-screen');
+            this.startMenu = document.getElementById('start-menu');
+            this.deathScreen = document.getElementById('death-screen');
+            this.craftingMenu = document.getElementById('crafting-menu');
+            this.tooltip = document.getElementById('tooltip');
+            this.dialogBox = document.getElementById('dialog');
+            this.notificationArea = document.getElementById('notifications');
+
+            this.resizeCanvas();
+
+            // Game state
+            this.gameState = 'loading'; // loading, menu, playing, dead, paused
+            this.loadingProgress = 0;
+
+            // World generation (Simplified)
+            this.worldSize = 4000; // Large world
+            this.worldSeed = Math.floor(Math.random() * 10000);
+            this.objects = []; // Trees, rocks, etc. (simplified for now)
+            this.creatures = []; // NPCs, monsters
+            this.weatherEffect = 'clear'; // clear, rain, snow
+            this.weatherParticles = []; // For visual effects
+
+            // Player
+            this.player = {
+                x: this.worldSize / 2,
+                y: this.worldSize / 2,
+                health: 100,
+                maxHealth: 100,
+                stamina: 100,
+                maxStamina: 100,
+                food: 50,
+                maxFood: 100, // Base food limit
+                inventory: new Array(8).fill(null), // 8 hotbar slots
+                selectedSlot: 0,
+                direction: -Math.PI / 2, // Angle in radians (start facing up)
+                moveSpeed: 3, // Pixels per second equivalent
+                runSpeed: 6,
+                isRunning: false,
+                skills: {
+                    swords: 1, axes: 1, clubs: 1, bows: 1, blocking: 1,
+                    woodcutting: 1, mining: 1, building: 1, running: 1, jumping: 1
+                },
+                statusEffects: [], // { name: 'Wet', duration: 60, icon: '💧' }
+                blocking: false
+            };
+
+            // Time
+            this.dayLength = 20 * 60; // 20 minutes per day in seconds
+            this.gameTimeScale = 72; // 1 real second = 72 game seconds
+            this.currentTime = 6 * 3600; // Start at 6 AM (in seconds)
+            this.currentDay = 1;
+
+            // Game mechanics
+            this.crafting = {
+                recipes: [],
+                activeTab: 'tools',
+                requiredWorkbenchLevel: 0 // 0 = None, 1 = Workbench, etc.
+            };
+            this.building = {
+                active: false,
+                currentPiece: null, // The item being placed
+                ghostX: 0, ghostY: 0, // Preview position
+                rotation: 0 // Degrees
+            };
+            this.bossPowers = {
+                eikthyr: false, elder: false, bonemass: false, moder: false, yagluth: false,
+                activePower: null, // Name of the active power
+                powerCooldown: 0
+            };
+
+            // UI State
+            this.showTooltip = false;
+            this.tooltipX = 0;
+            this.tooltipY = 0;
+            this.tooltipText = '';
+            this.dialogQueue = []; // Array of strings for dialog
+            this.inputBuffer = {}; // Tracks currently pressed keys
+
+            // Initialize systems
+            this.initInputHandling();
+            this.initInventory();
+            this.initCrafting();
+            this.setupEventListeners(); // Setup UI listeners
+            this.simulateLoading(); // Start loading simulation
+
+            // Start game loop
+            this.lastTime = performance.now();
+            requestAnimationFrame(this.gameLoop.bind(this));
+        }
+
+        simulateLoading() {
+            const loadingBar = document.getElementById('loading-bar');
+            const loadingText = document.getElementById('loading-text');
+            const texts = [
+                'Generating terrain...', 'Spawning creatures...', 'Placing resources...',
+                'Growing trees...', 'Preparing Odin\'s realm...', 'Done!'
+            ];
+
+            let progress = 0;
+            const loadingInterval = setInterval(() => {
+                progress += Math.random() * 10 + 5; // Faster loading simulation
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(loadingInterval);
+                    this.gameState = 'menu';
+                    this.loadingScreen.style.display = 'none';
+                    this.startMenu.style.display = 'flex'; // Show start menu
+                }
+
+                this.loadingProgress = progress;
+                loadingBar.style.width = `${progress}%`;
+
+                const textIndex = Math.min(texts.length - 1, Math.floor(progress / (100 / (texts.length -1) )));
+                loadingText.textContent = texts[textIndex];
+
+            }, 150); // Shorter interval
+        }
+
+        resizeCanvas() {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+            this.minimapCanvas.width = 150;
+            this.minimapCanvas.height = 150;
+            // Re-render on resize if needed, especially if game is running
+            if (this.gameState === 'playing') {
+                this.render();
+            }
+        }
+
+        gameLoop(currentTime) {
+            const deltaTime = (currentTime - this.lastTime) / 1000;
+            this.lastTime = currentTime;
+
+            // Update only if playing
+            if (this.gameState === 'playing') {
+                this.update(deltaTime);
+            }
+
+            // Always render unless loading
+            if (this.gameState !== 'loading') {
+                 this.render();
+            }
+
+            // Continue the game loop
+            requestAnimationFrame(this.gameLoop.bind(this));
+        }
+
+        update(deltaTime) {
+            this.updateTimeOfDay(deltaTime);
+            this.updatePlayer(deltaTime);
+            this.updateCreatures(deltaTime); // Basic placeholder
+            this.updateWeather(deltaTime);
+            this.updateStatusEffects(deltaTime);
+        }
+
+        updateTimeOfDay(deltaTime) {
+            this.currentTime += deltaTime * this.gameTimeScale;
+
+            if (this.currentTime >= 24 * 3600) {
+                this.currentTime -= 24 * 3600;
+                this.currentDay++;
+                document.getElementById('day-counter').textContent = `Day ${this.currentDay}`;
+                 this.showNotification(`Day ${this.currentDay}`);
+            }
+
+            // Update time indicator (0-1 cycle for day)
+            const timeOfDay = (this.currentTime % (24 * 3600)) / (24 * 3600);
+            // Slide the gradient background. -50% is midnight, 0% is noon, +50% is midnight again.
+            // We want 6am (0.25) to be the start (-25%), noon (0.5) to be middle (0%), 6pm (0.75) to be end (+25%)
+            const transformPercent = (timeOfDay - 0.5) * 100;
+            document.getElementById('time-fill').style.transform = `translateX(${transformPercent}%)`;
+
+            // Randomly change weather (very basic)
+            if (Math.random() < 0.0005) { // Small chance each frame
+                const effects = ['clear', 'rain', 'snow']; // Add more later (fog, storm)
+                this.weatherEffect = effects[Math.floor(Math.random() * effects.length)];
+                this.showNotification(`Weather changed to: ${this.weatherEffect}`);
+            }
+        }
+
+        updatePlayer(deltaTime) {
+            let dx = 0;
+            let dy = 0;
+            const effectiveSpeed = (this.player.isRunning && this.player.stamina > 0 && !this.player.blocking) ? this.player.runSpeed : this.player.moveSpeed;
+
+            if (this.inputBuffer['KeyW']) dy -= 1;
+            if (this.inputBuffer['KeyS']) dy += 1;
+            if (this.inputBuffer['KeyA']) dx -= 1;
+            if (this.inputBuffer['KeyD']) dx += 1;
+
+            // Normalize diagonal movement
+            const magnitude = Math.sqrt(dx * dx + dy * dy);
+            if (magnitude > 0) {
+                dx = (dx / magnitude) * effectiveSpeed * deltaTime * 60; // Scale speed by delta time (60fps baseline)
+                dy = (dy / magnitude) * effectiveSpeed * deltaTime * 60;
+
+                // Update position (clamp to world boundaries)
+                this.player.x = Math.max(0, Math.min(this.worldSize, this.player.x + dx));
+                this.player.y = Math.max(0, Math.min(this.worldSize, this.player.y + dy));
+
+                // Update player direction
+                this.player.direction = Math.atan2(dy, dx);
+
+                // Handle running stamina consumption & skill
+                if (this.player.isRunning && !this.player.blocking) {
+                    this.player.stamina -= 10 * deltaTime; // Stamina cost per second
+                    this.increaseSkill('running', 0.01 * deltaTime); // Increase running skill slowly
+                    if (this.player.stamina <= 0) {
+                        this.player.stamina = 0;
+                        this.player.isRunning = false; // Stop running if out of stamina
+                        this.showNotification("Out of stamina!", true);
+                    }
+                }
+            }
+
+             // Stamina regeneration (if not running, not blocking, and not fully depleted)
+            if (!this.player.isRunning && !this.player.blocking && this.player.stamina < this.player.maxStamina) {
+                 const regenRate = 10 + (this.player.food / 10); // Regen faster with more food
+                 this.player.stamina = Math.min(this.player.maxStamina, this.player.stamina + regenRate * deltaTime);
+            }
+
+             // Food drain over time
+            this.player.food = Math.max(0, this.player.food - 0.5 * deltaTime); // Slower food drain
+
+            // Health regeneration based on food (passive regen)
+            if (this.player.food > 25 && this.player.health < this.player.maxHealth) { // Need some food to regen
+                 const healthRegenRate = 0.5 + (this.player.food / 50); // Regen faster with more food
+                 this.player.health = Math.min(this.player.maxHealth, this.player.health + healthRegenRate * deltaTime);
+            }
+
+            // Update UI Bars
+            document.querySelector('.health-fill').style.width = `${(this.player.health / this.player.maxHealth) * 100}%`;
+            document.querySelector('.stamina-fill').style.width = `${(this.player.stamina / this.player.maxStamina) * 100}%`;
+            document.querySelector('.hunger-fill').style.width = `${(this.player.food / this.player.maxFood) * 100}%`;
+
+            // Check for death
+            if (this.player.health <= 0) {
+                this.die();
+            }
+
+            // Update building preview position based on player direction
+            if (this.building.active) {
+                const lookDistance = 100; // How far ahead to place the ghost
+                this.building.ghostX = this.canvas.width / 2 + Math.cos(this.player.direction) * lookDistance;
+                this.building.ghostY = this.canvas.height / 2 + Math.sin(this.player.direction) * lookDistance;
+            }
+        }
+
+        updateCreatures(deltaTime) {
+            // Placeholder for creature AI and movement
+            for (const creature of this.creatures) {
+                // Example: Simple random movement
+                // creature.x += (Math.random() - 0.5) * creature.speed * deltaTime;
+                // creature.y += (Math.random() - 0.5) * creature.speed * deltaTime;
+            }
+        }
+
+        updateWeather(deltaTime) {
+            // Update existing particles
+            for (let i = this.weatherParticles.length - 1; i >= 0; i--) {
+                const p = this.weatherParticles[i];
+                p.x += p.speedX * deltaTime;
+                p.y += p.speedY * deltaTime;
+                p.life -= deltaTime;
+
+                // Remove particle if life ends or goes off screen
+                if (p.life <= 0 || p.y > this.canvas.height + 50 || p.x < -50 || p.x > this.canvas.width + 50) {
+                    this.weatherParticles.splice(i, 1);
+                }
+            }
+
+            // Generate new particles based on weather type
+            const maxParticles = 300; // Limit total particles
+            if (this.weatherParticles.length < maxParticles) {
+                if (this.weatherEffect === 'rain') {
+                    for (let i = 0; i < 5; i++) { // Add 5 rain drops per update cycle
+                        this.weatherParticles.push({
+                            x: Math.random() * this.canvas.width,
+                            y: -10, // Start above screen
+                            size: 10 + Math.random() * 15, // Length of rain drop
+                            speedX: -20 - Math.random() * 30, // Angled rain
+                            speedY: 300 + Math.random() * 200,
+                            life: 2 + Math.random() * 1, // Lifetime in seconds
+                            type: 'rain',
+                            color: 'rgba(170, 200, 255, 0.6)'
+                        });
+                    }
+                } else if (this.weatherEffect === 'snow') {
+                    for (let i = 0; i < 2; i++) { // Add 2 snowflakes per update cycle
+                         this.weatherParticles.push({
+                            x: Math.random() * this.canvas.width,
+                            y: -10,
+                            size: 3 + Math.random() * 3, // Size of snowflake
+                            speedX: (Math.random() - 0.5) * 40, // Gentle side drift
+                            speedY: 50 + Math.random() * 50, // Falling speed
+                            life: 5 + Math.random() * 5,
+                            type: 'snow',
+                            color: 'rgba(255, 255, 255, 0.8)'
+                        });
+                    }
+                }
+            }
+        }
+
+        updateStatusEffects(deltaTime) {
+            const effectsContainer = document.getElementById('status-effects');
+            effectsContainer.innerHTML = ''; // Clear current effects UI
+
+            for (let i = this.player.statusEffects.length - 1; i >= 0; i--) {
+                const effect = this.player.statusEffects[i];
+                effect.duration -= deltaTime;
+
+                if (effect.duration <= 0) {
+                    this.player.statusEffects.splice(i, 1);
+                    this.showNotification(`${effect.name} faded.`);
+                    // Remove buffs/debuffs associated with the effect here
+                } else {
+                    // Update UI for remaining effects
+                    const effectDiv = document.createElement('div');
+                    effectDiv.className = 'status-effect';
+                    effectDiv.title = `${effect.name} (${Math.ceil(effect.duration)}s)`;
+                    effectDiv.textContent = effect.icon || effect.name.charAt(0);
+
+                    const durationBar = document.createElement('div');
+                    durationBar.className = 'status-duration';
+                    const remainingBar = document.createElement('div');
+                    remainingBar.className = 'status-remaining';
+                    // Calculate remaining percentage based on an assumed initial duration (needs refinement)
+                    // For now, just show a fixed bar or use a property if available
+                    remainingBar.style.width = `${Math.max(0, Math.min(100, (effect.duration / (effect.initialDuration || 60)) * 100))}%`; // Needs initialDuration
+
+                    durationBar.appendChild(remainingBar);
+                    effectDiv.appendChild(durationBar);
+                    effectsContainer.appendChild(effectDiv);
+                }
+            }
+        }
+
+        render() {
+            // Clear main canvas
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+             if (this.gameState === 'menu' || this.gameState === 'dead') {
+                // Menus cover the screen, no need to render game world
+                return;
+            }
+
+            // Render world (relative to player)
+            this.renderWorld();
+
+            // Render other objects/creatures relative to player
+            this.renderObjects();
+            this.renderCreatures();
+
+            // Render player at the center
+            this.renderPlayer();
+
+            // Render building preview if active
+            if (this.building.active && this.building.currentPiece) {
+                this.renderBuildingPreview();
+            }
+
+            // Render weather effects on top
+            this.renderWeather();
+
+            // Render minimap
+            this.renderMinimap();
+        }
+
+        renderWorld() {
+            const screenCenterX = this.canvas.width / 2;
+            const screenCenterY = this.canvas.height / 2;
+
+            // Calculate the top-left corner of the viewport in world coordinates
+            const viewX = this.player.x - screenCenterX;
+            const viewY = this.player.y - screenCenterY;
+
+            // --- Sky ---
+            const skyGradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+            const timeOfDay = (this.currentTime % (24 * 3600)) / (24 * 3600);
+            let skyTop = '#1a2533'; // Night top
+            let skyBottom = '#2d365e'; // Night bottom
+
+            if (timeOfDay > 0.25 && timeOfDay < 0.75) { // Daytime (6am - 6pm)
+                skyTop = '#8ec8ff';
+                skyBottom = '#b8d9ff';
+            } else if (timeOfDay > 0.2 && timeOfDay < 0.25 || timeOfDay > 0.75 && timeOfDay < 0.8) { // Dawn/Dusk
+                skyTop = '#ff8a63';
+                skyBottom = '#ffc48f';
+            }
+            skyGradient.addColorStop(0, skyTop);
+            skyGradient.addColorStop(1, skyBottom);
+            this.ctx.fillStyle = skyGradient;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+
+            // --- Ground --- (Simple colored rectangle for now)
+            // This would ideally be replaced by rendering terrain tiles based on viewX, viewY
+            this.ctx.fillStyle = '#4a7b58'; // Basic green ground
+            this.ctx.fillRect(0, screenCenterY, this.canvas.width, this.canvas.height / 2);
+
+
+             // --- Simple "Scenery" (Placeholder Trees/Rocks) ---
+             // This should be based on actual world objects in `this.objects`
+            this.ctx.fillStyle = '#2d5931'; // Tree color
+            this.ctx.strokeStyle = '#5e3b1e'; // Trunk color
+            this.ctx.lineWidth = 5;
+            for (let i = 0; i < 20; i++) {
+                // Simple deterministic placement based on index and seed for consistency
+                const objWorldX = (this.worldSeed * i * 53) % this.worldSize;
+                const objWorldY = (this.worldSeed * i * 31) % this.worldSize;
+
+                // Calculate screen position
+                const objScreenX = objWorldX - viewX;
+                const objScreenY = objWorldY - viewY;
+
+                // Only render if potentially visible (basic culling)
+                if (objScreenX > -50 && objScreenX < this.canvas.width + 50 && objScreenY > -100 && objScreenY < this.canvas.height + 50) {
+                    // Draw a simple tree shape
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(objScreenX, objScreenY - 50); // Top point
+                    this.ctx.lineTo(objScreenX - 25, objScreenY); // Bottom left
+                    this.ctx.lineTo(objScreenX + 25, objScreenY); // Bottom right
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    // Trunk
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(objScreenX, objScreenY);
+                    this.ctx.lineTo(objScreenX, objScreenY + 30);
+                    this.ctx.stroke();
+                }
+            }
+        }
+
+        renderObjects() {
+            // In a real game, loop through this.objects and render them relative to the player
+            // e.g., trees, rocks, buildings placed by the player
+        }
+
+        renderCreatures() {
+            // Placeholder for creature rendering, relative to player
+        }
+
+        renderPlayer() {
+            const centerX = this.canvas.width / 2;
+            const centerY = this.canvas.height / 2;
+
+            this.ctx.save(); // Save context state
+            this.ctx.translate(centerX, centerY); // Move origin to player center
+            this.ctx.rotate(this.player.direction + Math.PI / 2); // Rotate based on direction (add PI/2 because 0 rad is right)
+
+            // Body (simple rectangle for now)
+            this.ctx.fillStyle = '#8B4513'; // Brownish
+            this.ctx.fillRect(-10, -20, 20, 40); // Centered rectangle
+
+            // Head (circle)
+            this.ctx.fillStyle = '#D2B48C'; // Skin tone
+            this.ctx.beginPath();
+            this.ctx.arc(0, -30, 10, 0, Math.PI * 2); // Position head above body center
+            this.ctx.fill();
+
+             // Simple indicator for blocking
+             if (this.player.blocking) {
+                this.ctx.fillStyle = 'rgba(100, 150, 255, 0.5)';
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, 30, -Math.PI * 0.7, -Math.PI * 0.3); // Arc in front
+                this.ctx.lineTo(0, 0);
+                this.ctx.closePath();
+                this.ctx.fill();
+             }
+
+            this.ctx.restore(); // Restore context state
+        }
+
+        renderWeather() {
+            for (const p of this.weatherParticles) {
+                this.ctx.fillStyle = p.color;
+                if (p.type === 'rain') {
+                    // Draw angled line for rain
+                    this.ctx.save();
+                    this.ctx.translate(p.x, p.y);
+                    const angle = Math.atan2(p.speedY, p.speedX);
+                    this.ctx.rotate(angle - Math.PI / 2); // Align with velocity vector
+                    this.ctx.fillRect(-1, -p.size/2, 2, p.size); // Draw line centered on path
+                    this.ctx.restore();
+                } else if (p.type === 'snow') {
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+            }
+        }
+
+        renderBuildingPreview() {
+             // Render a translucent preview of the current building piece at ghostX, ghostY
+             const piece = this.building.currentPiece;
+             if (!piece) return;
+
+             // Use ghostX, ghostY calculated in updatePlayer
+             const x = this.building.ghostX;
+             const y = this.building.ghostY;
+             const size = 50; // Placeholder size
+
+             this.ctx.save();
+             this.ctx.translate(x, y);
+             this.ctx.rotate(this.building.rotation * Math.PI / 180); // Convert degrees to radians
+
+             // Simple box preview
+             this.ctx.fillStyle = 'rgba(200, 255, 200, 0.5)'; // Greenish tint
+             this.ctx.strokeStyle = '#ffffff';
+             this.ctx.lineWidth = 1;
+             this.ctx.fillRect(-size / 2, -size / 2, size, size);
+             this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+
+             this.ctx.restore();
+        }
+
+        renderMinimap() {
+            const mapSize = this.minimapCanvas.width;
+            const scale = mapSize / this.worldSize;
+
+            // Clear minimap
+            this.minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Dark background
+            this.minimapCtx.fillRect(0, 0, mapSize, mapSize);
+
+             // Draw a simple representation of the nearby world (optional, could be complex)
+             // For now, just a background
+
+            // Calculate player position on minimap
+            const playerMapX = this.player.x * scale;
+            const playerMapY = this.player.y * scale;
+
+             // Draw player icon (triangle showing direction)
+            this.minimapCtx.save();
+            this.minimapCtx.translate(playerMapX, playerMapY);
+            this.minimapCtx.rotate(this.player.direction); // Rotate to player's facing direction
+            this.minimapCtx.fillStyle = '#ffffff'; // White player marker
+            this.minimapCtx.beginPath();
+            this.minimapCtx.moveTo(5, 0); // Tip of triangle
+            this.minimapCtx.lineTo(-3, -3); // Back left corner
+            this.minimapCtx.lineTo(-3, 3); // Back right corner
+            this.minimapCtx.closePath();
+            this.minimapCtx.fill();
+            this.minimapCtx.restore();
+
+             // Draw world center/spawn point (optional)
+            this.minimapCtx.fillStyle = '#f5b642'; // Gold color
+            this.minimapCtx.beginPath();
+            this.minimapCtx.arc(this.worldSize / 2 * scale, this.worldSize / 2 * scale, 3, 0, Math.PI * 2);
+            this.minimapCtx.fill();
+
+            // Clip drawing to the circle
+            this.minimapCtx.globalCompositeOperation = 'destination-in';
+            this.minimapCtx.beginPath();
+            this.minimapCtx.arc(mapSize / 2, mapSize / 2, mapSize / 2, 0, Math.PI * 2);
+            this.minimapCtx.fill();
+            this.minimapCtx.globalCompositeOperation = 'source-over'; // Reset composite mode
+
+            // Redraw border after clipping (optional, done by CSS border already)
+            // this.minimapCtx.strokeStyle = '#555';
+            // this.minimapCtx.lineWidth = 2;
+            // this.minimapCtx.beginPath();
+            // this.minimapCtx.arc(mapSize / 2, mapSize / 2, mapSize / 2 - 1, 0, Math.PI * 2);
+            // this.minimapCtx.stroke();
+        }
+
+        initInputHandling() {
+            window.addEventListener('keydown', (e) => {
+                // Prevent default browser behavior for keys used by the game
+                if(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'Space', 'KeyE', 'KeyB', 'KeyR', 'Tab', 'Escape', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].includes(e.code)) {
+                   // e.preventDefault(); // Be careful with preventing defaults, might block text input elsewhere
+                }
+
+                this.inputBuffer[e.code] = true;
+
+                // Handle immediate actions on keydown
+                switch (e.code) {
+                    case 'ShiftLeft':
+                    case 'ShiftRight':
+                        if (this.player.stamina > 0 && !this.player.blocking) {
+                            this.player.isRunning = true;
+                        }
+                        break;
+                    case 'KeyE':
+                        if (this.gameState === 'playing') this.interact();
+                        break;
+                    case 'KeyB':
+                        if (this.gameState === 'playing') this.toggleBuildingMode();
+                        break;
+                    case 'Tab':
+                        if (this.gameState === 'playing') {
+                            e.preventDefault(); // Prevent tabbing out of the game window
+                            this.toggleCraftingMenu();
+                        }
+                        break;
+                    case 'Escape':
+                         if (this.gameState === 'playing') {
+                            if (this.craftingMenu.style.display === 'block') {
+                                this.toggleCraftingMenu(); // Close crafting first
+                            } else if (this.building.active) {
+                                this.toggleBuildingMode(); // Exit building mode
+                            } else {
+                                // Implement Pause Menu toggle here later
+                                console.log("Pause Toggle (Not Implemented)");
+                            }
+                        }
+                        break;
+                    case 'KeyR':
+                        if (this.building.active) {
+                            this.rotateBuildingPiece();
+                        } else {
+                            // Holster/Unholster weapon? (Not implemented)
+                        }
+                        break;
+                    case 'Space':
+                        if (this.gameState === 'playing' && !this.player.blocking) {
+                            this.jump(); // Implement jump logic
+                        }
+                        break;
+                     // Handle number keys for inventory selection
+                    case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+                    case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8':
+                        const digit = parseInt(e.code.substring(5));
+                        this.selectInventorySlot(digit - 1);
+                        break;
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                this.inputBuffer[e.code] = false;
+                // Handle specific key releases
+                switch (e.code) {
+                    case 'ShiftLeft':
+                    case 'ShiftRight':
+                        this.player.isRunning = false;
+                        break;
+                     case 'ControlLeft': // Stop blocking on Ctrl release
+                     case 'ControlRight':
+                     case 'MouseButton2': // Also handle if using mouse for block
+                        if(this.player.blocking) {
+                            this.player.blocking = false;
+                            console.log('Stopped blocking');
+                        }
+                        break;
+                }
+            });
+
+             // Mouse input
+            this.canvas.addEventListener('mousedown', (e) => {
+                if (this.gameState !== 'playing') return;
+
+                if (e.button === 0) { // Left click
+                     if (this.building.active && this.building.currentPiece) {
+                        this.placeBuilding(this.building.currentPiece); // Place the ghosted piece
+                    } else {
+                        this.useItem(); // Primary action (attack/use tool)
+                    }
+                } else if (e.button === 2) { // Right click
+                    this.secondaryAction(); // Secondary action (block/aim/cancel build)
+                     this.inputBuffer['MouseButton2'] = true; // Track mouse button state
+                }
+            });
+
+             this.canvas.addEventListener('mouseup', (e) => {
+                 if (e.button === 2) { // Right click release
+                     this.inputBuffer['MouseButton2'] = false;
+                     if(this.player.blocking) {
+                        this.player.blocking = false;
+                        console.log('Stopped blocking');
+                    }
+                 }
+             });
+
+            // Prevent context menu on canvas
+            this.canvas.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            });
+
+             // Update tooltip position
+             window.addEventListener('mousemove', (e) => {
+                 this.tooltipX = e.clientX;
+                 this.tooltipY = e.clientY;
+                 if (this.tooltip.style.display === 'block') {
+                    this.positionTooltip(); // Reposition if visible
+                 }
+             });
+        }
+
+        setupEventListeners() {
+            // Window resize
+            window.addEventListener('resize', this.resizeCanvas.bind(this));
+
+            // Start Menu
+            document.getElementById('start-game').addEventListener('click', () => {
+                this.startMenu.style.display = 'none';
+                this.gameState = 'playing';
+                this.showNotification("Welcome to Valheim HTML5!");
+                // Maybe play some starting music/sound
+            });
+            // Add listeners for Options/Credits later
+
+            // Death Screen
+            document.getElementById('respawn-button').addEventListener('click', () => {
+                this.respawnPlayer();
+            });
+
+            // Crafting Menu
+            document.querySelectorAll('.crafting-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelector('.crafting-tab.active').classList.remove('active');
+                    tab.classList.add('active');
+                    this.crafting.activeTab = tab.dataset.tab;
+                    this.updateCraftingUI();
+                });
+            });
+            document.querySelector('#crafting-menu .close-button').addEventListener('click', () => {
+                this.toggleCraftingMenu();
+            });
+
+            // Building Controls
+            document.getElementById('building-menu-button').addEventListener('click', () => {
+                this.crafting.activeTab = 'building'; // Pre-select building tab
+                this.toggleCraftingMenu(true); // Open crafting menu to building
+            });
+            document.getElementById('rotate-button').addEventListener('click', () => {
+                if (this.building.active) {
+                    this.rotateBuildingPiece();
+                }
+            });
+
+             // Inventory Slot Clicks & Tooltips (Done in initInventory)
+        }
+
+        interact() {
+            console.log('Interact key pressed');
+             // Process dialog if active
+            if (this.dialogBox.style.display === 'block') {
+                this.advanceDialog();
+                return;
+            }
+            // Placeholder: Check for interactable objects nearby (chests, doors, NPCs, signs)
+            this.showNotification("Nothing to interact with here.", true);
+        }
+
+        useItem() {
+            const selectedItem = this.player.inventory[this.player.selectedSlot];
+            if (!selectedItem) {
+                console.log("Empty hand action (punch?)");
+                // Implement punching?
+                this.player.stamina -= 5; // Punch stamina cost
+                 this.increaseSkill('clubs', 0.05); // Unarmed is like clubs?
+                return;
+            }
+
+            console.log(`Using item: ${selectedItem.name}`);
+            switch (selectedItem.type) {
+                case 'weapon': this.attackWithWeapon(selectedItem); break;
+                case 'tool': this.useToolOnTarget(selectedItem); break;
+                case 'food': this.eatFood(selectedItem, this.player.selectedSlot); break;
+                // Building items are handled by left-click when building mode is active via placeBuilding()
+                default: console.log(`No primary action defined for item type: ${selectedItem.type}`); break;
+            }
+            this.updateInventoryUI(); // Update UI after potential usage/consumption
+        }
+
+        secondaryAction() {
+             console.log('Secondary action triggered');
+             // Cancel building placement if active
+            if (this.building.active) {
+                this.toggleBuildingMode(); // Cancel build mode
+                this.showNotification("Building cancelled.", true);
+                return;
+            }
+
+            const selectedItem = this.player.inventory[this.player.selectedSlot];
+            if (!selectedItem) {
+                // Secondary action with empty hands? Maybe dodge? (Not implemented)
+                console.log("Empty hand secondary action");
+                return;
+            }
+
+            // Handle blocking
+            if ((selectedItem.type === 'weapon' || selectedItem.type === 'shield') && selectedItem.blockValue && this.player.stamina > 5) {
+                 this.blockWithItem(selectedItem);
+             } else if (selectedItem.type === 'bow') {
+                 this.aimBow(selectedItem); // Placeholder
+             } else {
+                 console.log(`No secondary action defined for item: ${selectedItem.name}`);
+             }
+             this.updateInventoryUI();
+        }
+
+        attackWithWeapon(weapon) {
+            console.log(`Attacking with ${weapon.name}`);
+             if (this.player.stamina < (weapon.staminaCost || 10)) {
+                 this.showNotification("Not enough stamina!", true);
+                 return;
+             }
+            this.player.stamina -= (weapon.staminaCost || 10);
+            // TODO: Implement actual attack animation, hitbox check, damage calculation
+            this.increaseSkill(weapon.skill || 'swords', 0.1);
+        }
+
+        useToolOnTarget(tool) {
+             console.log(`Using ${tool.name}`);
+             if (this.player.stamina < (tool.staminaCost || 5)) {
+                 this.showNotification("Not enough stamina!", true);
+                 return;
+             }
+             this.player.stamina -= (tool.staminaCost || 5);
+            // TODO: Check what object is in front of player (tree, rock) and apply effect
+            console.log("Swinging tool...");
+            this.increaseSkill(tool.skill || 'woodcutting', 0.1);
+        }
+
+        eatFood(food, slotIndex) {
+            console.log(`Eating ${food.name}`);
+            // Apply food buffs - Valheim has multiple food slots, this is simplified
+            this.player.food = Math.min(this.player.maxFood, this.player.food + (food.foodValue || 20));
+            this.player.health = Math.min(this.player.maxHealth, this.player.health + (food.healthValue || 5)); // Instant health gain
+            // Add status effect for HoT/Stamina buffs if defined in food item
+            if (food.buff) {
+                this.addStatusEffect({...food.buff}); // Add a copy
+            }
+
+             this.showNotification(`Ate ${food.name}.`);
+
+            // Consume the item
+            food.quantity -= 1;
+            if (food.quantity <= 0) {
+                this.player.inventory[slotIndex] = null;
+            }
+            this.updateInventoryUI();
+        }
+
+         placeBuilding(item) {
+             if (!this.building.active || this.building.currentPiece !== item) {
+                 console.error("Trying to place building item when not in correct build mode state.");
+                 return; // Should not happen if logic is correct
+             }
+             console.log(`Placing ${item.name}`);
+
+             // TODO: Check placement validity (collision, support, workbench radius?)
+             const isValidPlacement = true; // Assume valid for now
+
+             if (isValidPlacement) {
+                 // TODO: Add the building piece to the game world `this.objects` at the calculated world position
+                 const worldX = this.player.x + Math.cos(this.player.direction) * 100; // Approx world pos based on ghost
+                 const worldY = this.player.y + Math.sin(this.player.direction) * 100;
+                 console.log(`Placed ${item.name} at ${worldX.toFixed(1)}, ${worldY.toFixed(1)} rot ${this.building.rotation}`);
+
+                 // Consume materials (find the item in inventory and decrement)
+                 const requiredItemName = item.name; // Assume the item itself is consumed
+                 let consumed = false;
+                 for (let i = 0; i < this.player.inventory.length; i++) {
+                     const invItem = this.player.inventory[i];
+                     if (invItem && invItem.name === requiredItemName && invItem.quantity > 0) {
+                         invItem.quantity -= 1;
+                         if (invItem.quantity <= 0) {
+                             this.player.inventory[i] = null;
+                             // If the consumed item was the one being placed, exit build mode
+                             if (i === this.player.selectedSlot) {
+                                this.building.currentPiece = null;
+                                this.building.active = false;
+                             }
+                         }
+                         consumed = true;
+                         break;
+                     }
+                 }
+                 if (!consumed) console.error("Could not find item to consume for building!");
+
+
+                 this.updateInventoryUI();
+                 this.increaseSkill('building', 0.2);
+             } else {
+                 this.showNotification("Cannot place here", true);
+             }
+         }
+
+        blockWithItem(item) {
+            console.log(`Blocking with ${item.name}`);
+             if (this.player.stamina < 5) { // Minimum stamina to start blocking
+                 this.showNotification("Not enough stamina to block!", true);
+                 return;
+             }
+             this.player.blocking = true;
+             // Stamina drain while holding block can be handled in updatePlayer or here if needed
+             // Stamina cost on successful block would be handled when damage is received
+             this.increaseSkill('blocking', 0.02); // Skill gain just for holding block
+        }
+
+         aimBow(bow) {
+             console.log(`Aiming ${bow.name}`);
+             // TODO: Enter aiming mode, maybe change camera FoV, show crosshair
+             // Right-click release or left-click would fire
+         }
+
+         jump() {
+             console.log("Jump attempt");
+             // TODO: Implement jump physics (apply upward velocity, handle gravity)
+             const jumpCost = 10;
+             if(this.player.stamina >= jumpCost) {
+                 this.player.stamina -= jumpCost;
+                 console.log("Jumped!");
+                 this.increaseSkill('jumping', 0.1);
+             } else {
+                 this.showNotification("Not enough stamina to jump!", true);
+             }
+         }
+
+        increaseSkill(skillName, amount) {
+            if (!this.player.skills.hasOwnProperty(skillName)) {
+                console.warn(`Attempted to increase unknown skill: ${skillName}`);
+                return;
+            }
+            const currentLevel = this.player.skills[skillName];
+            // Diminishing returns could be added here
+            const newLevel = Math.min(100, currentLevel + amount); // Cap at 100
+
+            if (newLevel > currentLevel) {
+                 this.player.skills[skillName] = newLevel;
+                 // Show skill increase notification only on whole level up
+                if (Math.floor(newLevel) > Math.floor(currentLevel)) {
+                    this.showNotification(`${skillName.charAt(0).toUpperCase() + skillName.slice(1)} increased to ${Math.floor(newLevel)}!`);
+                }
+            }
+        }
+
+        showNotification(text, isWarning = false) {
+             console.log(`Notification: ${text}`);
+             const notification = document.createElement('div');
+             notification.className = 'notification';
+             notification.textContent = text;
+             if (isWarning) notification.style.color = '#ffcc00';
+
+             this.notificationArea.appendChild(notification);
+
+             // Auto remove after a delay
+            setTimeout(() => {
+                notification.classList.add('fade-out');
+                setTimeout(() => {
+                    if (notification.parentNode === this.notificationArea) {
+                        this.notificationArea.removeChild(notification);
+                    }
+                }, 500); // Wait for fade out transition
+            }, 3000); // Display time
+        }
+
+        selectInventorySlot(slotIndex) {
+            if (slotIndex < 0 || slotIndex >= this.player.inventory.length) return;
+
+            // Deselect old slot
+            const oldSelected = document.querySelector(`.inventory-slot.selected`);
+            if (oldSelected) oldSelected.classList.remove('selected');
+
+            // Select new slot
+            const newSelected = document.querySelector(`.inventory-slot[data-slot="${slotIndex}"]`);
+            if (newSelected) newSelected.classList.add('selected');
+
+            this.player.selectedSlot = slotIndex;
+            console.log(`Selected inventory slot ${slotIndex + 1}`);
+
+            // If switching to a building item, enter building mode automatically? (Optional)
+            // const newItem = this.player.inventory[slotIndex];
+            // if (newItem && newItem.type === 'building' && !this.building.active) {
+            //     this.toggleBuildingMode();
+            // } else if (!newItem || newItem.type !== 'building' && this.building.active) {
+            //    this.toggleBuildingMode(); // Exit build mode if switching away from build item
+            // }
+        }
+
+        toggleBuildingMode() {
+             const currentItem = this.player.inventory[this.player.selectedSlot];
+             if (!this.building.active) {
+                 // Check if selected item is a placeable building piece
+                 if (currentItem && currentItem.type === 'building' && currentItem.isPlaceable) {
+                     this.building.active = true;
+                     this.building.currentPiece = currentItem;
+                     this.building.rotation = 0; // Reset rotation
+                     this.showNotification(`Building mode activated: ${currentItem.name}`, true);
+                     console.log('Entered building mode');
+                 } else {
+                     this.showNotification("Select a building piece first.", true);
+                 }
+             } else {
+                 this.building.active = false;
+                 this.building.currentPiece = null;
+                 this.showNotification("Building mode deactivated.", true);
+                 console.log('Exited building mode');
+             }
+        }
+
+        rotateBuildingPiece() {
+            if (!this.building.active) return;
+            this.building.rotation = (this.building.rotation + 22.5) % 360; // Valheim uses smaller increments
+            console.log(`Rotated building piece to ${this.building.rotation} degrees`);
+        }
+
+        toggleCraftingMenu(forceOpen = false) {
+            const isOpen = this.craftingMenu.style.display === 'block';
+            if (isOpen && !forceOpen) {
+                this.craftingMenu.style.display = 'none';
+                 // Maybe unpause game if pause was implemented
+            } else {
+                this.craftingMenu.style.display = 'block';
+                this.updateCraftingUI(); // Refresh UI when opening
+                 // Maybe pause game if pause was implemented
+            }
+        }
+
+        initInventory() {
+            const inventoryBar = document.getElementById('inventory-bar');
+            inventoryBar.innerHTML = ''; // Clear previous slots if any
+
+            for (let i = 0; i < this.player.inventory.length; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                slot.dataset.slot = i;
+
+                const slotNumber = document.createElement('div');
+                slotNumber.className = 'slot-number';
+                slotNumber.textContent = (i + 1);
+
+                slot.appendChild(slotNumber);
+                inventoryBar.appendChild(slot);
+
+                slot.addEventListener('click', () => this.selectInventorySlot(i));
+
+                // Tooltip Handling
+                slot.addEventListener('mouseenter', (e) => {
+                    const item = this.player.inventory[i];
+                    if (item) this.showItemTooltip(item);
+                });
+                slot.addEventListener('mouseleave', () => this.hideTooltip());
+            }
+
+            // Set initial selected slot UI
+            this.selectInventorySlot(0);
+
+            // Add some starter items (use addItem helper for potentially stacking)
+            this.addItem({ name: 'Stone Axe', type: 'tool', skill: 'axes', damage: 10, staminaCost: 6, description: 'A crude axe made of stone and wood.', icon: '🪓' });
+            this.addItem({ name: 'Club', type: 'weapon', skill: 'clubs', damage: 15, blockValue: 5, staminaCost: 8, description: 'A heavy piece of wood. Good for bashing.', icon: '🏏' });
+            this.addItem({ name: 'Wood', type: 'material', quantity: 20, stackSize: 50, description: 'Basic building material.', icon: '🪵' });
+            this.addItem({ name: 'Cooked Meat', type: 'food', quantity: 3, stackSize: 20, foodValue: 40, healthValue: 10, buff: {name: 'Rested', duration: 300, initialDuration: 300, icon: '🍖'}, description: 'Provides good sustenance.', icon: '🥩' });
+            this.addItem({ name: 'Wood Wall 1x1', type: 'building', isPlaceable: true, quantity: 10, stackSize: 50, requirements: [{ item: 'Wood', quantity: 2 }], description: 'A simple wooden wall segment.', icon: '🧱' });
+            this.addItem({ name: 'Stone', type: 'material', quantity: 15, stackSize: 50, description: 'A piece of rock.', icon: '🪨' });
+
+            this.updateInventoryUI(); // Initial UI draw
+        }
+
+        // Helper to add item, handles stacking or finding first empty slot
+        addItem(itemToAdd) {
+            const stackSize = itemToAdd.stackSize || 1;
+            let quantityToAdd = itemToAdd.quantity || 1;
+
+            // Try to stack first
+            if (stackSize > 1) {
+                for (let i = 0; i < this.player.inventory.length; i++) {
+                    const existingItem = this.player.inventory[i];
+                    if (existingItem && existingItem.name === itemToAdd.name && existingItem.quantity < stackSize) {
+                        const canAdd = stackSize - existingItem.quantity;
+                        const amountToAdd = Math.min(quantityToAdd, canAdd);
+                        existingItem.quantity += amountToAdd;
+                        quantityToAdd -= amountToAdd;
+                        if (quantityToAdd <= 0) {
+                            this.updateInventoryUI();
+                            return true; // Added successfully
+                        }
+                    }
+                }
+            }
+
+            // Find empty slot if not fully stacked
+            if (quantityToAdd > 0) {
+                const emptySlotIndex = this.player.inventory.findIndex(slot => slot === null);
+                if (emptySlotIndex !== -1) {
+                     // Make a copy of the item to avoid modifying the original definition
+                     const newItem = {...itemToAdd};
+                     newItem.quantity = quantityToAdd;
+                     this.player.inventory[emptySlotIndex] = newItem;
+                     this.updateInventoryUI();
+                     return true; // Added successfully
+                }
+            }
+
+            if (quantityToAdd > 0) {
+                 this.showNotification("Inventory full!", true);
+                 return false; // Failed to add
+            }
+            return true;
+        }
+
+        // Helper to count items in inventory
+        countItem(itemName) {
+            let count = 0;
+            for (const item of this.player.inventory) {
+                if (item && item.name === itemName) {
+                    count += item.quantity;
+                }
+            }
+            return count;
+        }
+
+        // Helper to remove items from inventory
+        removeItem(itemName, quantityToRemove) {
+            let remainingToRemove = quantityToRemove;
+            for (let i = this.player.inventory.length - 1; i >= 0; i--) { // Iterate backwards for easier removal
+                const item = this.player.inventory[i];
+                if (item && item.name === itemName) {
+                    if (item.quantity > remainingToRemove) {
+                        item.quantity -= remainingToRemove;
+                        remainingToRemove = 0;
+                        break;
+                    } else {
+                        remainingToRemove -= item.quantity;
+                        this.player.inventory[i] = null;
+                        if (remainingToRemove <= 0) break;
+                    }
+                }
+            }
+            this.updateInventoryUI();
+            return remainingToRemove <= 0; // Return true if all were removed
+        }
+
+
+        updateInventoryUI() {
+            for (let i = 0; i < this.player.inventory.length; i++) {
+                const slot = document.querySelector(`.inventory-slot[data-slot="${i}"]`);
+                const item = this.player.inventory[i];
+
+                // Clear existing item details (keep slot number)
+                const itemElement = slot.querySelector('.slot-item');
+                const countElement = slot.querySelector('.item-count');
+                if (itemElement) slot.removeChild(itemElement);
+                if (countElement) slot.removeChild(countElement);
+
+                if (item) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'slot-item';
+                    itemDiv.textContent = item.icon || item.name.charAt(0); // Use icon if available
+
+                    // Simple background color based on type (can be improved with images)
+                     let bgColor = '#777'; // Default grey
+                     switch (item.type) {
+                         case 'weapon': bgColor = '#b33'; break;
+                         case 'tool': bgColor = '#3b3'; break;
+                         case 'food': bgColor = '#b93'; break;
+                         case 'material': bgColor = '#888'; break;
+                         case 'building': bgColor = '#36b'; break;
+                         case 'armor': bgColor = '#aaa'; break;
+                         case 'shield': bgColor = '#a65'; break;
+                         case 'misc': bgColor = '#93b'; break;
+                     }
+                     itemDiv.style.backgroundColor = bgColor;
+                    slot.appendChild(itemDiv);
+
+                    if (item.quantity && item.quantity > 1) {
+                        const countDiv = document.createElement('div');
+                        countDiv.className = 'item-count';
+                        countDiv.textContent = item.quantity;
+                        slot.appendChild(countDiv);
+                    }
+                }
+            }
+        }
+
+         showItemTooltip(item) {
+            this.tooltip.innerHTML = `
+                <strong>${item.name}</strong><br>
+                <span style="font-size: 0.9em; color: #ccc;">${item.type.charAt(0).toUpperCase() + item.type.slice(1)}</span><br>
+                ${item.description || ''}<br>
+                ${item.damage ? `<span style="color: #ffddaa">Damage: ${item.damage}</span><br>` : ''}
+                ${item.blockValue ? `<span style="color: #aaddff">Block: ${item.blockValue}</span><br>` : ''}
+                ${item.foodValue ? `<span style="color: #ffaa88">Food: ${item.foodValue}</span><br>` : ''}
+                ${item.healthValue ? `<span style="color: #ff8888">Health: ${item.healthValue}</span><br>` : ''}
+                ${item.staminaCost ? `<span style="color: #aaffaa">Stamina Use: ${item.staminaCost}</span><br>` : ''}
+                ${item.quantity ? `Quantity: ${item.quantity}` : ''}
+                 ${item.stackSize && item.stackSize > 1 ? ` / ${item.stackSize}` : ''}
+            `;
+            this.tooltip.style.display = 'block';
+            this.positionTooltip(); // Position it immediately
+        }
+
+        positionTooltip() {
+             // Position tooltip near cursor, avoiding screen edges
+             const tooltipWidth = this.tooltip.offsetWidth;
+             const tooltipHeight = this.tooltip.offsetHeight;
+             const margin = 15; // Offset from cursor
+
+             let left = this.tooltipX + margin;
+             let top = this.tooltipY + margin;
+
+             // Adjust if too close to right edge
+             if (left + tooltipWidth > window.innerWidth) {
+                 left = this.tooltipX - tooltipWidth - margin;
+             }
+             // Adjust if too close to bottom edge
+             if (top + tooltipHeight > window.innerHeight) {
+                 top = this.tooltipY - tooltipHeight - margin;
+             }
+             // Adjust if too close to left edge (after potentially moving left)
+             if (left < 0) {
+                 left = margin;
+             }
+              // Adjust if too close to top edge (after potentially moving up)
+             if (top < 0) {
+                 top = margin;
+             }
+
+            this.tooltip.style.left = `${left}px`;
+            this.tooltip.style.top = `${top}px`;
+        }
+
+        hideTooltip() {
+            this.tooltip.style.display = 'none';
+        }
+
+        initCrafting() {
+            // Define some basic recipes
+            this.crafting.recipes = [
+                // Tools
+                { name: 'Stone Axe', type: 'tools', workbench: 0, requirements: [{ item: 'Wood', quantity: 5 }, { item: 'Stone', quantity: 2 }], result: { name: 'Stone Axe', quantity: 1 } },
+                { name: 'Flint Knife', type: 'tools', workbench: 1, requirements: [{ item: 'Wood', quantity: 2 }, { item: 'Flint', quantity: 4 }, { item: 'Leather Scraps', quantity: 2 }], result: { name: 'Flint Knife', quantity: 1 } },
+                // Weapons
+                { name: 'Club', type: 'weapons', workbench: 0, requirements: [{ item: 'Wood', quantity: 6 }], result: { name: 'Club', quantity: 1 } },
+                { name: 'Crude Bow', type: 'weapons', workbench: 1, requirements: [{ item: 'Wood', quantity: 10 }, { item: 'Leather Scraps', quantity: 8 }], result: { name: 'Crude Bow', quantity: 1 } },
+                { name: 'Wood Arrow', type: 'weapons', workbench: 1, requirements: [{ item: 'Wood', quantity: 8 }], result: { name: 'Wood Arrow', quantity: 20, type: 'ammo', icon: '🏹' } }, // Example ammo
+                // Building
+                { name: 'Wood Wall 1x1', type: 'building', workbench: 1, requirements: [{ item: 'Wood', quantity: 2 }], result: { name: 'Wood Wall 1x1', quantity: 1 } },
+                { name: 'Wood Floor 2x2', type: 'building', workbench: 1, requirements: [{ item: 'Wood', quantity: 2 }], result: { name: 'Wood Floor 2x2', quantity: 1, type: 'building', isPlaceable: true, icon: '🟫' } },
+                { name: 'Wood Roof 26 deg', type: 'building', workbench: 1, requirements: [{ item: 'Wood', quantity: 2 }], result: { name: 'Wood Roof 26 deg', quantity: 1, type: 'building', isPlaceable: true, icon: '🛖' } },
+                // Furniture
+                { name: 'Workbench', type: 'furniture', workbench: 0, requirements: [{ item: 'Wood', quantity: 10 }], result: { name: 'Workbench', quantity: 1, type: 'furniture', isPlaceable: true, providesWorkbench: 1, icon: '🛠️' } }, // Provides level 1 workbench
+                { name: 'Campfire', type: 'furniture', workbench: 0, requirements: [{ item: 'Stone', quantity: 5 }, { item: 'Wood', quantity: 2 }], result: { name: 'Campfire', quantity: 1, type: 'furniture', isPlaceable: true, providesFire: true, icon: '🔥' } },
+                // Misc
+                { name: 'Coal', type: 'misc', workbench: 0, requiresFire: true, requirements: [{ item: 'Wood', quantity: 1 }], result: { name: 'Coal', quantity: 1, type: 'material', icon: '⚫' } }, // Requires Campfire nearby
+            ];
+
+             // Populate item details into recipes for later use
+             this.crafting.recipes.forEach(recipe => {
+                 // Find the full item definition for the result (assuming it exists from initInventory or other source)
+                 const resultItemDef = this.findItemDefinition(recipe.result.name);
+                 if (resultItemDef) {
+                     // Combine recipe result info (like quantity) with base item definition
+                     recipe.result = { ...resultItemDef, ...recipe.result };
+                 } else {
+                     console.warn(`Could not find item definition for crafting result: ${recipe.result.name}`);
+                     // Use provided result info as fallback
+                     recipe.result = { ...recipe.result }; // Ensure it has necessary props
+                 }
+             });
+
+            this.updateCraftingUI(); // Initial update
+        }
+
+         // Helper to find a base item definition (useful for crafting results)
+         findItemDefinition(itemName) {
+             // Check inventory for an example first (quick check)
+             const invItem = this.player.inventory.find(i => i && i.name === itemName);
+             if (invItem) return { ...invItem }; // Return a copy
+
+             // TODO: Ideally, have a central item database/definitions list to check here
+             // For now, we'll rely on recipes having enough info or items being in inventory.
+             // Example check against a hypothetical database:
+             // if (ItemDatabase[itemName]) return { ...ItemDatabase[itemName] };
+
+             // Check recipes themselves for definitions if needed (less ideal)
+             const recipeSource = this.crafting.recipes.find(r => r.result.name === itemName);
+             if (recipeSource && recipeSource.result.type) return { ...recipeSource.result }; // Return copy if recipe has details
+
+             return null; // Not found
+         }
+
+        updateCraftingUI() {
+            const craftingItemsContainer = document.querySelector('.crafting-items');
+            craftingItemsContainer.innerHTML = '';
+
+            // TODO: Determine current workbench level based on player proximity to Workbench objects
+            const currentWorkbenchLevel = 0; // Placeholder
+
+            const filteredRecipes = this.crafting.recipes.filter(recipe =>
+                recipe.type === this.crafting.activeTab &&
+                (recipe.workbench || 0) <= currentWorkbenchLevel // Check workbench requirement
+            );
+
+            for (const recipe of filteredRecipes) {
+                const recipeElement = document.createElement('div');
+                recipeElement.className = 'crafting-item';
+
+                const canCraft = recipe.requirements.every(req => this.countItem(req.item) >= req.quantity);
+                if (!canCraft) {
+                    recipeElement.classList.add('unavailable');
+                    recipeElement.title = "Missing materials";
+                } else {
+                    recipeElement.title = `Click to craft ${recipe.name}`;
+                }
+
+                 const imageElement = document.createElement('div');
+                 imageElement.className = 'crafting-item-image';
+                 const resultItem = recipe.result; // Already populated in initCrafting
+                 imageElement.textContent = resultItem.icon || resultItem.name.charAt(0);
+                 // Background color based on result type
+                 let bgColor = '#777';
+                 switch (resultItem.type) {
+                     case 'weapon': bgColor = '#b33'; break; case 'tool': bgColor = '#3b3'; break;
+                     case 'food': bgColor = '#b93'; break; case 'material': bgColor = '#888'; break;
+                     case 'building': bgColor = '#36b'; break; case 'armor': bgColor = '#aaa'; break;
+                     case 'shield': bgColor = '#a65'; break; case 'misc': bgColor = '#93b'; break;
+                     case 'furniture': bgColor = '#a5a'; break; case 'ammo': bgColor = '#999'; break;
+                 }
+                 imageElement.style.backgroundColor = bgColor;
+
+                 const nameElement = document.createElement('div');
+                 nameElement.textContent = recipe.name;
+                 if (resultItem.quantity > 1) {
+                    nameElement.textContent += ` x${resultItem.quantity}`;
+                 }
+
+                 const requirementsElement = document.createElement('div');
+                 requirementsElement.className = 'requirements';
+                 recipe.requirements.forEach(req => {
+                     const currentAmount = this.countItem(req.item);
+                     const reqDiv = document.createElement('div');
+                     reqDiv.textContent = `${req.item}: ${req.quantity}`;
+                     reqDiv.classList.add(currentAmount >= req.quantity ? 'requirement-met' : 'requirement-missing');
+                     requirementsElement.appendChild(reqDiv);
+                 });
+
+                 recipeElement.appendChild(imageElement);
+                 recipeElement.appendChild(nameElement);
+                 recipeElement.appendChild(requirementsElement);
+
+                if (canCraft) {
+                    recipeElement.addEventListener('click', () => this.craftItem(recipe));
+                }
+
+                craftingItemsContainer.appendChild(recipeElement);
+            }
+        }
+
+        craftItem(recipe) {
+            console.log(`Attempting to craft: ${recipe.name}`);
+            // Double check requirements
+            const hasMaterials = recipe.requirements.every(req => this.countItem(req.item) >= req.quantity);
+            if (!hasMaterials) {
+                this.showNotification('Missing required materials!', true);
+                return;
+            }
+
+            // Check inventory space (using addItem helper handles this)
+            // Create a copy of the result object to pass to addItem
+            const itemToCraft = { ...recipe.result };
+
+            // Attempt to add the item (this checks for space/stacking)
+             if (this.addItem(itemToCraft)) {
+                 // If item was added successfully, consume materials
+                 recipe.requirements.forEach(req => {
+                    this.removeItem(req.item, req.quantity);
+                 });
+                 this.showNotification(`Crafted: ${recipe.name}`);
+                 this.increaseSkill('building', 0.1); // General crafting skill?
+                 this.updateCraftingUI(); // Update UI to reflect new material counts
+             } else {
+                 // addItem would have shown "Inventory full" notification
+                 console.log("Crafting failed - inventory likely full.");
+             }
+        }
+
+        addStatusEffect(effect) {
+             // Check if effect already exists, maybe refresh duration?
+             const existingEffect = this.player.statusEffects.find(e => e.name === effect.name);
+             if (existingEffect) {
+                 existingEffect.duration = Math.max(existingEffect.duration, effect.duration); // Refresh to max duration
+                 existingEffect.initialDuration = Math.max(existingEffect.initialDuration || 0, effect.initialDuration || effect.duration);
+             } else {
+                // Add initial duration if not present
+                if (!effect.initialDuration) effect.initialDuration = effect.duration;
+                 this.player.statusEffects.push(effect);
+             }
+             this.showNotification(`Gained effect: ${effect.name}`);
+             // Apply instant buffs/debuffs associated with the effect here
+        }
+
+        die() {
+            console.log("Player has died!");
+            this.gameState = 'dead';
+            this.deathScreen.style.display = 'flex';
+            // Drop inventory? Lose skills? Create tombstone? (Not implemented)
+            this.showNotification("YOU DIED", true);
+        }
+
+        respawnPlayer() {
+            console.log("Respawning player...");
+            this.deathScreen.style.display = 'none';
+            // Reset player stats (maybe not max values)
+            this.player.health = 50; // Respawn with partial health
+            this.player.stamina = this.player.maxStamina;
+            this.player.food = 25;
+            // Move player to spawn point (world center for now)
+            this.player.x = this.worldSize / 2;
+            this.player.y = this.worldSize / 2;
+            this.player.statusEffects = []; // Clear effects on death
+
+             // Reset input buffer to prevent stuck keys
+             this.inputBuffer = {};
+             this.player.isRunning = false;
+             this.player.blocking = false;
+
+            this.gameState = 'playing';
+             this.showNotification("Respawned!");
+        }
+
+        // Dialog System Functions
+        showDialog(messages) {
+            if (!Array.isArray(messages)) messages = [messages];
+            this.dialogQueue = [...messages]; // Copy messages to queue
+            this.advanceDialog(); // Show the first message
+        }
+
+        advanceDialog() {
+            if (this.dialogQueue.length > 0) {
+                const nextMessage = this.dialogQueue.shift();
+                document.getElementById('dialog-text').textContent = nextMessage;
+                this.dialogBox.style.display = 'block';
+                document.getElementById('dialog-continue').style.display = this.dialogQueue.length > 0 ? 'block' : 'none'; // Show "continue" if more messages
+            } else {
+                this.dialogBox.style.display = 'none'; // Hide dialog box if queue is empty
+            }
+        }
+    }
+
+    // Initialize the game once the DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+        const game = new ValheimGame();
+         // Example dialog on start:
+        // setTimeout(() => {
+        //    if(game.gameState === 'playing') game.showDialog(["Welcome, Viking!", "Odin watches over you.", "Press Tab to craft."]);
+        // }, 5000);
+    });
+
+    </script>
+</body>
+</html>

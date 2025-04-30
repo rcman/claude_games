@@ -1,0 +1,405 @@
+/* General Reset & Body Style */
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; background-color: #000; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+canvas { display: block; } /* Prevent canvas having extra space below */
+
+/* UI Overlay Container */
+#game-ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to canvas unless element has pointer-events: auto */
+    z-index: 10;
+}
+
+/* --- MENUS & OVERLAYS --- */
+.menu, #blocker, #instructions, #death-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    display: flex; /* Use flexbox for centering */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    pointer-events: auto; /* Menus capture clicks */
+    z-index: 100; /* Menus on top */
+    transition: opacity 0.3s ease; /* Fade effect for menus */
+}
+#instructions { background-color: rgba(0,0,0,0.5); cursor: pointer; font-size: 1.5em; }
+#blocker { z-index: 99; /* Below menus but above HUD */ }
+#main-menu { z-index: 110; /* Main menu highest */ }
+#death-screen { display: none; background-color: rgba(100,0,0,0.8); }
+
+
+.menu-container {
+    background: rgba(30, 30, 30, 0.9);
+    padding: 30px;
+    border: 2px solid #aa8855;
+    border-radius: 10px;
+    min-width: 300px;
+    max-width: 600px; /* Limit width */
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+.menu h2 { margin-top: 0; border-bottom: 1px solid #aa8855; padding-bottom: 10px; color: #ffcc88; }
+.menu button, .menu select, .menu input[type="text"], .menu input[type="password"] {
+    display: block;
+    width: 90%; /* Button width within container */
+    margin: 10px auto;
+    padding: 10px 15px;
+    background-color: #554422;
+    border: 1px solid #aa8855;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    text-align: center;
+    border-radius: 4px;
+}
+.menu button:hover { background-color: #776644; }
+.menu button:disabled { background-color: #444; color: #888; cursor: not-allowed; }
+.menu input[type="range"] { padding: 0; height: 8px; cursor: pointer; width: 80%; /* Smaller range slider */ margin: 5px auto; }
+.menu input[type="checkbox"] { width: auto; display: inline-block; margin-left: 10px; vertical-align: middle; cursor: pointer;}
+.menu label { margin-top: 15px; display: block; font-size: 14px; color: #ccc; }
+.menu .option-group { margin-bottom: 15px; text-align: left; padding: 0 5%;} /* Align options */
+
+/* --- IN-GAME HUD --- */
+#hud {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: 200px;
+    pointer-events: auto; /* Can potentially click HUD elements if needed */
+    z-index: 20; /* Above map/time, below menus */
+}
+.hud-bar {
+    height: 15px;
+    margin-bottom: 5px;
+    border: 1px solid #555;
+    background-color: rgba(0,0,0,0.5);
+    border-radius: 3px;
+    overflow: hidden; /* Hide overflow for inner bar */
+    box-shadow: inset 0 0 3px rgba(0,0,0,0.7);
+}
+.hud-bar > div { height: 100%; transition: width 0.3s ease; box-shadow: inset 0 0 3px rgba(255,255,255,0.2); }
+#health { background-color: #b03030; } /* Red */
+#stamina { background-color: #e0e040; } /* Yellow */
+
+#action-bar {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    pointer-events: auto;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 5px;
+    border-radius: 5px;
+}
+.action-slot {
+    width: 50px;
+    height: 50px;
+    background: rgba(85, 68, 34, 0.6); /* Darker brown */
+    border: 2px solid #aa8855;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    font-size: 10px; /* Number below icon */
+    flex-direction: column;
+    position: relative; /* For number */
+    border-radius: 4px;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+.action-slot::before { /* Number */
+    content: attr(data-slot-number);
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 10px;
+    color: #ccc;
+    font-weight: bold;
+    text-shadow: 1px 1px 1px #000;
+}
+
+.action-slot.selected { border: 2px solid #ffffff; background: rgba(119, 102, 68, 0.8); }
+.action-slot:hover { border-color: #fff; }
+.action-item { font-size: 24px; line-height: 1; /* Adjust icon size */ }
+
+/* --- In-Game Menus (Inventory, Build, Craft) --- */
+#inventory, #building-menu, #crafting, #boss-altar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%; /* Responsive width */
+    max-width: 700px; /* Max width */
+    background: rgba(15, 15, 15, 0.9); /* Slightly darker background */
+    border: 2px solid #aa8855;
+    padding: 20px;
+    display: none; /* Hidden by default */
+    pointer-events: auto;
+    z-index: 90; /* Below menu overlay, above HUD */
+    color: #eee;
+    border-radius: 8px;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.6);
+    max-height: 85vh; /* Limit height */
+    overflow-y: auto; /* Scroll if needed */
+}
+#inventory h2, #building-menu h2, #crafting h2, #boss-altar h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #aa8855;
+    text-align: center;
+    color: #ffcc88;
+    font-size: 1.4em;
+}
+
+/* Inventory Specific */
+#inventory .inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); /* Responsive grid */
+    gap: 5px;
+    margin-top: 15px;
+    min-height: 100px; /* Ensure grid has some height */
+}
+.inventory-slot {
+    height: 60px;
+    background: rgba(85, 68, 34, 0.4);
+    border: 1px solid #776644;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative; /* For quantity */
+    overflow: hidden; /* Hide overflow text */
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+.inventory-slot:hover { background-color: rgba(119, 102, 68, 0.6); }
+.inventory-item {
+    text-align: center;
+    font-size: 12px;
+    max-width: 100%;
+}
+.item-icon { font-size: 24px; display: block; }
+.item-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; margin-top: 2px; color: #ccc; }
+/* Add quantity display later */
+.equipment-slot {
+    height: 60px; width: 60px; background: rgba(50,50,50,0.5); border: 1px dashed #888; color: #aaa;
+    display: flex; justify-content: center; align-items: center; font-size: 12px; margin: 5px auto; border-radius: 3px;
+}
+
+/* Building/Crafting Shared Styles */
+.building-categories, .crafting-categories {
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+    gap: 5px;
+    margin-bottom: 15px;
+}
+.building-items, .crafting-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); /* Responsive items, slightly wider */
+    gap: 10px;
+    max-height: 45vh; /* Limit item list height */
+    overflow-y: auto;
+    padding: 10px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid #444;
+    border-radius: 4px;
+}
+.building-item, .crafting-item, .required-item {
+    background: rgba(85, 68, 34, 0.3);
+    border: 1px solid #aa8855;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    display: flex; /* Use flex for better layout */
+    flex-direction: column;
+    justify-content: space-between; /* Space out elements */
+    min-height: 120px; /* Ensure items have height */
+    border-radius: 4px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+.building-item:hover, .crafting-item:hover { background: rgba(119, 102, 68, 0.5); border-color: #fff; }
+.building-item.cannot-afford, .crafting-item:has(button:disabled) { cursor: not-allowed; opacity: 0.6; border-color: #777; }
+.building-item.cannot-afford:hover, .crafting-item:has(button:disabled):hover { background: rgba(85, 68, 34, 0.3); border-color: #777; } /* Don't highlight on hover if cannot afford */
+
+
+.item-icon { font-size: 28px; margin-bottom: 5px; }
+.item-name { font-size: 14px; margin-bottom: 5px; font-weight: bold; color: #fff; }
+.item-cost { font-size: 11px; color: #ccc; }
+.item-cost span { display: block; margin-top: 2px;} /* Ensure resource lines break */
+.craft-btn { /* Style the craft button inside item */
+    margin-top: 10px;
+    padding: 5px;
+    background-color: #4a4; /* Green */
+    color: #030;
+    border: 1px solid #383;
+    font-size: 12px;
+    border-radius: 3px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.craft-btn:disabled { background-color: #777; color: #aaa; border-color: #555; cursor: not-allowed; }
+.craft-btn:hover:not(:disabled) { background-color: #6c6; }
+
+
+.category-btn {
+    flex: 1 1 auto; /* Allow wrapping */
+    padding: 8px 5px;
+    background: rgba(85, 68, 34, 0.5);
+    color: white;
+    border: 1px solid #aa8855;
+    cursor: pointer;
+    font-size: 13px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+.category-btn:hover { background-color: rgba(119, 102, 68, 0.7); }
+.category-btn.selected { background: rgba(119, 102, 68, 0.9); font-weight: bold; border-color: #fff;}
+#close-inventory, #close-building, #close-crafting, #close-altar, #close-options { /* General close button */
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #800;
+    color: white;
+    border: 1px solid #f00;
+    border-radius: 50%;
+    width: 28px; /* Slightly larger */
+    height: 28px;
+    line-height: 26px; /* Center 'X' */
+    text-align: center;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 16px;
+    z-index: 5; /* Ensure it's above content */
+    transition: background-color 0.2s;
+}
+#close-inventory:hover, #close-building:hover, #close-crafting:hover, #close-altar:hover, #close-options:hover { background: #a00; }
+
+
+/* --- Time & Map --- */
+#time-indicator {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 120px;
+    height: 30px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid #aa8855;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    z-index: 15; /* Below HUD/Action Bar, Above Map */
+}
+#sun-moon {
+    position: absolute;
+    width: 20px; height: 20px;
+    top: 5px; left: 0%; /* Positioned by JS */
+    transform: translateX(-50%); /* Center icon */
+    background: #ffcc00; /* Sun color */
+    border-radius: 50%;
+    transition: background-color 0.5s, left 0.1s linear, box-shadow 0.5s; /* Animate color/position */
+    z-index: 2;
+    box-shadow: 0 0 8px #ffcc00; /* Sun glow */
+}
+#time-progress {
+    position: absolute; top: 0; left: 0;
+    width: 0%; /* Width set by JS */ height: 100%;
+    background: linear-gradient(90deg, rgba(255, 204, 0, 0.4), rgba(0, 0, 153, 0.4)); /* Day to night gradient */
+    z-index: 1;
+}
+
+#mini-map {
+    position: absolute;
+    top: 10px; left: 10px;
+    width: 150px; height: 150px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid #aa8855;
+    border-radius: 50%; /* Circular map */
+    overflow: hidden;
+    pointer-events: auto; /* Allow interaction if needed */
+    box-shadow: 0 0 10px rgba(0,0,0,0.6);
+    z-index: 15; /* Below HUD/Action Bar */
+}
+#map-canvas { display: block; width: 100%; height: 100%; }
+/* Player marker drawn on canvas now */
+
+/* --- Misc UI --- */
+#interaction-prompt {
+    position: absolute;
+    bottom: 80px; /* Above action bar */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 15px;
+    border-radius: 5px;
+    display: none; /* Shown by JS */
+    font-size: 14px;
+    border: 1px solid #555;
+    z-index: 25;
+    white-space: nowrap;
+}
+#damage-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(255, 0, 0, 0.5); /* Red flash */
+    opacity: 0;
+    transition: opacity 0.1s ease-out;
+    pointer-events: none;
+    z-index: 50;
+}
+#game-messages {
+    position: absolute;
+    top: 50px; /* Below map/time */
+    left: 10px;
+    width: 250px;
+    max-height: 150px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 80;
+}
+#game-messages .message {
+    background-color: rgba(0,0,0,0.7);
+    padding: 5px 10px;
+    margin-bottom: 5px;
+    border-radius: 3px;
+    font-size: 13px;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+    color: #eee;
+    border-left: 3px solid #aaa; /* Default border */
+}
+#game-messages .message.error { background-color: rgba(150,0,0,0.8); color: #fdd; border-left-color: #f55; }
+#game-messages .message.success { background-color: rgba(0,100,0,0.8); color: #dfd; border-left-color: #5f5; }
+#game-messages .message.info { background-color: rgba(0, 50, 100, 0.8); color: #ddf; border-left-color: #55f; }
+
+#build-mode-indicator {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(170, 136, 85, 0.9);
+    padding: 5px 10px;
+    border: 1px solid #fff;
+    border-radius: 5px;
+    font-size: 14px;
+    display: none; /* Shown in build mode */
+    z-index: 25;
+    color: #fff;
+    text-shadow: 1px 1px 1px #000;
+}
+
+/* Tooltips (Add later if needed) */
+.tooltip { /* Basic tooltip style */ }
+
+/* Weather Effects Overlay (Add later) */
+#weather-effects { /* Container for rain/fog layers */ }
+.rain { /* Rain animation */ }
+.fog { /* Fog overlay */ }

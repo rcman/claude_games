@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open World Survival</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            padding: 10px;
+            color: white;
+            text-shadow: 1px 1px 1px #000;
+            pointer-events: none;
+            user-select: none;
+        }
+        #health-bar, #hunger-bar, #thirst-bar {
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            margin-bottom: 5px;
+            position: relative;
+        }
+        #health-bar > div {
+            height: 100%;
+            background-color: #f44;
+            width: 100%;
+        }
+        #hunger-bar > div {
+            height: 100%;
+            background-color: #fc4;
+            width: 100%;
+        }
+        #thirst-bar > div {
+            height: 100%;
+            background-color: #4af;
+            width: 100%;
+        }
+        #inventory {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            pointer-events: none;
+        }
+        .slot {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #aaa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        #tooltip {
+            position: absolute;
+            display: none;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px;
+            border-radius: 3px;
+            pointer-events: none;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="health-bar"><div></div></div>
+        <div id="hunger-bar"><div></div></div>
+        <div id="thirst-bar"><div></div></div>
+        <div id="status">Day 1 - 12:00</div>
+    </div>
+    <div id="inventory">
+        <div class="slot" data-item="">1</div>
+        <div class="slot" data-item="">2</div>
+        <div class="slot" data-item="">3</div>
+        <div class="slot" data-item="">4</div>
+        <div class="slot" data-item="">5</div>
+        <div class="slot" data-item="">6</div>
+    </div>
+    <div id="tooltip"></div>
+    <div id="controls">
+        <strong>Controls:</strong><br>
+        WASD - Move<br>
+        SHIFT - Run<br>
+        SPACE - Jump<br>
+        E - Interact<br>
+        1-6 - Select item<br>
+        LEFT CLICK - Use item / Rotate Camera<br>
+        MOUSE - Look around<br>
+        ESC - Pause
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game parameters
+        const GAME_STATE = {
+            health: 100,
+            hunger: 100,
+            thirst: 100,
+            day: 1,
+            hour: 12,
+            inventory: {
+                wood: 0,
+                stone: 0,
+                food: 0,
+                water: 0,
+                tools: []
+            }
+        };
+
+        // Basic setup
+        let scene, camera, renderer, water;
+        let terrain, player;
+        let playerVelocity = new THREE.Vector3();
+        let playerOnGround = false;
+        let playerDirection = new THREE.Vector3();
+        let keyStates = {};
+        
+        // Camera controls
+        let cameraRotation = 0;
+        let cameraTilt = 0;
+        
+        // Player and environment parameters
+        const GRAVITY = 30;
+        const JUMP_FORCE = 10;
+        const PLAYER_SPEED = 5;
+        const PLAYER_RUN_SPEED = 10;
+        
+        // Time tracking
+        let previousTime = performance.now();
+        let gameTime = 0;
+        
+        // Resources and interactables
+        const resources = [];
+        
+        init();
+        animate();
+        
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.FogExp2(0x87ceeb, 0.01);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 5);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            
+            // Create lights
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            scene.add(directionalLight);
+            
+            // Create terrain
+            createTerrain();
+            
+            // Create water
+            createWater();
+            
+            // Create player
+            createPlayer();
+            
+            // Generate resources
+            generateResources();
+            
+            // Setup event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', (e) => keyStates[e.code] = true);
+            document.addEventListener('keyup', (e) => keyStates[e.code] = false);
+            
+            // Initialize UI
+            updateUI();
+        }
+        
+        function createTerrain() {
+            // Create terrain geometry
+            const geometry = new THREE.PlaneGeometry(100, 100, 64, 64);
+            
+            // Apply height modifications
+            const vertices = geometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                const x = vertices[i];
+                const z = vertices[i + 2];
+                
+                // Apply noise-based height
+                vertices[i + 1] = Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2;
+                
+                // Add some random variation
+                vertices[i + 1] += (Math.random() * 0.5 - 0.25);
+            }
+            
+            // Update normals after modifying vertices
+            geometry.computeVertexNormals();
+            
+            // Create terrain material with improved visibility
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x4d8c4a,
+                flatShading: true,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            
+            // Create terrain mesh
+            terrain = new THREE.Mesh(geometry, material);
+            terrain.rotation.x = -Math.PI / 2;
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+            
+            // Add some trees and rocks
+            for (let i = 0; i < 50; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                
+                // Get height at this position
+                const y = getHeightAt(x, z);
+                
+                // 70% chance for tree, 30% for rock
+                if (Math.random() < 0.7) {
+                    createTree(x, y, z);
+                } else {
+                    createRock(x, y, z);
+                }
+            }
+        }
+        
+        function getHeightAt(x, z) {
+            // Simple height calculation based on sine waves
+            return Math.sin(x * 0.1) * Math.cos(z * 0.1) * 2 + (Math.random() * 0.5 - 0.25);
+        }
+        
+        function createTree(x, y, z) {
+            // Create trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 2, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.set(x, y + 1, z);
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            scene.add(trunk);
+            
+            // Create foliage
+            const foliageGeometry = new THREE.ConeGeometry(1, 2, 8);
+            const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+            foliage.position.set(x, y + 3, z);
+            foliage.castShadow = true;
+            foliage.receiveShadow = true;
+            scene.add(foliage);
+            
+            // Add as resource
+            resources.push({
+                type: 'tree',
+                position: new THREE.Vector3(x, y, z),
+                objects: [trunk, foliage],
+                resources: { wood: 3 }
+            });
+        }
+        
+        function createRock(x, y, z) {
+            // Create rock
+            const rockGeometry = new THREE.DodecahedronGeometry(0.7, 0);
+            const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+            rock.position.set(x, y + 0.5, z);
+            rock.scale.y = 0.7;
+            rock.rotation.y = Math.random() * Math.PI;
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            scene.add(rock);
+            
+            // Add as resource
+            resources.push({
+                type: 'rock',
+                position: new THREE.Vector3(x, y, z),
+                objects: [rock],
+                resources: { stone: 2 }
+            });
+        }
+        
+        function createWater() {
+            // Simple water implementation using a plane with a blue material
+            const waterGeometry = new THREE.PlaneGeometry(200, 200);
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0077be,
+                transparent: true,
+                opacity: 0.6
+            });
+            
+            water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.rotation.x = -Math.PI / 2;
+            water.position.y = -1.5;
+            scene.add(water);
+        }
+        
+        function createPlayer() {
+            // Create player body
+            const bodyGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1.8, 8);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.9;
+            
+            // Create player head
+            const headGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xffccaa });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 1.7;
+            
+            // Create player group
+            player = new THREE.Group();
+            player.add(body);
+            player.add(head);
+            player.position.set(0, 2, 0);
+            player.castShadow = true;
+            player.receiveShadow = true;
+            scene.add(player);
+            
+            // Set up camera follow
+            camera.position.set(0, 3, 5);
+            player.add(camera);
+            camera.position.set(0, 2, 5);
+            camera.lookAt(player.position);
+        }
+        
+        function generateResources() {
+            // Generate some food resources
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * 80 - 40;
+                const z = Math.random() * 80 - 40;
+                const y = getHeightAt(x, z);
+                
+                const berryGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+                const berryMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                const berry = new THREE.Mesh(berryGeometry, berryMaterial);
+                berry.position.set(x, y + 0.2, z);
+                berry.castShadow = true;
+                berry.receiveShadow = true;
+                scene.add(berry);
+                
+                resources.push({
+                    type: 'food',
+                    position: new THREE.Vector3(x, y, z),
+                    objects: [berry],
+                    resources: { food: 1 }
+                });
+            }
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function updatePlayer(deltaTime) {
+            // Apply gravity
+            playerVelocity.y -= GRAVITY * deltaTime;
+            
+            // Get player movement input
+            const speedModifier = keyStates['ShiftLeft'] || keyStates['ShiftRight'] ? PLAYER_RUN_SPEED : PLAYER_SPEED;
+            
+            playerDirection.x = 0;
+            playerDirection.z = 0;
+            
+            if (keyStates['KeyW']) playerDirection.z = -1;
+            if (keyStates['KeyS']) playerDirection.z = 1;
+            if (keyStates['KeyA']) playerDirection.x = -1;
+            if (keyStates['KeyD']) playerDirection.x = 1;
+            
+            // Normalize and scale movement vector
+            if (playerDirection.x !== 0 || playerDirection.z !== 0) {
+                playerDirection.normalize();
+                
+                // Calculate camera-relative direction using cameraRotation
+                const rotatedX = playerDirection.x * Math.cos(cameraRotation) - playerDirection.z * Math.sin(cameraRotation);
+                const rotatedZ = playerDirection.x * Math.sin(cameraRotation) + playerDirection.z * Math.cos(cameraRotation);
+                
+                playerVelocity.x = rotatedX * speedModifier;
+                playerVelocity.z = rotatedZ * speedModifier;
+                
+                // Rotate player model to face direction of movement
+                if (playerVelocity.x !== 0 || playerVelocity.z !== 0) {
+                    player.rotation.y = Math.atan2(playerVelocity.x, playerVelocity.z);
+                }
+                
+                // Decrease hunger and thirst from running
+                if (speedModifier === PLAYER_RUN_SPEED) {
+                    GAME_STATE.hunger -= 0.05;
+                    GAME_STATE.thirst -= 0.1;
+                }
+            } else {
+                playerVelocity.x = 0;
+                playerVelocity.z = 0;
+            }
+            
+            // Handle jumping
+            if ((keyStates['Space']) && playerOnGround) {
+                playerVelocity.y = JUMP_FORCE;
+                playerOnGround = false;
+            }
+            
+            // Update player position
+            player.position.x += playerVelocity.x * deltaTime;
+            player.position.y += playerVelocity.y * deltaTime;
+            player.position.z += playerVelocity.z * deltaTime;
+            
+            // Simple collision with ground
+            const terrainHeight = getHeightAt(player.position.x, player.position.z);
+            if (player.position.y < terrainHeight + 1) {
+                player.position.y = terrainHeight + 1;
+                playerVelocity.y = 0;
+                playerOnGround = true;
+            }
+            
+            // Collision with water
+            if (player.position.y < -0.5) {
+                // Player is in water
+                playerVelocity.y *= 0.9;  // Water resistance
+                playerVelocity.x *= 0.8;
+                playerVelocity.z *= 0.8;
+                
+                // Replenish thirst when in water
+                GAME_STATE.thirst = Math.min(100, GAME_STATE.thirst + 0.5);
+            }
+            
+            // Check for interaction with resources
+            if (keyStates['KeyE']) {
+                checkResourceInteraction();
+                // Reset key state to prevent multiple interactions
+                keyStates['KeyE'] = false;
+            }
+            
+            // Decrease hunger and thirst over time
+            GAME_STATE.hunger -= 0.01;
+            GAME_STATE.thirst -= 0.02;
+            
+            // Apply damage if hunger or thirst are too low
+            if (GAME_STATE.hunger <= 0 || GAME_STATE.thirst <= 0) {
+                GAME_STATE.health -= 0.1;
+            }
+            
+            // Ensure values stay within range
+            GAME_STATE.hunger = Math.max(0, GAME_STATE.hunger);
+            GAME_STATE.thirst = Math.max(0, GAME_STATE.thirst);
+            GAME_STATE.health = Math.max(0, GAME_STATE.health);
+            
+            // Game over check
+            if (GAME_STATE.health <= 0) {
+                alert("Game Over! You didn't survive.");
+                resetGame();
+            }
+        }
+        
+        function checkResourceInteraction() {
+            // Check distance to all resources
+            for (let i = 0; i < resources.length; i++) {
+                const resource = resources[i];
+                const distance = player.position.distanceTo(resource.position);
+                
+                // If close enough to interact
+                if (distance < 2) {
+                    // Handle interaction based on resource type
+                    switch (resource.type) {
+                        case 'tree':
+                            GAME_STATE.inventory.wood += resource.resources.wood;
+                            console.log(`Collected ${resource.resources.wood} wood!`);
+                            break;
+                            
+                        case 'rock':
+                            GAME_STATE.inventory.stone += resource.resources.stone;
+                            console.log(`Collected ${resource.resources.stone} stone!`);
+                            break;
+                            
+                        case 'food':
+                            GAME_STATE.hunger = Math.min(100, GAME_STATE.hunger + 20);
+                            console.log('Ate some food!');
+                            break;
+                    }
+                    
+                    // Remove resource objects from scene
+                    resource.objects.forEach(obj => scene.remove(obj));
+                    
+                    // Remove resource from array
+                    resources.splice(i, 1);
+                    break;
+                }
+            }
+            
+            updateUI();
+        }
+        
+        function updateGameTime(deltaTime) {
+            // Update game time (1 real second = 1 game minute)
+            gameTime += deltaTime;
+            
+            // Update day/night cycle
+            GAME_STATE.hour += deltaTime * 60 / 60; // 60 game minutes per real minute
+            
+            if (GAME_STATE.hour >= 24) {
+                GAME_STATE.hour = 0;
+                GAME_STATE.day++;
+            }
+            
+            // Update lighting based on time of day
+            const timeOfDay = GAME_STATE.hour / 24;
+            
+            // Calculate sun position
+            const sunAngle = timeOfDay * Math.PI * 2;
+            const sunY = Math.sin(sunAngle);
+            const sunX = Math.cos(sunAngle);
+            
+            // Update directional light
+            const directionalLight = scene.children.find(child => child instanceof THREE.DirectionalLight);
+            if (directionalLight) {
+                directionalLight.position.set(sunX, Math.max(0.1, sunY), 0);
+                
+                // Night time
+                if (sunY < 0) {
+                    directionalLight.intensity = 0.2;
+                    scene.background = new THREE.Color(0x0a1a2a);
+                    scene.fog.color = new THREE.Color(0x0a1a2a);
+                } else {
+                    // Day time
+                    directionalLight.intensity = 1.0;
+                    scene.background = new THREE.Color(0x87ceeb);
+                    scene.fog.color = new THREE.Color(0x87ceeb);
+                }
+            }
+        }
+        
+        function updateUI() {
+            // Update health, hunger, and thirst bars
+            document.querySelector('#health-bar > div').style.width = `${GAME_STATE.health}%`;
+            document.querySelector('#hunger-bar > div').style.width = `${GAME_STATE.hunger}%`;
+            document.querySelector('#thirst-bar > div').style.width = `${GAME_STATE.thirst}%`;
+            
+            // Update status text
+            const hour = Math.floor(GAME_STATE.hour);
+            const minute = Math.floor((GAME_STATE.hour - hour) * 60);
+            document.querySelector('#status').textContent = 
+                `Day ${GAME_STATE.day} - ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} | ` +
+                `Wood: ${GAME_STATE.inventory.wood} | Stone: ${GAME_STATE.inventory.stone}`;
+        }
+        
+        function resetGame() {
+            // Reset game state
+            GAME_STATE.health = 100;
+            GAME_STATE.hunger = 100;
+            GAME_STATE.thirst = 100;
+            GAME_STATE.day = 1;
+            GAME_STATE.hour = 12;
+            GAME_STATE.inventory = {
+                wood: 0,
+                stone: 0,
+                food: 0,
+                water: 0,
+                tools: []
+            };
+            
+            // Reset player position
+            player.position.set(0, 2, 0);
+            playerVelocity.set(0, 0, 0);
+            
+            // Regenerate resources
+            resources.forEach(resource => {
+                resource.objects.forEach(obj => scene.remove(obj));
+            });
+            resources.length = 0;
+            generateResources();
+            
+            updateUI();
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const currentTime = performance.now();
+            const deltaTime = (currentTime - previousTime) / 1000;
+            previousTime = currentTime;
+            
+            // Update player
+            updatePlayer(deltaTime);
+            
+            // Update camera position to follow player
+            const cameraDistance = 5;
+            const cameraHeight = 2 + Math.sin(cameraTilt) * 3;
+            const cameraOffsetX = Math.sin(cameraRotation) * cameraDistance * Math.cos(cameraTilt);
+            const cameraOffsetZ = Math.cos(cameraRotation) * cameraDistance * Math.cos(cameraTilt);
+            
+            camera.position.x = player.position.x - cameraOffsetX;
+            camera.position.y = player.position.y + cameraHeight;
+            camera.position.z = player.position.z - cameraOffsetZ;
+            camera.lookAt(new THREE.Vector3(
+                player.position.x, 
+                player.position.y + 1, 
+                player.position.z
+            ));
+            
+            // Update game time
+            updateGameTime(deltaTime);
+            
+            // Update UI every second
+            if (Math.floor(gameTime) > Math.floor(gameTime - deltaTime)) {
+                updateUI();
+            }
+            
+            // Animate water
+            if (water) {
+                water.position.y = -1.5 + Math.sin(currentTime * 0.001) * 0.05;
+            }
+            
+            // Render scene
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
