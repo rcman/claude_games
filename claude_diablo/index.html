@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diablo-Style HTML5 Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            background-color: #111;
+            cursor: pointer;
+        }
+        #ui {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        #healthBar {
+            width: 200px;
+            height: 20px;
+            background-color: #300;
+            border: 2px solid #600;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #healthFill {
+            height: 100%;
+            background-color: #f00;
+            width: 100%;
+            transition: width 0.3s;
+        }
+        #stats {
+            color: #fff;
+            margin-left: 20px;
+        }
+        #gameOver {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #f00;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        #gameOver button {
+            background-color: #600;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #gameOver button:hover {
+            background-color: #900;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div id="healthBar"><div id="healthFill"></div></div>
+        <div id="stats">
+            Level: <span id="level">1</span> | 
+            Experience: <span id="xp">0</span> | 
+            Kills: <span id="kills">0</span> |
+            Damage: <span id="damage">5-10</span>
+        </div>
+    </div>
+    <div id="gameOver">
+        <h2>You Died!</h2>
+        <p>The demons have claimed another soul...</p>
+        <button id="restartButton">Restart Game</button>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const healthFill = document.getElementById('healthFill');
+        const levelEl = document.getElementById('level');
+        const xpEl = document.getElementById('xp');
+        const killsEl = document.getElementById('kills');
+        const damageEl = document.getElementById('damage');
+        const gameOverEl = document.getElementById('gameOver');
+        const restartButton = document.getElementById('restartButton');
+
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - 80; // Account for UI
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 80;
+        });
+
+        // Game assets - simple placeholders
+        const playerColor = '#66f';
+        const enemyColors = ['#f33', '#c00', '#800'];
+        const tileColors = [
+            '#444', // Stone
+            '#333', // Darker stone
+            '#555', // Lighter stone
+            '#3a3a3a', // Medium stone
+        ];
+
+        // Isometric constants
+        const TILE_WIDTH = 64;
+        const TILE_HEIGHT = 32;
+        const MAP_SIZE = 20;
+
+        // Generate map
+        let map = [];
+        function generateMap() {
+            map = [];
+            for (let y = 0; y < MAP_SIZE; y++) {
+                let row = [];
+                for (let x = 0; x < MAP_SIZE; x++) {
+                    // Random floor tile
+                    row.push(Math.floor(Math.random() * tileColors.length));
+                }
+                map.push(row);
+            }
+        }
+
+        // Convert grid to isometric
+        function toIso(x, y) {
+            return {
+                x: (x - y) * TILE_WIDTH / 2,
+                y: (x + y) * TILE_HEIGHT / 2
+            };
+        }
+
+        // Convert isometric to grid
+        function toGrid(x, y) {
+            // Center the coordinates
+            const offsetX = x - canvas.width / 2 + MAP_SIZE * TILE_WIDTH / 2;
+            const offsetY = y - canvas.height / 3;
+            
+            const gridY = (offsetY / TILE_HEIGHT - offsetX / TILE_WIDTH) / 2;
+            const gridX = offsetY / TILE_HEIGHT + gridY;
+            
+            return {
+                x: Math.floor(gridX),
+                y: Math.floor(gridY)
+            };
+        }
+
+        // Game entities
+        let player = {
+            x: Math.floor(MAP_SIZE / 2),
+            y: Math.floor(MAP_SIZE / 2),
+            targetX: Math.floor(MAP_SIZE / 2),
+            targetY: Math.floor(MAP_SIZE / 2),
+            health: 100,
+            maxHealth: 100,
+            speed: 0.07,
+            moving: false,
+            attackRange: 1.5,
+            attackCooldown: 0,
+            level: 1,
+            xp: 0,
+            xpToLevel: 100,
+            kills: 0,
+            minDamage: 5,
+            maxDamage: 10,
+            size: 20
+        };
+
+        let enemies = [];
+        
+        // Generate enemies
+        function spawnEnemies(count) {
+            for (let i = 0; i < count; i++) {
+                let enemyType = Math.floor(Math.random() * 3);
+                let enemy = {
+                    x: Math.floor(Math.random() * MAP_SIZE),
+                    y: Math.floor(Math.random() * MAP_SIZE),
+                    health: 20 + enemyType * 15,
+                    maxHealth: 20 + enemyType * 15,
+                    speed: 0.02 + (Math.random() * 0.02),
+                    type: enemyType,
+                    size: 16 + enemyType * 2,
+                    damage: 3 + enemyType * 2,
+                    state: 'idle',
+                    aggroRange: 4 + enemyType,
+                    attackRange: 1.2,
+                    attackCooldown: 0,
+                    xpValue: 10 + enemyType * 5
+                };
+                
+                // Ensure enemies don't spawn too close to player
+                while (Math.sqrt(Math.pow(enemy.x - player.x, 2) + Math.pow(enemy.y - player.y, 2)) < 5) {
+                    enemy.x = Math.floor(Math.random() * MAP_SIZE);
+                    enemy.y = Math.floor(Math.random() * MAP_SIZE);
+                }
+                
+                enemies.push(enemy);
+            }
+        }
+
+        // Draw isometric tiles
+        function drawMap() {
+            // Calculate camera offset to center on player
+            const playerIso = toIso(player.x, player.y);
+            const cameraX = canvas.width / 2 - playerIso.x;
+            const cameraY = canvas.height / 3 - playerIso.y;
+
+            // Draw floor tiles
+            for (let y = 0; y < MAP_SIZE; y++) {
+                for (let x = 0; x < MAP_SIZE; x++) {
+                    const iso = toIso(x, y);
+
+                    // Create diamond shape
+                    ctx.beginPath();
+                    ctx.moveTo(cameraX + iso.x, cameraY + iso.y);
+                    ctx.lineTo(cameraX + iso.x + TILE_WIDTH / 2, cameraY + iso.y + TILE_HEIGHT / 2);
+                    ctx.lineTo(cameraX + iso.x, cameraY + iso.y + TILE_HEIGHT);
+                    ctx.lineTo(cameraX + iso.x - TILE_WIDTH / 2, cameraY + iso.y + TILE_HEIGHT / 2);
+                    ctx.closePath();
+
+                    // Fill with tile color
+                    ctx.fillStyle = tileColors[map[y][x]];
+                    ctx.fill();
+                }
+            }
+
+            return { cameraX, cameraY };
+        }
+
+        // Draw entities (player and enemies)
+        function drawEntities(cameraX, cameraY) {
+            // Draw enemies
+            enemies.forEach(enemy => {
+                const enemyIso = toIso(enemy.x, enemy.y);
+                
+                // Enemy body
+                ctx.beginPath();
+                ctx.arc(cameraX + enemyIso.x, cameraY + enemyIso.y, enemy.size, 0, Math.PI * 2);
+                ctx.fillStyle = enemyColors[enemy.type];
+                ctx.fill();
+                
+                // Health bar
+                const healthWidth = enemy.size * 2;
+                ctx.fillStyle = '#300';
+                ctx.fillRect(cameraX + enemyIso.x - healthWidth/2, cameraY + enemyIso.y - enemy.size - 10, healthWidth, 5);
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(cameraX + enemyIso.x - healthWidth/2, cameraY + enemyIso.y - enemy.size - 10, healthWidth * (enemy.health / enemy.maxHealth), 5);
+            });
+            
+            // Draw player
+            const playerIso = toIso(player.x, player.y);
+            
+            // Player body
+            ctx.beginPath();
+            ctx.arc(cameraX + playerIso.x, cameraY + playerIso.y, player.size, 0, Math.PI * 2);
+            ctx.fillStyle = playerColor;
+            ctx.fill();
+            
+            // Draw player direction
+            if (player.moving) {
+                const targetIso = toIso(player.targetX, player.targetY);
+                ctx.beginPath();
+                ctx.moveTo(cameraX + playerIso.x, cameraY + playerIso.y);
+                ctx.lineTo(cameraX + targetIso.x, cameraY + targetIso.y);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.stroke();
+            }
+        }
+
+        // Update player position
+        function updatePlayer() {
+            // Move towards target
+            if (player.moving) {
+                const dx = player.targetX - player.x;
+                const dy = player.targetY - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0.1) {
+                    player.x += dx * player.speed;
+                    player.y += dy * player.speed;
+                } else {
+                    player.moving = false;
+                }
+            }
+            
+            // Attack cooldown
+            if (player.attackCooldown > 0) {
+                player.attackCooldown--;
+            }
+            
+            // Update health UI
+            healthFill.style.width = (player.health / player.maxHealth * 100) + '%';
+        }
+
+        // Update enemy behavior
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                // Check for death
+                if (enemy.health <= 0) {
+                    // Give XP to player
+                    player.xp += enemy.xpValue;
+                    player.kills++;
+                    killsEl.textContent = player.kills;
+                    xpEl.textContent = player.xp;
+                    
+                    // Check for level up
+                    if (player.xp >= player.xpToLevel) {
+                        levelUp();
+                    }
+                    
+                    // Remove enemy
+                    enemies.splice(i, 1);
+                    continue;
+                }
+                
+                // Attack cooldown
+                if (enemy.attackCooldown > 0) {
+                    enemy.attackCooldown--;
+                }
+                
+                // Calculate distance to player
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // State machine
+                switch (enemy.state) {
+                    case 'idle':
+                        // Check if player is in aggro range
+                        if (distance < enemy.aggroRange) {
+                            enemy.state = 'chase';
+                        }
+                        break;
+                    
+                    case 'chase':
+                        // Move towards player
+                        if (distance > enemy.attackRange) {
+                            enemy.x += dx * enemy.speed;
+                            enemy.y += dy * enemy.speed;
+                        } else {
+                            enemy.state = 'attack';
+                        }
+                        
+                        // Lost sight of player
+                        if (distance > enemy.aggroRange + 2) {
+                            enemy.state = 'idle';
+                        }
+                        break;
+                    
+                    case 'attack':
+                        // Attack player if in range and cooldown is ready
+                        if (distance <= enemy.attackRange && enemy.attackCooldown === 0) {
+                            // Deal damage
+                            player.health -= enemy.damage;
+                            enemy.attackCooldown = 40; // Attack every 40 frames
+                            
+                            // Check for player death
+                            if (player.health <= 0) {
+                                gameOver();
+                            }
+                            
+                            // Update health UI
+                            healthFill.style.width = (player.health / player.maxHealth * 100) + '%';
+                        }
+                        
+                        // If player moved out of range, chase
+                        if (distance > enemy.attackRange) {
+                            enemy.state = 'chase';
+                        }
+                        break;
+                }
+            }
+            
+            // Spawn new enemies if needed
+            if (enemies.length < 5 + player.level) {
+                spawnEnemies(1 + Math.floor(player.level / 3));
+            }
+        }
+
+        // Handle player attack
+        function playerAttack() {
+            if (player.attackCooldown > 0) return;
+            
+            // Find nearest enemy in range
+            let nearestEnemy = null;
+            let nearestDistance = player.attackRange;
+            
+            for (const enemy of enemies) {
+                const dx = enemy.x - player.x;
+                const dy = enemy.y - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < nearestDistance) {
+                    nearestEnemy = enemy;
+                    nearestDistance = distance;
+                }
+            }
+            
+            // Attack if enemy found
+            if (nearestEnemy) {
+                // Calculate damage
+                const damage = Math.floor(player.minDamage + Math.random() * (player.maxDamage - player.minDamage));
+                nearestEnemy.health -= damage;
+                
+                // Reset attack cooldown
+                player.attackCooldown = 20;
+                
+                // Show damage effect (flash the enemy)
+                const originalColor = enemyColors[nearestEnemy.type];
+                enemyColors[nearestEnemy.type] = '#fff';
+                setTimeout(() => {
+                    enemyColors[nearestEnemy.type] = originalColor;
+                }, 100);
+            }
+        }
+
+        // Level up player
+        function levelUp() {
+            player.level++;
+            player.xp -= player.xpToLevel;
+            player.xpToLevel = Math.floor(player.xpToLevel * 1.5);
+            player.maxHealth += 20;
+            player.health = player.maxHealth;
+            player.minDamage += 2;
+            player.maxDamage += 3;
+            
+            // Update UI
+            levelEl.textContent = player.level;
+            xpEl.textContent = player.xp;
+            damageEl.textContent = player.minDamage + '-' + player.maxDamage;
+            
+            // Healing effect
+            healthFill.style.backgroundColor = '#0f0';
+            setTimeout(() => {
+                healthFill.style.backgroundColor = '#f00';
+            }, 500);
+        }
+
+        // Game over state
+        function gameOver() {
+            gameOverEl.style.display = 'block';
+        }
+
+        // Restart game
+        function restartGame() {
+            // Reset player
+            player.x = Math.floor(MAP_SIZE / 2);
+            player.y = Math.floor(MAP_SIZE / 2);
+            player.targetX = player.x;
+            player.targetY = player.y;
+            player.health = 100;
+            player.maxHealth = 100;
+            player.level = 1;
+            player.xp = 0;
+            player.xpToLevel = 100;
+            player.kills = 0;
+            player.minDamage = 5;
+            player.maxDamage = 10;
+            
+            // Update UI
+            levelEl.textContent = player.level;
+            xpEl.textContent = player.xp;
+            killsEl.textContent = player.kills;
+            damageEl.textContent = player.minDamage + '-' + player.maxDamage;
+            
+            // Clear enemies and generate new ones
+            enemies = [];
+            generateMap();
+            spawnEnemies(5);
+            
+            // Hide game over screen
+            gameOverEl.style.display = 'none';
+        }
+
+        // Handle mouse click
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Convert to grid coordinates
+            const { cameraX, cameraY } = drawMap();
+            const grid = toGrid(mouseX - cameraX, mouseY - cameraY);
+            
+            // Check if click is on valid map position
+            if (grid.x >= 0 && grid.x < MAP_SIZE && grid.y >= 0 && grid.y < MAP_SIZE) {
+                // Check if click is near enemy (attack)
+                let nearestEnemy = null;
+                let nearestDistance = player.attackRange;
+                
+                for (const enemy of enemies) {
+                    const enemyIso = toIso(enemy.x, enemy.y);
+                    const dx = mouseX - cameraX - enemyIso.x;
+                    const dy = mouseY - cameraY - enemyIso.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < enemy.size * 1.2 && 
+                        Math.sqrt(Math.pow(enemy.x - player.x, 2) + Math.pow(enemy.y - player.y, 2)) < player.attackRange) {
+                        nearestEnemy = enemy;
+                        break;
+                    }
+                }
+                
+                if (nearestEnemy) {
+                    // Attack enemy
+                    playerAttack();
+                } else {
+                    // Move to location
+                    player.targetX = grid.x;
+                    player.targetY = grid.y;
+                    player.moving = true;
+                }
+            }
+        });
+
+        // Set up game restart button
+        restartButton.addEventListener('click', restartGame);
+
+        // Game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw map and get camera offsets
+            const camera = drawMap();
+            
+            // Update entities
+            updatePlayer();
+            updateEnemies();
+            
+            // Draw entities
+            drawEntities(camera.cameraX, camera.cameraY);
+            
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize game
+        function initGame() {
+            generateMap();
+            spawnEnemies(5);
+            gameLoop();
+        }
+
+        // Start the game
+        initGame();
+    </script>
+</body>
+</html>

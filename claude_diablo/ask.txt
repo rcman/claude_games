@@ -1,0 +1,1 @@
+write me a game in HTML5 where it has the view and angle of a game like Diablo. Where it have player mechanics and game play like Diablo.

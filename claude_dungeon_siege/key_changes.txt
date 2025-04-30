@@ -1,0 +1,35 @@
+
+**Key Changes and Additions:**
+
+1.  **`Item` Class:** Added the `Item` class definition with properties like name, type, sprite, stats, description, `containsPoint`, and `getEquipmentSlot`.
+2.  **`Character` Class Completion:**
+    *   **Constructor:** Added game reference, more detailed stats setup, skills, AI properties, equipment slots. Calls `updateStats`.
+    *   **`updateStats`:** Calculates derived stats based on base stats, level, and equipped items.
+    *   **`update`:** Main loop for character logic - calls AI, movement, animation updates, handles mana regen, cooldowns.
+    *   **`updateEnemyAI`:** Implemented basic AI states (idle, wander, chase, attack) with target acquisition and loss logic.
+    *   **`updateCompanionAI`:** Basic follow/attack logic for non-player party members.
+    *   **`updateMovement`:** Handles moving towards `moveTarget`, basic collision detection against unwalkable tiles (with simple sliding), and updates character `direction`.
+    *   **`updateAnimation`:** Cycles through animation frames when moving.
+    *   **`moveTo`:** Sets the destination target.
+    *   **`attack`:** Calculates damage (including variance, crit), applies it to the target, handles cooldown, gains skill exp, consumes mana if applicable.
+    *   **`takeDamage`:** Reduces HP, checks for death, triggers retaliation AI.
+    *   **`heal`, `restoreMana`:** Applies healing/mana restoration, capped by max values.
+    *   **`die`:** Logs death, sets AI state. (Player death needs more robust handling).
+    *   **`gainExperience`, `levelUp`:** Handles XP gain and leveling up, including stat increases and full heal.
+    *   **`gainSkillExp`:** Adds experience to a specific skill and handles skill level ups.
+    *   **`equipItem`:** Handles equipping items, swapping with existing items, and updating stats.
+    *   **Helper Methods:** `setTarget`, `setInteractionTarget`, `stopActions`, `containsPoint`, `getXpValue`, `getClassType`, `faceTarget`, `calculateExpToNextLevel`.
+3.  **`DungeonSiege` Class Enhancements:**
+    *   **World Interaction:** Added `getTile` and `isWalkable` for collision checks.
+    *   **Chunk Loading:** Improved chunk loading/unloading logic and integrated it with minimap updates. World generation uses simple noise.
+    *   **Input Handling:** Refined mouse click logic (right-click for attack/move, left-click for interact/select), added Escape key handling for inventory/pause. World coordinates calculated on mouse move.
+    *   **Item Pickup:** Pickup now happens when a character with an `interactionTarget` (set by clicking the item) gets close enough. Added optional auto-pickup check.
+    *   **UI Updates:** `updatePartyUI` updates health/mana dynamically. `updateInventory` now handles both inventory and equipment slots, including tooltips with item comparison. Added `createItemIcon` helper. Added `unequipItem`.
+    *   **Floating Text:** Added system for displaying damage numbers, healing, XP gains, level ups.
+    *   **Rendering:** Entities are now sorted by Y-coordinate for correct draw order. Character rendering uses animation frames and direction (assuming compatible sprite sheets). Health bars appear above heads. Debug info improved.
+    *   **Camera:** Slightly smoother camera follow.
+    *   **Initialization:** Starts near world center, loads initial chunks correctly.
+    *   **Global `game` variable:** Made `game` a global variable initialized on DOMContentLoaded for easier access from classes.
+4.  **HTML/CSS:** Minor tweaks - pointer events on party UI, inventory size limits, equipment slots added, floating text CSS, slightly better UI element positioning. Added placeholder portrait backgrounds.
+
+This provides a much more functional base for the game, including core mechanics like movement, combat, inventory management, leveling, basic AI, and world interaction. Remember to replace placeholder assets with actual game graphics!

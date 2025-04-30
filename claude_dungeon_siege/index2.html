@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dungeon Siege Clone (Generated Assets)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        #loadingBar {
+            width: 50%;
+            height: 30px;
+            border: 2px solid white;
+            margin-top: 20px;
+        }
+        #loadingProgress {
+            width: 0%;
+            height: 100%;
+            background-color: #4a90e2;
+            transition: width 0.2s;
+        }
+        #ui {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            pointer-events: none;
+        }
+        #partyUI {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            pointer-events: auto; /* Allow clicking on portraits */
+        }
+        .character-portrait {
+            width: 50px;
+            height: 50px;
+            background-color: #333;
+            border: 2px solid #777;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer; /* Indicate clickable */
+             /* background-image removed - will be set dynamically via JS */
+             background-size: contain; /* Use contain for generated assets */
+             background-position: center;
+             background-repeat: no-repeat;
+        }
+
+        .character-portrait.selected {
+            border-color: #4a90e2;
+            box-shadow: 0 0 10px #4a90e2;
+        }
+        .health-bar, .mana-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 5px;
+            width: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .health-bar-fill {
+            height: 100%;
+            background-color: red;
+             transition: width 0.2s ease-out;
+        }
+        .mana-bar {
+            bottom: 5px; /* Position mana above health */
+        }
+        .mana-bar-fill {
+            height: 100%;
+            background-color: blue;
+            transition: width 0.2s ease-out;
+        }
+        #actionBar {
+            display: flex;
+            margin-left: auto;
+            gap: 5px;
+            align-self: flex-end;
+        }
+        .action-button {
+            width: 40px;
+            height: 40px;
+            background-color: #555;
+            border: 2px solid #777;
+            border-radius: 5px;
+            pointer-events: auto;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            color: white; /* Ensure icons/text are visible */
+        }
+        #minimapContainer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 200px;
+            height: 200px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #444;
+            border-radius: 3px;
+            overflow: hidden; /* Ensure minimap canvas stays within bounds */
+        }
+        #minimap {
+            width: 100%;
+            height: 100%;
+        }
+        #inventoryScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 600px; /* Limit max width */
+            height: 80%;
+            max-height: 500px; /* Limit max height */
+            background-color: rgba(20, 20, 20, 0.95);
+            border: 3px solid #555;
+            display: none;
+            z-index: 50;
+            color: white;
+            padding: 20px;
+            box-sizing: border-box; /* Include padding in width/height */
+            overflow-y: auto; /* Allow scrolling if content overflows */
+        }
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); /* Responsive columns */
+            grid-gap: 10px;
+            margin-top: 20px;
+        }
+        .inventory-slot {
+            width: 50px;
+            height: 50px;
+            background-color: #333;
+            border: 1px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative; /* For item count */
+            cursor: pointer;
+            color: #888; /* Placeholder text color */
+            font-size: 10px;
+        }
+        .inventory-slot:hover {
+             border-color: #aaa;
+        }
+        .item-icon {
+             width: 90%;
+             height: 90%;
+             /* background-image removed - will be set dynamically */
+             background-size: contain;
+             background-position: center;
+             background-repeat: no-repeat;
+        }
+         #dialogueBox {
+            position: absolute;
+            bottom: 120px; /* Raise above UI */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
+            max-width: 800px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #666;
+            color: white;
+            padding: 15px;
+            display: none;
+            z-index: 40;
+            border-radius: 5px;
+        }
+        #dialogueText { margin-bottom: 10px; }
+        #dialogueContinue {
+            padding: 5px 15px;
+            cursor: pointer;
+            background-color: #555;
+            border: 1px solid #777;
+            color: white;
+            border-radius: 3px;
+            float: right; /* Position button */
+        }
+         #dialogueContinue:hover { background-color: #777; }
+        #tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border: 1px solid #777;
+            pointer-events: none;
+            display: none;
+            z-index: 60;
+            max-width: 250px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .floating-text {
+            position: absolute;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+            z-index: 55;
+            animation: floatUp 1s ease-out forwards;
+        }
+        .floating-text.damage { color: red; }
+        .floating-text.heal { color: limegreen; }
+        .floating-text.xp { color: gold; }
+        .floating-text.levelup { color: cyan; font-size: 18px; }
+
+        @keyframes floatUp {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(-50px); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="loadingScreen">
+        <h1>Dungeon Siege Clone</h1>
+        <p>Generating game assets...</p> <!-- Updated text -->
+        <div id="loadingBar">
+            <div id="loadingProgress"></div>
+        </div>
+    </div>
+
+    <div id="ui">
+        <div id="partyUI">
+            <!-- Party portraits will be added dynamically -->
+        </div>
+        <div id="actionBar">
+            <!-- Action buttons will be added dynamically -->
+        </div>
+    </div>
+
+    <div id="minimapContainer">
+        <canvas id="minimap"></canvas>
+    </div>
+
+    <div id="inventoryScreen">
+        <h2>Inventory</h2>
+        <button onclick="game.toggleInventory()" style="position: absolute; top: 10px; right: 10px; background: #555; color: white; border: 1px solid #777; cursor: pointer; padding: 5px 10px;">X</button>
+        <div class="inventory-grid" id="inventoryGrid">
+            <!-- Inventory slots will be added dynamically -->
+        </div>
+         <div id="equipmentSlots" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #555;">
+             <h3>Equipment</h3>
+             <!-- Add equipment slots here -->
+             <div style="display: flex; gap: 10px;">
+                 <div class="inventory-slot" id="equip-weapon" data-slot-type="weapon">WPN</div>
+                 <div class="inventory-slot" id="equip-armor" data-slot-type="armor">ARM</div>
+                 <div class="inventory-slot" id="equip-helmet" data-slot-type="helmet">HLM</div>
+                 <div class="inventory-slot" id="equip-boots" data-slot-type="boots">BOT</div>
+                 <div class="inventory-slot" id="equip-accessory" data-slot-type="accessory">ACC</div>
+             </div>
+         </div>
+    </div>
+
+    <div id="dialogueBox">
+        <p id="dialogueText"></p>
+        <button id="dialogueContinue">Continue</button>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <script>
+        // Game Configuration
+        const config = {
+            tileSize: 64,
+            chunkSize: 16, // Tiles per chunk
+            worldSize: 64, // Chunks in the world (64x64 chunks = 4096x4096 tiles)
+            viewDistance: 2, // Chunks visible around player chunk
+            debugMode: false,
+            maxInventorySize: 24,
+            assetSize: 64 // Standard size for generated assets (can be overridden)
+        };
+
+        // --- Global Game Instance ---
+        let game = null;
+
+        // Define assets to generate
+        const assetsToGenerate = [
+            // Characters (provide basic type and color hint)
+            { name: 'playerSheet', type: 'character', color: '#4a90e2', needsUi: true }, // Blue player
+            { name: 'companionSheet1', type: 'character', color: '#32CD32', needsUi: true }, // Green companion
+            { name: 'enemyKrug', type: 'character', color: '#8B4513', size: 48 }, // Brown Krug
+            { name: 'enemySeck', type: 'character', color: '#DAA520', size: 56 }, // Golden Seck (lizard-like?)
+
+            // Terrain (provide base color)
+            { name: 'terrainGrass', type: 'terrain', color: '#55a055' },
+            { name: 'terrainDirt', type: 'terrain', color: '#966c4a' },
+            { name: 'terrainStone', type: 'terrain', color: '#888888' },
+            { name: 'terrainWater', type: 'terrain', color: '#4477cc' },
+
+            // Items (provide type hint and color/shape)
+            { name: 'itemSword', type: 'item', color: '#cccccc', shape: 'line', needsUi: true },
+            { name: 'itemBow', type: 'item', color: '#8B4513', shape: 'arc', needsUi: true },
+            { name: 'itemStaff', type: 'item', color: '#7744aa', shape: 'line_dot', needsUi: true },
+            { name: 'itemPotion', type: 'item', color: '#ff4444', shape: 'circle', needsUi: true },
+            { name: 'itemManaPotion', type: 'item', color: '#4444ff', shape: 'circle', needsUi: true },
+            { name: 'itemArmor', type: 'item', color: '#a0a0a0', shape: 'square', needsUi: true },
+            { name: 'itemHelmet', type: 'item', color: '#909090', shape: 'dome', needsUi: true },
+            { name: 'itemBoots', type: 'item', color: '#654321', shape: 'l-shape', needsUi: true },
+        ];
+
+        // --- Asset Generation ---
+        function generateAsset(assetInfo) {
+            const size = assetInfo.size || config.assetSize;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const color = assetInfo.color || '#ffffff'; // Default to white
+            const half = size / 2;
+            const quarter = size / 4;
+            const eighth = size / 8;
+
+            ctx.clearRect(0, 0, size, size); // Ensure canvas is clear
+
+            switch (assetInfo.type) {
+                case 'character':
+                    // Simple character: colored circle (head) on rectangle (body)
+                    ctx.fillStyle = color;
+                    // Body (slightly darker)
+                    ctx.fillStyle = darkenColor(color, 20);
+                    ctx.fillRect(quarter, quarter, half, size * 0.65);
+                    // Head
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(half, quarter, quarter * 0.8, 0, Math.PI * 2);
+                    ctx.fill();
+                     // Add simple "feet" indication
+                    ctx.fillStyle = darkenColor(color, 30);
+                    ctx.fillRect(quarter, quarter + size * 0.65, eighth, eighth);
+                    ctx.fillRect(half + eighth, quarter + size * 0.65, eighth, eighth);
+                    break;
+
+                case 'terrain':
+                     // Simple colored square with subtle pattern/noise
+                     ctx.fillStyle = color;
+                     ctx.fillRect(0, 0, size, size);
+                     // Add some noise/pattern
+                     const darkerColor = darkenColor(color, 15);
+                     const lighterColor = lightenColor(color, 10);
+                     for (let i = 0; i < size * 2; i++) { // More dots for denser pattern
+                         const x = Math.random() * size;
+                         const y = Math.random() * size;
+                         const dotSize = Math.random() * 2 + 1;
+                         ctx.fillStyle = Math.random() > 0.5 ? darkerColor : lighterColor;
+                         ctx.fillRect(x, y, dotSize, dotSize);
+                     }
+                     // Add border for clarity?
+                     // ctx.strokeStyle = darkenColor(color, 30);
+                     // ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+                    break;
+
+                case 'item':
+                    // Simple shapes based on item type hint
+                    ctx.fillStyle = color;
+                    ctx.strokeStyle = darkenColor(color, 30);
+                    ctx.lineWidth = Math.max(1, size / 16);
+                    const iconSize = size * 0.8;
+                    const iconOffset = (size - iconSize) / 2;
+
+                    switch (assetInfo.shape) {
+                        case 'line': // Sword-like
+                            ctx.beginPath();
+                            ctx.moveTo(half, iconOffset);
+                            ctx.lineTo(half, size - iconOffset);
+                            ctx.stroke();
+                            // Guard
+                            ctx.beginPath();
+                            ctx.moveTo(quarter, half + quarter);
+                            ctx.lineTo(size - quarter, half + quarter);
+                            ctx.stroke();
+                            break;
+                        case 'arc': // Bow-like
+                            ctx.beginPath();
+                            ctx.arc(half, half, iconSize * 0.4, Math.PI * 1.3, Math.PI * 1.7);
+                            ctx.stroke();
+                            // String
+                            ctx.beginPath();
+                            ctx.moveTo(half + Math.cos(Math.PI * 1.3) * iconSize * 0.4, half + Math.sin(Math.PI * 1.3) * iconSize * 0.4);
+                            ctx.lineTo(half + Math.cos(Math.PI * 1.7) * iconSize * 0.4, half + Math.sin(Math.PI * 1.7) * iconSize * 0.4);
+                            ctx.stroke();
+                             // Arrow shaft (simple)
+                            ctx.beginPath();
+                            ctx.moveTo(half, iconOffset*1.5);
+                            ctx.lineTo(half, size-iconOffset*1.5);
+                            ctx.strokeStyle = lightenColor(color, 30);
+                            ctx.stroke();
+
+                            break;
+                        case 'line_dot': // Staff-like
+                            ctx.beginPath();
+                            ctx.moveTo(half, iconOffset);
+                            ctx.lineTo(half, size - iconOffset);
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.arc(half, iconOffset + eighth, eighth, 0, Math.PI * 2);
+                            ctx.fill();
+                            break;
+                        case 'circle': // Potion-like
+                            ctx.beginPath();
+                            ctx.arc(half, half + eighth, iconSize * 0.35, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.stroke();
+                            // Stopper/neck
+                             ctx.fillStyle = darkenColor(color, 20);
+                             ctx.fillRect(half - eighth, half - quarter, quarter, quarter);
+                            break;
+                        case 'square': // Armor-like
+                            ctx.fillRect(iconOffset, iconOffset + eighth, iconSize, iconSize * 0.8);
+                            ctx.strokeRect(iconOffset, iconOffset + eighth, iconSize, iconSize * 0.8);
+                            break;
+                        case 'dome': // Helmet-like
+                            ctx.beginPath();
+                            ctx.arc(half, half, iconSize * 0.4, Math.PI, 0); // Semicircle
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.stroke();
+                            break;
+                        case 'l-shape': // Boots-like
+                            ctx.beginPath();
+                            ctx.moveTo(iconOffset, half);
+                            ctx.lineTo(half + quarter, half); // Sole
+                            ctx.lineTo(half + quarter, size - iconOffset); // Back
+                            ctx.lineTo(half, size - iconOffset); // Bottom back
+                            ctx.lineTo(half, half + quarter); // Inner ankle
+                            ctx.lineTo(iconOffset, half + quarter); // Top front
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.stroke();
+                            break;
+                        default: // Default: simple square
+                            ctx.fillRect(iconOffset, iconOffset, iconSize, iconSize);
+                            ctx.strokeRect(iconOffset, iconOffset, iconSize, iconSize);
+                    }
+                    break;
+
+                default:
+                    // Fallback: simple colored square
+                    ctx.fillStyle = color;
+                    ctx.fillRect(0, 0, size, size);
+                    ctx.strokeStyle = '#555';
+                    ctx.strokeRect(0, 0, size, size);
+                    ctx.fillStyle = 'white';
+                    ctx.font = `${Math.floor(size / 4)}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('?', half, half);
+            }
+
+            return canvas; // Return the canvas element itself
+        }
+
+        // --- Helper color functions ---
+        function darkenColor(hex, amount) {
+            let r = parseInt(hex.slice(1, 3), 16);
+            let g = parseInt(hex.slice(3, 5), 16);
+            let b = parseInt(hex.slice(5, 7), 16);
+            r = Math.max(0, r - amount);
+            g = Math.max(0, g - amount);
+            b = Math.max(0, b - amount);
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+        function lightenColor(hex, amount) {
+             let r = parseInt(hex.slice(1, 3), 16);
+             let g = parseInt(hex.slice(3, 5), 16);
+             let b = parseInt(hex.slice(5, 7), 16);
+             r = Math.min(255, r + amount);
+             g = Math.min(255, g + amount);
+             b = Math.min(255, b + amount);
+             return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+
+        // Main game class
+        class DungeonSiege {
+            constructor() {
+                // Canvas setup
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.minimapCanvas = document.getElementById('minimap');
+                this.minimapCtx = this.minimapCanvas.getContext('2d');
+
+                // Resize canvas to fill window
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+
+                // Game state
+                this.gameState = {
+                    LOADING: 0,
+                    MAIN_MENU: 1, // Not used currently
+                    PLAYING: 2,
+                    INVENTORY: 3,
+                    DIALOGUE: 4,
+                    PAUSED: 5
+                };
+                this.currentState = this.gameState.LOADING;
+
+                // Input handling
+                this.mouse = { x: 0, y: 0, isDown: false, worldX: 0, worldY: 0 };
+                this.keys = {};
+
+                this.setupEventListeners();
+
+                // Game objects
+                this.assets = {}; // Stores generated canvas elements
+                this.assetDataUrls = {}; // Stores Data URLs for CSS backgrounds
+                this.player = null;
+                this.party = [];
+                this.enemies = [];
+                this.items = [];
+                this.npcs = [];
+                this.activeChunks = new Map();
+                this.floatingTexts = [];
+
+                // Camera
+                this.camera = {
+                    x: 0,
+                    y: 0,
+                    target: null,
+                    followSpeed: 0.08 // Smoother follow
+                };
+
+                // Game time
+                this.lastTime = 0;
+                this.deltaTime = 0;
+
+                // Start loading/generating assets
+                this.loadAssets(() => {
+                    this.initGame();
+                    this.currentState = this.gameState.PLAYING; // Skip main menu for now
+                    this.hideLoadingScreen();
+                    this.gameLoop(0);
+                });
+            }
+
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            setupEventListeners() {
+                // (Event listeners remain largely the same as before)
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.mouse.isDown = true;
+                    this.handleMouseClick(e);
+                });
+                 this.canvas.addEventListener('mouseup', (e) => {
+                    this.mouse.isDown = false;
+                });
+                 this.canvas.addEventListener('mousemove', (e) => {
+                    this.mouse.x = e.clientX;
+                    this.mouse.y = e.clientY;
+                    this.mouse.worldX = e.clientX + this.camera.x - this.canvas.width / 2;
+                    this.mouse.worldY = e.clientY + this.camera.y - this.canvas.height / 2;
+                    const tooltip = document.getElementById('tooltip');
+                    tooltip.style.left = (e.clientX + 15) + 'px';
+                    tooltip.style.top = (e.clientY + 15) + 'px';
+                });
+                 this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                 window.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                    if (this.currentState !== this.gameState.DIALOGUE) {
+                        if (e.key.toLowerCase() === 'i' && (this.currentState === this.gameState.PLAYING || this.currentState === this.gameState.INVENTORY)) {
+                            this.toggleInventory();
+                        }
+                        if ((e.key.toLowerCase() === 'p' || e.key === 'Escape') &&
+                            (this.currentState === this.gameState.PLAYING || this.currentState === this.gameState.PAUSED)) {
+                             if(this.currentState === this.gameState.PAUSED) {
+                                this.currentState = this.gameState.PLAYING;
+                            } else {
+                                this.currentState = this.gameState.PAUSED;
+                            }
+                        }
+                         else if (e.key === 'Escape' && this.currentState === this.gameState.INVENTORY) {
+                             this.toggleInventory();
+                         }
+                    }
+                    if (e.key.toLowerCase() === 'b') {
+                        config.debugMode = !config.debugMode;
+                        this.showMessage(`Debug Mode: ${config.debugMode ? 'ON' : 'OFF'}`);
+                    }
+                });
+                 window.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
+                document.getElementById('dialogueContinue').addEventListener('click', () => {
+                    if (this.currentState === this.gameState.DIALOGUE) {
+                        this.advanceDialogue();
+                    }
+                });
+            }
+
+            // --- MODIFIED loadAssets ---
+            loadAssets(callback) {
+                let loaded = 0;
+                const totalAssets = assetsToGenerate.length;
+                const progressBar = document.getElementById('loadingProgress');
+
+                const updateProgress = () => {
+                    loaded++;
+                    const percent = (loaded / totalAssets) * 100;
+                    progressBar.style.width = percent + '%';
+
+                    if (loaded === totalAssets) {
+                        // Apply generated assets to UI elements that need them *after* all are generated
+                        this.applyGeneratedUiAssets();
+                        setTimeout(callback, 100); // Small delay before callback
+                    }
+                };
+
+                if (totalAssets === 0) {
+                    callback();
+                    return;
+                }
+
+                console.log("Generating placeholder assets...");
+                assetsToGenerate.forEach(assetInfo => {
+                    try {
+                        const generatedCanvas = generateAsset(assetInfo);
+                        this.assets[assetInfo.name] = generatedCanvas;
+
+                         // Generate Data URL if needed for CSS/UI
+                        if (assetInfo.needsUi) {
+                            this.assetDataUrls[assetInfo.name] = generatedCanvas.toDataURL('image/png');
+                        }
+
+                        // Simulate async loading for progress bar feel
+                        setTimeout(updateProgress, 0);
+                    } catch (error) {
+                        console.error(`Failed to generate asset: ${assetInfo.name}`, error);
+                        // Still count as 'loaded' (or failed) to prevent stall
+                        setTimeout(updateProgress, 0);
+                    }
+                });
+                 console.log("Asset generation complete.");
+            }
+
+            // --- NEW: Apply Data URLs to CSS ---
+            applyGeneratedUiAssets() {
+                // Example: If specific portraits used placeholders directly in CSS before
+                // document.querySelectorAll('.character-portrait[data-name="Farmer"]').forEach(el => {
+                //     if(this.assetDataUrls.playerSheet) el.style.backgroundImage = `url(${this.assetDataUrls.playerSheet})`;
+                // });
+                // The current implementation applies icons dynamically in updatePartyUI and createItemIcon,
+                // so this function might be less critical unless there were static CSS backgrounds.
+                 console.log("Applying generated UI assets (if any static ones needed)...");
+            }
+
+
+            hideLoadingScreen() {
+                const loadingScreen = document.getElementById('loadingScreen');
+                loadingScreen.style.opacity = '0';
+                loadingScreen.style.transition = 'opacity 0.5s ease-out';
+                setTimeout(() => {
+                    if (loadingScreen.parentNode) {
+                         loadingScreen.parentNode.removeChild(loadingScreen);
+                    }
+                }, 500);
+            }
+
+            initGame() {
+                 // Create player character (uses generated asset)
+                this.player = new Character({
+                    game: this,
+                    name: 'Farmer',
+                    type: 'player',
+                    x: config.chunkSize * config.tileSize * config.worldSize / 2 + 100,
+                    y: config.chunkSize * config.tileSize * config.worldSize / 2 + 100,
+                    width: 48, height: 48,
+                    spriteSheet: this.assets.playerSheet, // Now a canvas
+                    hp: 100, maxHp: 100, mana: 50, maxMana: 50,
+                    baseStats: { strength: 12, dexterity: 10, intelligence: 8 },
+                    skills: { melee: { level: 2, exp: 50, nextLevel: 200 } },
+                    assetName: 'playerSheet' // Store name for UI lookup
+                });
+                this.party.push(this.player);
+                this.player.isSelected = true;
+
+                 /* // Example Companion
+                 const companion = new Character({
+                     game: this, name: 'Companion1', type: 'player',
+                     x: this.player.x + 80, y: this.player.y,
+                     width: 48, height: 48,
+                     spriteSheet: this.assets.companionSheet1, // Generated canvas
+                     hp: 80, maxHp: 80, mana: 70, maxMana: 70,
+                     baseStats: { strength: 8, dexterity: 12, intelligence: 10 },
+                     assetName: 'companionSheet1' // Store name for UI lookup
+                 });
+                 this.party.push(companion);
+                 */
+
+                this.camera.target = this.player;
+                this.camera.x = this.player.x;
+                this.camera.y = this.player.y;
+                this.updateChunks();
+                this.updatePartyUI();
+                this.initActionBar();
+                this.initInventoryGrid();
+                this.initEquipmentSlots();
+                this.createStartingItems();
+                this.createInitialEnemies();
+                this.updateMinimap();
+                console.log("Game Initialized with Generated Assets");
+            }
+
+             getTile(worldX, worldY) {
+                 const tileX = Math.floor(worldX / config.tileSize);
+                 const tileY = Math.floor(worldY / config.tileSize);
+                 const chunkX = Math.floor(tileX / config.chunkSize);
+                 const chunkY = Math.floor(tileY / config.chunkSize);
+                 const chunkKey = `${chunkX},${chunkY}`;
+                 const chunk = this.activeChunks.get(chunkKey);
+                 if (chunk) {
+                     const localTileX = tileX % config.chunkSize;
+                     const localTileY = tileY % config.chunkSize;
+                      const lx = localTileX < 0 ? localTileX + config.chunkSize : localTileX;
+                      const ly = localTileY < 0 ? localTileY + config.chunkSize : localTileY;
+                     if (chunk.tiles[ly] && chunk.tiles[ly][lx]) {
+                         return chunk.tiles[ly][lx];
+                     }
+                 }
+                 return { type: 'void', walkable: false, worldX: tileX, worldY: tileY };
+             }
+
+            isWalkable(worldX, worldY) {
+                const tile = this.getTile(worldX, worldY);
+                return tile && tile.walkable;
+            }
+
+             generateWorld() { /* Delegated to chunk loading */ }
+
+             loadChunkAt(chunkX, chunkY) {
+                const chunkKey = `${chunkX},${chunkY}`;
+                if (this.activeChunks.has(chunkKey)) return;
+                if (chunkX < 0 || chunkY < 0 || chunkX >= config.worldSize || chunkY >= config.worldSize) return;
+
+                const chunk = { x: chunkX, y: chunkY, tiles: [], entities: [] };
+                const chunkSize = config.chunkSize;
+                const tileSize = config.tileSize;
+
+                const simpleNoise = (nx, ny) => {
+                    const n = nx * 57 + ny * 131; let nn = (n << 13) ^ n;
+                    return (1.0 - ((nn * (nn * nn * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0);
+                };
+
+                for (let y = 0; y < chunkSize; y++) {
+                    chunk.tiles[y] = [];
+                    for (let x = 0; x < chunkSize; x++) {
+                        const worldTileX = chunkX * chunkSize + x;
+                        const worldTileY = chunkY * chunkSize + y;
+                        const worldX = worldTileX * tileSize;
+                        const worldY = worldTileY * tileSize;
+
+                        let noiseVal = simpleNoise(worldTileX * 0.05, worldTileY * 0.05);
+                        let tileType = 'grass';
+                        if (noiseVal < -0.4) tileType = 'water';
+                        else if (noiseVal < -0.2) tileType = 'dirt';
+                        else if (noiseVal > 0.6) tileType = 'stone';
+
+                         const distFromWorldCenter = Math.sqrt(Math.pow(worldTileX - config.worldSize * chunkSize / 2, 2) + Math.pow(worldTileY - config.worldSize * chunkSize / 2, 2));
+                         const maxDist = config.worldSize * chunkSize * 0.48;
+                         if (distFromWorldCenter > maxDist) tileType = 'water';
+
+                        chunk.tiles[y][x] = {
+                            type: tileType,
+                            walkable: tileType !== 'water',
+                            x: x, y: y, worldX: worldTileX, worldY: worldTileY,
+                            assetName: `terrain${tileType.charAt(0).toUpperCase() + tileType.slice(1)}` // e.g., terrainGrass
+                        };
+
+                        if (chunk.tiles[y][x].walkable) {
+                            const spawnNoise = simpleNoise(worldTileX * 0.2, worldTileY * 0.2);
+                            if (spawnNoise > 0.7 && Math.random() < 0.05) this.spawnEnemy(worldX + tileSize / 2, worldY + tileSize / 2);
+                            else if (spawnNoise < -0.6 && Math.random() < 0.03) this.spawnItem(worldX + tileSize / 2, worldY + tileSize / 2);
+                        }
+                    }
+                }
+                this.activeChunks.set(chunkKey, chunk);
+            }
+
+             updateChunks() {
+                 const playerChunkX = Math.floor(this.player.x / (config.tileSize * config.chunkSize));
+                 const playerChunkY = Math.floor(this.player.y / (config.tileSize * config.chunkSize));
+                 const viewDist = config.viewDistance;
+                 let chunksLoadedThisFrame = false;
+
+                 for (let y = playerChunkY - viewDist; y <= playerChunkY + viewDist; y++) {
+                     for (let x = playerChunkX - viewDist; x <= playerChunkX + viewDist; x++) {
+                          if (!this.activeChunks.has(`${x},${y}`)) { this.loadChunkAt(x, y); chunksLoadedThisFrame = true; }
+                     }
+                 }
+                 const unloadDist = viewDist + 2;
+                 for (const [key, chunk] of this.activeChunks.entries()) {
+                     const [chunkX, chunkY] = key.split(',').map(Number);
+                     const distance = Math.max(Math.abs(chunkX - playerChunkX), Math.abs(chunkY - playerChunkY));
+                     if (distance > unloadDist) { this.activeChunks.delete(key); chunksLoadedThisFrame = true; }
+                 }
+                 if(chunksLoadedThisFrame) { this.updateMinimap(); }
+             }
+
+             createStartingItems() {
+                 const basePos = { x: this.player.x + 100, y: this.player.y + 100 };
+                 this.items.push(new Item({ game: this, name: 'Rusty Sword', type: 'weapon', subType: 'melee', x: basePos.x, y: basePos.y, sprite: this.assets.itemSword, stats: { damage: 5, attackSpeed: 1.2 }, description: 'A worn sword. +5 Damage.', assetName: 'itemSword'}));
+                 this.items.push(new Item({ game: this, name: 'Health Potion', type: 'consumable', x: basePos.x + 50, y: basePos.y - 50, sprite: this.assets.itemPotion, stats: { healAmount: 30 }, description: 'Restores 30 health.', assetName: 'itemPotion' }));
+                 this.items.push(new Item({ game: this, name: 'Leather Boots', type: 'armor', subType: 'boots', x: basePos.x - 50, y: basePos.y - 50, sprite: this.assets.itemBoots, stats: { defense: 1, moveSpeedBonus: 10 }, description: '+1 Defense, +10 Move Speed.', assetName: 'itemBoots' }));
+             }
+
+             createInitialEnemies() {
+                 const centerTileX = config.worldSize * config.chunkSize / 2;
+                 const centerTileY = config.worldSize * config.chunkSize / 2;
+                 const spawnRadiusMin = 300; const spawnRadiusMax = 1500;
+                 for (let i = 0; i < 20; i++) {
+                     const angle = Math.random() * Math.PI * 2;
+                     const radius = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin);
+                     const spawnX = centerTileX * config.tileSize + Math.cos(angle) * radius;
+                     const spawnY = centerTileY * config.tileSize + Math.sin(angle) * radius;
+                     if (this.isWalkable(spawnX, spawnY)) { this.spawnEnemy(spawnX, spawnY); } else { i--; }
+                 }
+             }
+
+             spawnEnemy(x, y) {
+                 if (!this.isWalkable(x,y)) return;
+                 const enemyTypes = [
+                    { name: 'Krug Scout', type: 'krug', asset: 'enemyKrug', hp: 30, mana: 0, str: 8, dex: 10, int: 4, level: 1, aggro: 250, xp: 10 },
+                    { name: 'Seck Warrior', type: 'seck', asset: 'enemySeck', hp: 80, mana: 20, str: 15, dex: 8, int: 10, level: 3, aggro: 350, xp: 35 }
+                 ];
+                 const typeData = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+                 const enemy = new Character({
+                    game: this, name: typeData.name, type: 'enemy', enemyType: typeData.type,
+                    x: x, y: y, width: 48, height: 48,
+                    spriteSheet: this.assets[typeData.asset], // Generated canvas
+                    hp: typeData.hp, maxHp: typeData.hp, mana: typeData.mana, maxMana: typeData.mana,
+                    baseStats: { strength: typeData.str, dexterity: typeData.dex, intelligence: typeData.int },
+                    level: typeData.level, aggroRange: typeData.aggro, xpValue: typeData.xp,
+                    stats: { moveSpeed: 120 }, assetName: typeData.asset
+                 });
+                 this.enemies.push(enemy);
+             }
+
+             spawnItem(x, y) {
+                 if (!this.isWalkable(x,y)) return;
+                 const itemTemplates = [
+                    { name: 'Health Potion', type: 'consumable', sprite: 'itemPotion', stats: { healAmount: 20 + Math.floor(Math.random() * 30) }, desc: 'Restores health.' },
+                    { name: 'Mana Potion', type: 'consumable', sprite: 'itemManaPotion', stats: { manaAmount: 15 + Math.floor(Math.random() * 25) }, desc: 'Restores mana.' },
+                    { name: 'Steel Sword', type: 'weapon', subType: 'melee', sprite: 'itemSword', stats: { damage: 3 + Math.floor(Math.random() * 8), attackSpeed: 1.1 + Math.random() * 0.3 }, desc: 'A basic sword.' },
+                    { name: 'Hunting Bow', type: 'weapon', subType: 'ranged', sprite: 'itemBow', stats: { damage: 2 + Math.floor(Math.random() * 6), attackSpeed: 1.4 + Math.random() * 0.4, range: 400 + Math.random()*100 }, desc: 'A simple bow.' },
+                    { name: 'Apprentice Staff', type: 'weapon', subType: 'magic', sprite: 'itemStaff', stats: { damage: 4 + Math.floor(Math.random() * 10), attackSpeed: 0.9 + Math.random() * 0.3, manaCost: 3 + Math.floor(Math.random()*5) }, desc: 'A staff for beginners.' },
+                    { name: 'Leather Armor', type: 'armor', subType: 'armor', sprite: 'itemArmor', stats: { defense: 2 + Math.floor(Math.random() * 4) }, desc: 'Provides some protection.' },
+                    { name: 'Leather Helmet', type: 'armor', subType: 'helmet', sprite: 'itemHelmet', stats: { defense: 1 + Math.floor(Math.random() * 2) }, desc: 'Basic head protection.' },
+                    { name: 'Leather Boots', type: 'armor', subType: 'boots', sprite: 'itemBoots', stats: { defense: 1, moveSpeedBonus: 5 + Math.floor(Math.random()*10) }, desc: 'Simple footwear.' },
+                 ];
+                 const template = itemTemplates[Math.floor(Math.random() * itemTemplates.length)];
+                 let fullDesc = template.desc;
+                 if (template.stats.damage) fullDesc += ` +${template.stats.damage} Damage.`;
+                 if (template.stats.defense) fullDesc += ` +${template.stats.defense} Defense.`;
+                 if (template.stats.healAmount) fullDesc += ` Heals ${template.stats.healAmount} HP.`;
+                 if (template.stats.manaAmount) fullDesc += ` Restores ${template.stats.manaAmount} Mana.`;
+                 if (template.stats.moveSpeedBonus) fullDesc += ` +${template.stats.moveSpeedBonus} Move Speed.`;
+                 const item = new Item({
+                     game: this, name: template.name, type: template.type, subType: template.subType || '',
+                     x: x, y: y, sprite: this.assets[template.sprite], // Generated canvas
+                     stats: template.stats, description: fullDesc, assetName: template.sprite
+                 });
+                 this.items.push(item);
+             }
+
+             // --- MODIFIED updatePartyUI ---
+             updatePartyUI() {
+                const partyUI = document.getElementById('partyUI');
+                partyUI.innerHTML = ''; // Clear previous portraits
+
+                this.party.forEach((character, index) => {
+                    const portrait = document.createElement('div');
+                    portrait.className = 'character-portrait';
+                    portrait.dataset.name = character.name; // Use name for tooltip reference etc.
+                    if (character.isSelected) {
+                        portrait.classList.add('selected');
+                    }
+
+                    // --- Apply generated asset as background ---
+                    if (character.assetName && this.assetDataUrls[character.assetName]) {
+                        portrait.style.backgroundImage = `url(${this.assetDataUrls[character.assetName]})`;
+                    } else {
+                        // Fallback if asset URL not found
+                         portrait.style.backgroundColor = '#555'; // Dark gray fallback
+                         portrait.innerText = character.name.substring(0, 1); // Show initial
+                         portrait.style.display = 'flex';
+                         portrait.style.alignItems = 'center';
+                         portrait.style.justifyContent = 'center';
+                         portrait.style.color = 'white';
+                         portrait.style.fontSize = '24px';
+                    }
+
+                    // Health bar
+                    const healthBar = document.createElement('div'); healthBar.className = 'health-bar';
+                    const healthFill = document.createElement('div'); healthFill.className = 'health-bar-fill';
+                    healthFill.style.width = Math.max(0, (character.hp / character.maxHp * 100)) + '%';
+                    healthBar.appendChild(healthFill);
+
+                    // Mana bar
+                     if (character.maxMana > 0) {
+                         const manaBar = document.createElement('div'); manaBar.className = 'mana-bar';
+                         const manaFill = document.createElement('div'); manaFill.className = 'mana-bar-fill';
+                         manaFill.style.width = Math.max(0, (character.mana / character.maxMana * 100)) + '%';
+                         manaBar.appendChild(manaFill);
+                         portrait.appendChild(manaBar);
+                     }
+                    portrait.appendChild(healthBar);
+
+                    portrait.addEventListener('click', (e) => { e.stopPropagation(); this.selectCharacter(index); });
+                    portrait.addEventListener('mouseover', () => {
+                        this.showTooltip(`<b>${character.name}</b> (Lvl ${character.level})<br>HP: ${Math.round(character.hp)}/${character.maxHp}<br>${character.maxMana > 0 ? `Mana: ${Math.round(character.mana)}/${character.maxMana}<br>` : ''}Class: ${character.getClassType()}`);
+                    });
+                    portrait.addEventListener('mouseout', () => this.hideTooltip());
+
+                    partyUI.appendChild(portrait);
+                });
+            }
+
+             initActionBar() {
+                const actionBar = document.getElementById('actionBar');
+                actionBar.innerHTML = '';
+                const actions = [ { name: 'Attack', icon: '⚔️', tooltip: 'Attack Mode (Right-Click target)'}, { name: 'Hold', icon: '✋', tooltip: 'Hold Position / Stop Actions'}, { name: 'Inventory', icon: '🎒', tooltip: 'Open Inventory (I)'} ];
+                actions.forEach(action => {
+                    const button = document.createElement('div'); button.className = 'action-button'; button.innerHTML = action.icon;
+                    button.addEventListener('click', (e) => { e.stopPropagation(); this.handleActionButton(action.name); });
+                    button.addEventListener('mouseover', () => this.showTooltip(action.tooltip || action.name));
+                    button.addEventListener('mouseout', () => this.hideTooltip());
+                    actionBar.appendChild(button);
+                });
+            }
+
+             initInventoryGrid() {
+                const grid = document.getElementById('inventoryGrid');
+                grid.innerHTML = '';
+                for (let i = 0; i < config.maxInventorySize; i++) {
+                    const slot = document.createElement('div'); slot.className = 'inventory-slot inventory-main'; slot.dataset.index = i;
+                    slot.addEventListener('click', (e) => { e.stopPropagation(); this.useInventoryItem(i); });
+                    slot.innerHTML = ``; // Empty slot
+                    grid.appendChild(slot);
+                }
+            }
+
+             initEquipmentSlots() {
+                 const equipmentSlots = document.querySelectorAll('#equipmentSlots .inventory-slot');
+                 equipmentSlots.forEach(slot => {
+                     const slotType = slot.dataset.slotType;
+                     slot.addEventListener('click', (e) => { e.stopPropagation(); this.unequipItem(slotType); });
+                     slot.innerHTML = slotType.substring(0,3).toUpperCase(); // Placeholder text
+                 });
+             }
+
+             // --- MODIFIED Minimap ---
+             updateMinimap() {
+                const minimap = this.minimapCanvas; const ctx = this.minimapCtx;
+                const size = 200; minimap.width = size; minimap.height = size;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, size, size);
+                 const worldViewDiameter = (config.viewDistance * 2 + 1) * config.chunkSize * config.tileSize;
+                 const mapScale = size / worldViewDiameter;
+                 const halfSize = size / 2; const playerMapX = halfSize; const playerMapY = halfSize;
+                 const tileDrawSize = Math.max(1, Math.ceil(config.tileSize * mapScale));
+
+                for (const [key, chunk] of this.activeChunks.entries()) {
+                    const [chunkX, chunkY] = key.split(',').map(Number);
+                    for (let y = 0; y < config.chunkSize; y++) {
+                        for (let x = 0; x < config.chunkSize; x++) {
+                            const tile = chunk.tiles[y]?.[x]; if (!tile) continue;
+                             const worldX = (chunkX * config.chunkSize + x) * config.tileSize + config.tileSize/2;
+                             const worldY = (chunkY * config.chunkSize + y) * config.tileSize + config.tileSize/2;
+                             const mapX = playerMapX + (worldX - this.player.x) * mapScale;
+                             const mapY = playerMapY + (worldY - this.player.y) * mapScale;
+
+                             if (mapX >= -tileDrawSize && mapX < size + tileDrawSize && mapY >= -tileDrawSize && mapY < size + tileDrawSize) {
+                                 // Use the color defined in the generated asset info
+                                 const assetInfo = assetsToGenerate.find(a => a.name === tile.assetName);
+                                 ctx.fillStyle = assetInfo ? assetInfo.color + 'b3' : 'rgba(30, 30, 30, 0.7)'; // Add alpha
+                                 ctx.fillRect(Math.floor(mapX - tileDrawSize/2), Math.floor(mapY - tileDrawSize/2), tileDrawSize, tileDrawSize);
+                             }
+                        }
+                    }
+                }
+                 const drawEntityDot = (entity, color, radius) => {
+                     const mapX = playerMapX + (entity.x - this.player.x) * mapScale;
+                     const mapY = playerMapY + (entity.y - this.player.y) * mapScale;
+                      if (mapX >= 0 && mapX < size && mapY >= 0 && mapY < size) {
+                         ctx.fillStyle = color; ctx.beginPath(); ctx.arc(mapX, mapY, radius, 0, Math.PI * 2); ctx.fill();
+                     }
+                 };
+                 this.items.forEach(item => drawEntityDot(item, 'rgba(255, 255, 0, 0.8)', 1));
+                 this.enemies.forEach(enemy => drawEntityDot(enemy, 'rgba(255, 50, 50, 0.9)', 2));
+                 this.party.forEach(p => { if (p !== this.player) drawEntityDot(p, 'rgba(50, 100, 255, 0.9)', 2); });
+                 drawEntityDot(this.player, 'rgba(255, 255, 255, 1)', 3);
+             }
+
+            handleMouseClick(e) {
+                 const worldX = this.mouse.worldX; const worldY = this.mouse.worldY;
+                 switch (this.currentState) {
+                    case this.gameState.PLAYING:
+                         let targetEntity = null;
+                         for (const enemy of this.enemies) { if (enemy.containsPoint(worldX, worldY)) { targetEntity = enemy; break; } }
+                         if (!targetEntity) { for (const item of this.items) { if (item.containsPoint(worldX, worldY)) { targetEntity = item; break; } } }
+
+                         const isRightClick = e.button === 2;
+                         if (targetEntity) {
+                             if (targetEntity.type === 'enemy' && isRightClick) {
+                                 this.party.forEach(character => { if (character.isSelected) { character.setTarget(targetEntity); character.moveTo(targetEntity.x, targetEntity.y); } });
+                             } else if (targetEntity instanceof Item) {
+                                  this.party.forEach(character => { if (character.isSelected) { character.moveTo(targetEntity.x, targetEntity.y); character.setInteractionTarget(targetEntity); } });
+                             } else if (targetEntity.type === 'player' && targetEntity !== this.player) {
+                                  this.selectCharacter(this.party.indexOf(targetEntity));
+                             }
+                         } else {
+                             if (isRightClick) {
+                                 this.party.forEach(character => { if (character.isSelected) { character.setTarget(null); character.setInteractionTarget(null); character.moveTo(worldX, worldY); } });
+                             }
+                         }
+                        break;
+                    case this.gameState.INVENTORY:
+                         const inventoryRect = document.getElementById('inventoryScreen').getBoundingClientRect();
+                         if (e.clientX < inventoryRect.left || e.clientX > inventoryRect.right || e.clientY < inventoryRect.top || e.clientY > inventoryRect.bottom) { this.toggleInventory(); }
+                        break;
+                 }
+             }
+
+             handleActionButton(action) {
+                switch (action) {
+                    case 'Attack': this.showMessage("Attack Mode: Right-click an enemy."); break;
+                    case 'Hold': this.party.forEach(c => { if (c.isSelected) c.stopActions(); }); this.showMessage("Selected characters holding position."); break;
+                    case 'Inventory': this.toggleInventory(); break;
+                }
+             }
+
+             selectCharacter(index) {
+                 if (index >= 0 && index < this.party.length) {
+                     const character = this.party[index]; const isShift = this.keys['shift'];
+                     if (isShift) { character.isSelected = !character.isSelected; }
+                     else { this.party.forEach((p, i) => { p.isSelected = (i === index); }); }
+                     this.updatePartyUI();
+                 }
+             }
+
+             toggleInventory() {
+                const inventoryScreen = document.getElementById('inventoryScreen');
+                if (this.currentState === this.gameState.PLAYING) { this.currentState = this.gameState.INVENTORY; inventoryScreen.style.display = 'block'; this.updateInventory(); }
+                else if (this.currentState === this.gameState.INVENTORY) { this.currentState = this.gameState.PLAYING; inventoryScreen.style.display = 'none'; this.hideTooltip(); }
+             }
+
+             // --- MODIFIED updateInventory ---
+             updateInventory() {
+                 const inventorySlots = document.querySelectorAll('.inventory-main');
+                 const equipmentSlots = document.querySelectorAll('#equipmentSlots .inventory-slot');
+
+                 inventorySlots.forEach(slot => {
+                     slot.innerHTML = ''; slot.dataset.itemIndex = '';
+                     slot.onmouseover = null; slot.onmouseout = null;
+                 });
+                 equipmentSlots.forEach(slot => {
+                     slot.innerHTML = slot.dataset.slotType.substring(0,3).toUpperCase(); // Reset placeholder text
+                     slot.onmouseover = null; slot.onmouseout = null;
+                 });
+
+                 this.player.inventory.forEach((item, index) => {
+                     if (index < inventorySlots.length) {
+                         const slot = inventorySlots[index]; slot.dataset.itemIndex = index;
+                         this.createItemIcon(item, slot); // Use new function
+                     }
+                 });
+
+                 for (const slotType in this.player.equipment) {
+                     const item = this.player.equipment[slotType];
+                     if (item) {
+                         const slotElement = document.getElementById(`equip-${slotType}`);
+                         if (slotElement) { this.createItemIcon(item, slotElement); }
+                     }
+                 }
+             }
+
+             // --- MODIFIED createItemIcon ---
+             createItemIcon(item, slotElement) {
+                 const itemIconDiv = document.createElement('div');
+                 itemIconDiv.className = 'item-icon'; // Use this div to apply the background
+
+                 // Apply generated asset Data URL as background image
+                 if (item.assetName && this.assetDataUrls[item.assetName]) {
+                     itemIconDiv.style.backgroundImage = `url(${this.assetDataUrls[item.assetName]})`;
+                 } else {
+                      // Fallback: Draw color directly on slot maybe? Or show text?
+                      slotElement.style.backgroundColor = '#ff00ff'; // Magenta error color
+                      console.warn(`Data URL not found for item asset: ${item.assetName}`);
+                 }
+
+                 slotElement.innerHTML = ''; // Clear placeholder text/previous icon
+                 slotElement.appendChild(itemIconDiv);
+
+                 // Add tooltip (remains the same logic)
+                 slotElement.onmouseover = () => {
+                     let tooltipText = `<b>${item.name}</b> (${item.type}${item.subType ? '/' + item.subType : ''})<br>${item.description}`;
+                     if (slotElement.classList.contains('inventory-main') && (item.type === 'weapon' || item.type === 'armor')) {
+                          const equippedItem = this.player.equipment[item.getEquipmentSlot()];
+                          if (equippedItem) {
+                              tooltipText += `<hr style='margin: 3px 0; border-color: #555;'><i>Equipped: ${equippedItem.name}</i><br>`;
+                              if (item.stats.damage && equippedItem.stats.damage) tooltipText += ` Damage: ${this.formatStatComparison(item.stats.damage, equippedItem.stats.damage)}<br>`;
+                              if (item.stats.defense && equippedItem.stats.defense) tooltipText += ` Defense: ${this.formatStatComparison(item.stats.defense, equippedItem.stats.defense)}<br>`;
+                              if (item.stats.attackSpeed && equippedItem.stats.attackSpeed) tooltipText += ` Atk Spd: ${this.formatStatComparison(item.stats.attackSpeed, equippedItem.stats.attackSpeed, true)}<br>`;
+                          }
+                     }
+                     this.showTooltip(tooltipText);
+                 };
+                 slotElement.onmouseout = () => this.hideTooltip();
+             }
+
+            formatStatComparison(newItemStat, equippedItemStat, lowerIsBetter = false) {
+                 const diff = newItemStat - equippedItemStat; let sign = diff >= 0 ? '+' : ''; let color = 'white';
+                 if (lowerIsBetter) { if (diff < 0) color = 'lightgreen'; else if (diff > 0) color = 'salmon'; }
+                 else { if (diff > 0) color = 'lightgreen'; else if (diff < 0) color = 'salmon'; }
+                 if (diff === 0) color = 'grey'; // Indicate no change
+                 const diffStr = diff.toFixed(diff % 1 !== 0 ? 1 : 0); // Show decimal only if needed
+                 const signStr = diff === 0 ? '' : (diff > 0 ? '+' : ''); // Show sign only if non-zero
+                 return `${newItemStat.toFixed(newItemStat % 1 !== 0 ? 1 : 0)} (<span style="color:${color}">${signStr}${diffStr}</span>)`;
+             }
+
+             useInventoryItem(index) {
+                 if (index >= 0 && index < this.player.inventory.length) {
+                     const item = this.player.inventory[index]; let itemUsed = false;
+                     if (item.type === 'consumable') {
+                         if (item.stats.healAmount > 0 && this.player.hp < this.player.maxHp) { this.player.heal(item.stats.healAmount); itemUsed = true; }
+                         if (item.stats.manaAmount > 0 && this.player.mana < this.player.maxMana) { this.player.restoreMana(item.stats.manaAmount); itemUsed = true; }
+                         if (itemUsed) { this.player.inventory.splice(index, 1); } else { this.showMessage("Cannot use this now."); }
+                     } else if (item.type === 'weapon' || item.type === 'armor') {
+                         this.player.equipItem(item); itemUsed = true;
+                     } else { this.showMessage(`Cannot use ${item.name} this way.`); }
+                     if (itemUsed) { this.updateInventory(); this.updatePartyUI(); }
+                 }
+             }
+
+             unequipItem(slotType) {
+                 const item = this.player.equipment[slotType];
+                 if (item) {
+                     if (this.player.inventory.length < config.maxInventorySize) {
+                         this.player.inventory.push(item); this.player.equipment[slotType] = null;
+                         this.player.updateStats(); this.updateInventory();
+                         this.showMessage(`Unequipped ${item.name}.`);
+                     } else { this.showMessage("Inventory full! Cannot unequip."); }
+                 }
+             }
+
+             pickupItem(character, item) {
+                 if (character.inventory.length < config.maxInventorySize) {
+                     character.inventory.push(item);
+                     const index = this.items.indexOf(item); if (index !== -1) this.items.splice(index, 1);
+                     this.showMessage(`Picked up: ${item.name}`, character === this.player ? 2000 : 1000);
+                     if (character === this.player) { this.updateInventory(); }
+                 } else { if (character === this.player) { this.showMessage("Inventory is full!", 2000); } }
+             }
+
+             showMessage(text, duration = 2000) {
+                 const message = document.createElement('div');
+                 message.style.cssText = `position: fixed; bottom: 15%; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.8); color: white; padding: 8px 15px; border-radius: 5px; z-index: 100; text-align: center; pointer-events: none; opacity: 1; transition: opacity 0.5s ease-out ${duration / 1000 - 0.5}s;`;
+                 message.textContent = text; document.body.appendChild(message);
+                 setTimeout(() => { if (message.parentNode) message.parentNode.removeChild(message); }, duration);
+             }
+
+             addFloatingText(text, x, y, type = '') { this.floatingTexts.push({ text, x, y, type, creationTime: this.lastTime }); }
+             updateFloatingTexts(deltaTime) { const now = this.lastTime; this.floatingTexts = this.floatingTexts.filter(ft => (now - ft.creationTime) < 1000); }
+             renderFloatingTexts(cameraOffsetX, cameraOffsetY) {
+                 const now = this.lastTime; this.ctx.save(); this.ctx.textAlign = 'center';
+                 this.ctx.shadowColor = 'black'; this.ctx.shadowBlur = 2; this.ctx.shadowOffsetX = 1; this.ctx.shadowOffsetY = 1;
+                 this.floatingTexts.forEach(ft => {
+                     const screenX = ft.x - cameraOffsetX; const screenY = ft.y - cameraOffsetY;
+                     const lifeTime = (now - ft.creationTime) / 1000;
+                     const driftY = lifeTime * -50; const opacity = 1.0 - lifeTime;
+                     this.ctx.globalAlpha = Math.max(0, opacity);
+                     this.ctx.fillStyle = ft.type === 'damage' ? 'red' : ft.type === 'heal' ? 'lime' : ft.type === 'xp' ? 'gold' : ft.type === 'levelup' ? 'cyan' : 'white';
+                     this.ctx.font = ft.type === 'levelup' ? 'bold 18px Arial' : 'bold 14px Arial';
+                     this.ctx.fillText(ft.text, screenX, screenY + driftY);
+                 }); this.ctx.restore();
+             }
+
+             showTooltip(text) { const t = document.getElementById('tooltip'); t.innerHTML = text; t.style.display = 'block'; }
+             hideTooltip() { document.getElementById('tooltip').style.display = 'none'; }
+             showDialogue(text, speaker = null) { this.currentState = this.gameState.DIALOGUE; const b = document.getElementById('dialogueBox'); const t = document.getElementById('dialogueText'); t.innerHTML = speaker ? `<strong>${speaker}:</strong> ${text}` : text; b.style.display = 'block'; }
+             advanceDialogue() { document.getElementById('dialogueBox').style.display = 'none'; this.currentState = this.gameState.PLAYING; }
+             startGame() { this.currentState = this.gameState.PLAYING; }
+
+            update(time) {
+                 if (!this.lastTime) this.lastTime = time;
+                 this.deltaTime = Math.min(0.05, (time - this.lastTime) / 1000); this.lastTime = time;
+                 if (this.currentState === this.gameState.PAUSED || this.currentState === this.gameState.LOADING) return;
+
+                 if (this.currentState === this.gameState.PLAYING) {
+                     this.party.forEach(character => character.update(this.deltaTime));
+                     for (let i = this.enemies.length - 1; i >= 0; i--) {
+                         const enemy = this.enemies[i]; enemy.update(this.deltaTime);
+                         if (enemy.hp <= 0) {
+                             const xpValue = enemy.getXpValue();
+                             this.party.forEach(p => { if ((p.x - enemy.x)**2 + (p.y - enemy.y)**2 < (1000 * 1000)) p.gainExperience(xpValue); });
+                             if (Math.random() < 0.4) this.spawnItem(enemy.x, enemy.y);
+                             this.enemies.splice(i, 1);
+                         }
+                     }
+                     this.items.forEach(item => item.update(this.deltaTime));
+                     this.party.forEach(character => {
+                         if(character.interactionTarget && character.interactionTarget instanceof Item) {
+                             const item = character.interactionTarget; if ((character.x - item.x)**2 + (character.y - item.y)**2 < (character.width * character.width)) { this.pickupItem(character, item); character.setInteractionTarget(null); character.stopActions(); }
+                         } else if (character.isMoving && !character.interactionTarget) {
+                             for(let i = this.items.length - 1; i >= 0; i--) { const item = this.items[i]; if ((character.x - item.x)**2 + (character.y - item.y)**2 < (character.width * 1.5)**2) { this.pickupItem(character, item); break; } }
+                         }
+                     });
+                     this.updateChunks();
+                     this.updateFloatingTexts(this.deltaTime);
+                 }
+                 this.updateCamera();
+                 this.updatePartyUI(); // Keep updating UI bars
+                 this.updateMinimap(); // Keep updating minimap
+             }
+
+             updateCamera() {
+                 if (!this.camera.target) return;
+                 const targetX = this.camera.target.x; const targetY = this.camera.target.y;
+                 this.camera.x += (targetX - this.camera.x) * this.camera.followSpeed;
+                 this.camera.y += (targetY - this.camera.y) * this.camera.followSpeed;
+                 if (Math.abs(targetX - this.camera.x) < 0.1) this.camera.x = targetX;
+                 if (Math.abs(targetY - this.camera.y) < 0.1) this.camera.y = targetY;
+             }
+
+            render() {
+                const ctx = this.ctx; ctx.imageSmoothingEnabled = false;
+                ctx.fillStyle = '#222'; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                const cameraOffsetX = Math.round(this.camera.x - this.canvas.width / 2);
+                const cameraOffsetY = Math.round(this.camera.y - this.canvas.height / 2);
+
+                 if (this.currentState !== this.gameState.LOADING && this.currentState !== this.gameState.MAIN_MENU) {
+                      this.renderGame(cameraOffsetX, cameraOffsetY);
+                 }
+
+                 this.renderFloatingTexts(cameraOffsetX, cameraOffsetY);
+
+                 if (this.currentState === this.gameState.PAUSED) {
+                     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                     ctx.fillStyle = 'white'; ctx.font = '48px Arial'; ctx.textAlign = 'center';
+                     ctx.fillText('PAUSED', this.canvas.width / 2, this.canvas.height / 2 - 20);
+                     ctx.font = '24px Arial'; ctx.fillText('Press P or ESC to resume', this.canvas.width / 2, this.canvas.height / 2 + 30);
+                 }
+                 if (config.debugMode) { this.renderDebugInfo(); }
+             }
+
+            renderGame(cameraOffsetX, cameraOffsetY) {
+                this.renderTerrain(cameraOffsetX, cameraOffsetY);
+                const renderables = [...this.items, ...this.enemies, ...this.party];
+                renderables.sort((a, b) => (a.y + a.height / 2) - (b.y + b.height / 2));
+                renderables.forEach(entity => { this.renderEntity(entity, cameraOffsetX, cameraOffsetY); });
+            }
+
+            // --- MODIFIED renderTerrain ---
+            renderTerrain(cameraOffsetX, cameraOffsetY) {
+                const tileSize = config.tileSize; const screenWidth = this.canvas.width; const screenHeight = this.canvas.height;
+                const startTileX = Math.floor(cameraOffsetX / tileSize); const startTileY = Math.floor(cameraOffsetY / tileSize);
+                const endTileX = startTileX + Math.ceil(screenWidth / tileSize) + 1; const endTileY = startTileY + Math.ceil(screenHeight / tileSize) + 1;
+
+                for (const [key, chunk] of this.activeChunks.entries()) {
+                    const chunkWorldX = chunk.x * config.chunkSize * tileSize; const chunkWorldY = chunk.y * config.chunkSize * tileSize;
+                    const chunkWorldSize = config.chunkSize * tileSize;
+                    if (chunkWorldX + chunkWorldSize < cameraOffsetX || chunkWorldX > cameraOffsetX + screenWidth || chunkWorldY + chunkWorldSize < cameraOffsetY || chunkWorldY > cameraOffsetY + screenHeight) continue;
+
+                    for (let y = 0; y < config.chunkSize; y++) {
+                        for (let x = 0; x < config.chunkSize; x++) {
+                             const tile = chunk.tiles[y]?.[x]; if (!tile) continue;
+                             const worldTileX = chunk.x * config.chunkSize + x; const worldTileY = chunk.y * config.chunkSize + y;
+                             if (worldTileX >= startTileX && worldTileX <= endTileX && worldTileY >= startTileY && worldTileY <= endTileY) {
+                                 const screenX = Math.round(worldTileX * tileSize - cameraOffsetX);
+                                 const screenY = Math.round(worldTileY * tileSize - cameraOffsetY);
+
+                                 const tileAsset = this.assets[tile.assetName]; // Get the generated canvas
+                                 if (tileAsset) {
+                                     this.ctx.drawImage(tileAsset, screenX, screenY, tileSize, tileSize); // Draw the canvas
+                                 } else {
+                                      // Fallback color if asset somehow missing
+                                      this.ctx.fillStyle = '#ff00ff'; // Magenta error
+                                      this.ctx.fillRect(screenX, screenY, tileSize, tileSize);
+                                 }
+
+                                 if (config.debugMode) {
+                                      this.ctx.strokeStyle = 'rgba(100,100,100,0.2)'; this.ctx.strokeRect(screenX, screenY, tileSize, tileSize);
+                                      if (!tile.walkable) { this.ctx.fillStyle = 'rgba(255,0,0,0.2)'; this.ctx.fillRect(screenX, screenY, tileSize, tileSize); }
+                                  }
+                             }
+                        }
+                    }
+                }
+            }
+
+            // --- MODIFIED renderEntity ---
+            renderEntity(entity, cameraOffsetX, cameraOffsetY) {
+                 const screenX = Math.round(entity.x - cameraOffsetX - entity.width / 2);
+                 const screenY = Math.round(entity.y - cameraOffsetY - entity.height / 2);
+                 if (screenX > this.canvas.width || screenX + entity.width < 0 || screenY > this.canvas.height || screenY + entity.height < 0) return;
+
+                 const ctx = this.ctx;
+                 const drawOffsetY = entity.drawOffsetY || 0; // Use existing offset
+
+                 // Draw the generated sprite (canvas)
+                 if (entity.sprite && entity.sprite instanceof HTMLCanvasElement) { // Check if it's a canvas
+                     // For Characters, basic animation might just be flipping L/R or simple bobbing if needed.
+                     // The generated assets aren't sprite sheets, so frame logic is less relevant here.
+                     // We just draw the whole generated canvas.
+
+                     // Optional: Flipping based on direction
+                     let scaleX = 1;
+                     if (entity instanceof Character) {
+                          // Simple flip: assume direction 1 is left, 2 is right
+                         if(entity.direction === 1) scaleX = -1;
+                     }
+
+                     if(scaleX === -1) {
+                         ctx.save();
+                         ctx.translate(screenX + entity.width, screenY + drawOffsetY); // Move to right edge
+                         ctx.scale(-1, 1); // Flip horizontally
+                         ctx.drawImage(entity.sprite, 0, 0, entity.width, entity.height); // Draw flipped at (0,0) relative to translated pos
+                         ctx.restore();
+                     } else {
+                         ctx.drawImage(entity.sprite, screenX, screenY + drawOffsetY, entity.width, entity.height);
+                     }
+
+                 } else if (entity.sprite) {
+                     // If somehow it's still an Image object (shouldn't be), draw it (legacy)
+                     // This block might be removable if all assets are guaranteed canvases
+                     ctx.drawImage(entity.sprite, screenX, screenY + drawOffsetY, entity.width, entity.height);
+                 }
+                  else {
+                     // Fallback placeholder if no sprite at all
+                     ctx.fillStyle = entity.type === 'enemy' ? 'rgba(200, 0, 0, 0.8)' : entity.type === 'player' ? 'rgba(0, 150, 255, 0.8)' : entity instanceof Item ? 'rgba(255, 255, 0, 0.8)' : 'grey';
+                     ctx.fillRect(screenX, screenY + drawOffsetY, entity.width, entity.height);
+                     ctx.strokeStyle = 'black'; ctx.strokeRect(screenX, screenY + drawOffsetY, entity.width, entity.height);
+                 }
+
+
+                 // Draw selection indicator (remains the same)
+                 if (entity.isSelected && entity.type === 'player') {
+                     ctx.strokeStyle = '#4a90e2'; ctx.lineWidth = 2; ctx.beginPath();
+                     ctx.ellipse(screenX + entity.width / 2, screenY + drawOffsetY + entity.height, entity.width * 0.4, entity.width * 0.15, 0, 0, Math.PI * 2);
+                     ctx.stroke();
+                 }
+
+                 // Draw health bar (remains the same)
+                 if (entity instanceof Character && entity.hp < entity.maxHp) {
+                     const barWidth = Math.min(entity.width, 50); const barHeight = 5;
+                     const barX = screenX + (entity.width - barWidth) / 2; const barY = screenY + drawOffsetY - barHeight - 5; // Adjusted Y pos relative to drawOffsetY
+                     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(barX, barY, barWidth, barHeight);
+                     const healthPercent = Math.max(0, entity.hp / entity.maxHp);
+                     ctx.fillStyle = healthPercent > 0.6 ? '#32CD32' : healthPercent > 0.3 ? '#FFD700' : '#FF4500';
+                     ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+                     ctx.strokeStyle = 'rgba(50,50,50,0.8)'; ctx.lineWidth = 1; ctx.strokeRect(barX, barY, barWidth, barHeight);
+                 }
+
+                 // Debug info (remains the same)
+                 if (config.debugMode && entity instanceof Character) {
+                     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+                     ctx.fillText(`${entity.aiState || 'player'}`, screenX + entity.width / 2, screenY + drawOffsetY - 15);
+                     if (entity.target) { ctx.strokeStyle = 'red'; ctx.beginPath(); ctx.moveTo(screenX + entity.width / 2, screenY + drawOffsetY + entity.height / 2); ctx.lineTo(entity.target.x - cameraOffsetX, entity.target.y - cameraOffsetY); ctx.stroke(); }
+                     if (entity.moveTarget) { ctx.strokeStyle = 'lime'; ctx.beginPath(); ctx.moveTo(screenX + entity.width / 2, screenY + drawOffsetY + entity.height / 2); ctx.lineTo(entity.moveTarget.x - cameraOffsetX, entity.moveTarget.y - cameraOffsetY); ctx.stroke(); }
+                 }
+            }
+
+            renderDebugInfo() {
+                 const ctx = this.ctx; ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(5, 5, 200, 150);
+                 ctx.fillStyle = 'white'; ctx.font = '12px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                 const fps = this.deltaTime > 0 ? (1 / this.deltaTime).toFixed(1) : 'N/A'; let line = 10; const lineHeight = 14;
+                 ctx.fillText(`FPS: ${fps}`, 10, line); line += lineHeight;
+                 ctx.fillText(`State: ${Object.keys(this.gameState).find(key => this.gameState[key] === this.currentState)}`, 10, line); line += lineHeight;
+                 ctx.fillText(`Entities: P:${this.party.length} E:${this.enemies.length} I:${this.items.length}`, 10, line); line += lineHeight;
+                 ctx.fillText(`Chunks: ${this.activeChunks.size}`, 10, line); line += lineHeight;
+                 ctx.fillText(`Player: (${Math.round(this.player.x)}, ${Math.round(this.player.y)})`, 10, line); line += lineHeight;
+                 const playerTile = this.getTile(this.player.x, this.player.y);
+                 ctx.fillText(` P Tile: (${playerTile.worldX},${playerTile.worldY}) ${playerTile.type}`, 10, line); line += lineHeight;
+                 ctx.fillText(`Camera: (${Math.round(this.camera.x)}, ${Math.round(this.camera.y)})`, 10, line); line += lineHeight;
+                 ctx.fillText(`MouseW: (${Math.round(this.mouse.worldX)}, ${Math.round(this.mouse.worldY)})`, 10, line); line += lineHeight;
+                 ctx.restore();
+             }
+
+            gameLoop(time) {
+                this.update(time);
+                this.render();
+                requestAnimationFrame((t) => this.gameLoop(t));
+            }
+        }
+
+         // --- MODIFIED Item class ---
+         class Item {
+             constructor(config) {
+                 this.game = config.game;
+                 this.name = config.name || 'Unknown Item';
+                 this.type = config.type || 'junk';
+                 this.subType = config.subType || '';
+                 this.x = config.x || 0; this.y = config.y || 0;
+                 this.sprite = config.sprite || null; // Expecting a generated canvas
+                 this.width = config.width || (this.sprite ? this.sprite.width : 32);
+                 this.height = config.height || (this.sprite ? this.sprite.height : 32);
+                 this.stats = config.stats || {};
+                 this.description = config.description || 'A mysterious item.';
+                 this.stackable = config.stackable || (this.type === 'consumable');
+                 this.quantity = config.quantity || 1;
+                 this.assetName = config.assetName || null; // Store name for UI lookups
+             }
+             update(deltaTime) { /* Static */ }
+             containsPoint(px, py) {
+                 const halfWidth = this.width / 2; const halfHeight = this.height / 2;
+                 return px >= this.x - halfWidth && px <= this.x + halfWidth && py >= this.y - halfHeight && py <= this.y + halfHeight;
+             }
+             getEquipmentSlot() {
+                 if (this.type === 'weapon') return 'weapon';
+                 if (this.type === 'armor') {
+                     switch (this.subType) {
+                         case 'armor': return 'armor'; case 'helmet': return 'helmet';
+                         case 'boots': return 'boots'; case 'accessory': return 'accessory';
+                         default: return null;
+                     }
+                 } return null;
+             }
+         }
+
+
+        // --- MODIFIED Character class ---
+        class Character {
+            constructor(config) {
+                this.game = config.game;
+                this.name = config.name || 'Character';
+                this.type = config.type || 'npc';
+                this.enemyType = config.enemyType || '';
+                this.x = config.x || 0; this.y = config.y || 0;
+                this.width = config.width || 48; this.height = config.height || 48;
+                this.drawOffsetY = config.drawOffsetY || -this.height * 0.1;
+                this.sprite = config.spriteSheet; // Expecting a generated canvas
+                this.assetName = config.assetName || null; // Store name for UI lookups
+
+                 // Animation properties are less relevant with static generated assets,
+                 // but keep direction for potential flipping/facing logic.
+                this.currentFrame = 0; this.frameCount = 1; this.frameDelay = 150; this.frameTimer = 0;
+                this.direction = config.direction || 0; // 0: Down, 1: Left, 2: Right, 3: Up
+
+                this.level = config.level || 1;
+                this.maxHp = config.maxHp || config.hp || 100; this.hp = config.hp || this.maxHp;
+                this.maxMana = config.maxMana || config.mana || 0; this.mana = config.mana || this.maxMana;
+                this.xpValue = config.xpValue || 0;
+                this.baseStats = { strength: config.baseStats?.strength || 10, dexterity: config.baseStats?.dexterity || 10, intelligence: config.baseStats?.intelligence || 10 };
+                this.stats = { /* ... derived stats ... */ }; // Initialized below
+                 this.skills = { melee: config.skills?.melee || { level: 1, exp: 0, nextLevel: 100 }, ranged: config.skills?.ranged || { level: 1, exp: 0, nextLevel: 100 }, combatMagic: config.skills?.combatMagic || { level: 1, exp: 0, nextLevel: 100 }, natureMagic: config.skills?.natureMagic || { level: 1, exp: 0, nextLevel: 100 } };
+                this.experience = 0; this.experienceToNextLevel = this.calculateExpToNextLevel(this.level);
+                this.moveTarget = null; this.isMoving = false; this.movementSpeedMultiplier = 1.0;
+                this.attackCooldown = 0; this.target = null; this.interactionTarget = null;
+                this.aggroRange = config.aggroRange || 300; this.isDefending = false;
+                this.isSelected = config.isSelected || false; this.aiState = 'idle'; this.aiTimer = 0;
+                this.inventory = []; this.equipment = { weapon: null, armor: null, helmet: null, boots: null, accessory: null };
+                this.updateStats(); // Calculate initial derived stats
+            }
+
+            calculateExpToNextLevel(level) { return Math.floor(100 * Math.pow(1.5, level - 1)); }
+            updateStats() {
+                // (Stat calculation logic remains the same)
+                this.maxHp = 50 + this.baseStats.strength * 5 + (this.level - 1) * 10;
+                this.maxMana = this.baseStats.intelligence * 5 + (this.level - 1) * 5;
+                this.stats.attackPower = this.baseStats.strength * 1.5;
+                this.stats.defense = Math.floor(this.baseStats.strength * 0.5 + this.baseStats.dexterity * 0.2);
+                this.stats.attackSpeed = 1.0 + this.baseStats.dexterity * 0.02;
+                this.stats.moveSpeed = 150 + this.baseStats.dexterity * 1;
+                this.stats.attackRange = 50;
+                this.stats.manaRegen = 0.1 + this.baseStats.intelligence * 0.05;
+                 this.stats.critChance = 0.05 + this.baseStats.dexterity * 0.005;
+                 this.stats.critMultiplier = 1.5;
+                 for (const slot in this.equipment) {
+                     const item = this.equipment[slot];
+                     if (item) {
+                         if (item.stats.damage) this.stats.attackPower += item.stats.damage;
+                         if (item.stats.defense) this.stats.defense += item.stats.defense;
+                         if (item.stats.attackSpeed) this.stats.attackSpeed *= item.stats.attackSpeed;
+                         if (item.stats.moveSpeedBonus) this.stats.moveSpeed += item.stats.moveSpeedBonus;
+                         if (item.stats.maxHp) this.maxHp += item.stats.maxHp;
+                         if (item.stats.maxMana) this.maxMana += item.stats.maxMana;
+                         if (item.stats.manaRegen) this.stats.manaRegen += item.stats.manaRegen;
+                         if (item.stats.range && slot === 'weapon') this.stats.attackRange = item.stats.range;
+                         if (item.stats.critChance) this.stats.critChance += item.stats.critChance;
+                         if (item.stats.critMultiplier) this.stats.critMultiplier += item.stats.critMultiplier;
+                     }
+                 }
+                 this.hp = Math.min(this.hp, this.maxHp); this.mana = Math.min(this.mana, this.maxMana);
+            }
+            update(deltaTime) {
+                if (this.hp <= 0) { this.aiState = 'dead'; this.isMoving = false; this.target = null; this.moveTarget = null; return; }
+                if (this.mana < this.maxMana) { this.mana = Math.min(this.maxMana, this.mana + this.stats.manaRegen * deltaTime); }
+                if (this.attackCooldown > 0) { this.attackCooldown -= deltaTime; }
+                if (this.type === 'enemy') { this.updateEnemyAI(deltaTime); }
+                else if (this.type === 'player' && this !== this.game.player) { this.updateCompanionAI(deltaTime); }
+                this.updateMovement(deltaTime);
+                // No frame animation needed for static generated assets
+                // this.updateAnimation(deltaTime);
+            }
+            updateEnemyAI(deltaTime) {
+                // (AI logic remains the same)
+                this.aiTimer -= deltaTime;
+                if (this.aiState !== 'chase' && this.aiState !== 'attack' && this.aiTimer <= 0) {
+                     let potentialTarget = null; let minDistSq = this.aggroRange * this.aggroRange;
+                     this.game.party.forEach(p => { if(p.hp > 0) { const distSq = (p.x - this.x)**2 + (p.y - this.y)**2; if (distSq < minDistSq) { minDistSq = distSq; potentialTarget = p; } } });
+                     if (potentialTarget) { this.target = potentialTarget; this.aiState = 'chase'; this.moveTarget = null; }
+                     else {
+                          if (this.aiState === 'idle') { if(Math.random() < 0.2) { this.aiState = 'wander'; const angle = Math.random() * Math.PI * 2; const dist = 100 + Math.random() * 200; this.moveTo(this.x + Math.cos(angle) * dist, this.y + Math.sin(angle) * dist); this.aiTimer = 3 + Math.random() * 4; } else { this.aiTimer = 1 + Math.random(); } }
+                          else if (this.aiState === 'wander' && !this.isMoving) { this.aiState = 'idle'; this.aiTimer = 2 + Math.random() * 3; }
+                     }
+                } else if (this.target && this.target.hp <= 0) { this.target = null; this.aiState = 'idle'; this.moveTarget = null; this.aiTimer = 1 + Math.random(); }
+                else if (this.target) { const distSqToTarget = (this.target.x - this.x)**2 + (this.target.y - this.y)**2; if (distSqToTarget > (this.aggroRange * 1.2)**2) { this.target = null; this.aiState = 'idle'; this.moveTarget = null; this.aiTimer = 1 + Math.random(); } }
+                 if (this.aiState === 'chase' && this.target) { const distSqToTarget = (this.target.x - this.x)**2 + (this.target.y - this.y)**2; const attackRangeSq = this.stats.attackRange * this.stats.attackRange; if (distSqToTarget <= attackRangeSq) { this.aiState = 'attack'; this.moveTarget = null; this.isMoving = false; } else { this.moveTo(this.target.x, this.target.y); } }
+                 else if (this.aiState === 'attack' && this.target) { const distSqToTarget = (this.target.x - this.x)**2 + (this.target.y - this.y)**2; const attackRangeSq = this.stats.attackRange * this.stats.attackRange; if (distSqToTarget > attackRangeSq * 1.1) { this.aiState = 'chase'; } else { this.faceTarget(this.target); if (this.attackCooldown <= 0) { this.attack(this.target); } } }
+            }
+             updateCompanionAI(deltaTime) {
+                 // (Companion AI logic remains the same)
+                 if (this.target && this.target.hp > 0) { const distSq = (this.target.x - this.x)**2 + (this.target.y - this.y)**2; const rangeSq = this.stats.attackRange * this.stats.attackRange; if (distSq <= rangeSq) { this.moveTarget = null; this.isMoving = false; if (this.attackCooldown <= 0) { this.attack(this.target); } } else { this.moveTo(this.target.x, this.target.y); } }
+                 else if (this.moveTarget) { /* Moving */ }
+                 else { const followDistSq = 100 * 100; const playerDistSq = (this.game.player.x - this.x)**2 + (this.game.player.y - this.y)**2; if (playerDistSq > followDistSq) { this.moveTo(this.game.player.x + (Math.random()-0.5)*30, this.game.player.y + (Math.random()-0.5)*30); } else { this.isMoving = false; } }
+             }
+            updateMovement(deltaTime) {
+                 // (Movement logic remains the same, including collision and direction setting)
+                 if (!this.moveTarget) { this.isMoving = false; return; }
+                 const targetX = this.moveTarget.x; const targetY = this.moveTarget.y; const dx = targetX - this.x; const dy = targetY - this.y;
+                 const distance = Math.sqrt(dx * dx + dy * dy); const moveSpeed = this.stats.moveSpeed * this.movementSpeedMultiplier;
+                 if (distance < 5) { this.x = targetX; this.y = targetY; this.moveTarget = null; this.isMoving = false; }
+                 else { this.isMoving = true; const moveAmount = moveSpeed * deltaTime; const ratio = moveAmount / distance; const moveX = dx * ratio; const moveY = dy * ratio; const nextX = this.x + moveX; const nextY = this.y + moveY;
+                     if (this.game.isWalkable(nextX, nextY)) { this.x = nextX; this.y = nextY; const angle = Math.atan2(dy, dx); if (angle > -Math.PI * 0.25 && angle <= Math.PI * 0.25) this.direction = 2; else if (angle > Math.PI * 0.25 && angle <= Math.PI * 0.75) this.direction = 0; else if (angle > Math.PI * 0.75 || angle <= -Math.PI * 0.75) this.direction = 1; else if (angle > -Math.PI * 0.75 && angle <= -Math.PI * 0.25) this.direction = 3; }
+                     else { if (this.game.isWalkable(this.x + moveX, this.y)) { this.x += moveX; this.direction = moveX > 0 ? 2 : 1; } else if (this.game.isWalkable(this.x, this.y + moveY)) { this.y += moveY; this.direction = moveY > 0 ? 0 : 3; } else { this.moveTarget = null; this.isMoving = false; } }
+                 }
+             }
+             // updateAnimation removed - not needed for static generated assets
+             moveTo(targetX, targetY) { this.moveTarget = { x: targetX, y: targetY }; this.interactionTarget = null; }
+             faceTarget(targetEntity) {
+                 // (Face target logic remains the same)
+                 const dx = targetEntity.x - this.x; const dy = targetEntity.y - this.y; const angle = Math.atan2(dy, dx);
+                 if (angle > -Math.PI * 0.25 && angle <= Math.PI * 0.25) this.direction = 2; else if (angle > Math.PI * 0.25 && angle <= Math.PI * 0.75) this.direction = 0; else if (angle > Math.PI * 0.75 || angle <= -Math.PI * 0.75) this.direction = 1; else if (angle > -Math.PI * 0.75 && angle <= -Math.PI * 0.25) this.direction = 3;
+             }
+             attack(target) {
+                 // (Attack logic remains the same)
+                 if (!target || target.hp <= 0 || this.attackCooldown > 0) return;
+                 const attackSpeedSeconds = 1.0 / this.stats.attackSpeed; this.attackCooldown = attackSpeedSeconds;
+                 let damage = this.stats.attackPower * (0.8 + Math.random() * 0.4);
+                 const isCrit = Math.random() < this.stats.critChance; if (isCrit) { damage *= this.stats.critMultiplier; }
+                 damage = Math.max(1, damage - target.stats.defense); damage = Math.round(damage);
+                 target.takeDamage(damage, this);
+                 this.game.addFloatingText(damage.toString() + (isCrit ? '!' : ''), target.x, target.y - target.height/2, 'damage');
+                 const weapon = this.equipment.weapon; let skillUsed = 'melee';
+                 if (weapon) { if(weapon.subType === 'ranged') skillUsed = 'ranged'; else if (weapon.subType === 'magic') skillUsed = 'combatMagic'; }
+                 this.gainSkillExp(skillUsed, 5);
+                 if(skillUsed === 'combatMagic' && weapon?.stats.manaCost) { if (this.mana >= weapon.stats.manaCost) { this.mana -= weapon.stats.manaCost; } else { if (this.type === 'player') this.game.showMessage("Not enough mana!"); this.attackCooldown = 0.5; } }
+             }
+             takeDamage(amount, attacker) {
+                 // (takeDamage logic remains the same)
+                 if (this.hp <= 0) return; this.hp -= amount;
+                 if (this.hp <= 0) { this.hp = 0; this.die(attacker); }
+                 else { if (this.type === 'enemy' && attacker && attacker.type === 'player' && !this.target) { this.target = attacker; this.aiState = 'chase'; } }
+             }
+             heal(amount) {
+                 // (heal logic remains the same)
+                 if (this.hp <= 0) return; const actualHeal = Math.min(amount, this.maxHp - this.hp); this.hp += actualHeal;
+                 if (actualHeal > 0) { this.game.addFloatingText(`+${Math.round(actualHeal)}`, this.x, this.y - this.height/2, 'heal'); }
+             }
+             restoreMana(amount) {
+                 // (restoreMana logic remains the same)
+                  if (this.mana >= this.maxMana) return; const actualRestore = Math.min(amount, this.maxMana - this.mana); this.mana += actualRestore;
+             }
+             die(killer) {
+                 // (die logic remains the same)
+                 console.log(`${this.name} was killed ${killer ? 'by ' + killer.name : ''}.`); this.aiState = 'dead';
+                 if(this.type === 'player') { this.game.showMessage(`${this.name} has fallen!`, 5000); }
+             }
+             gainExperience(amount) {
+                 // (gainExperience logic remains the same)
+                 if (this.level >= 100) return; this.experience += amount;
+                 this.game.addFloatingText(`+${amount} XP`, this.x, this.y - this.height/2 - 15, 'xp');
+                 while (this.experience >= this.experienceToNextLevel) { this.levelUp(); }
+             }
+             levelUp() {
+                 // (levelUp logic remains the same)
+                 this.experience -= this.experienceToNextLevel; this.level++; this.experienceToNextLevel = this.calculateExpToNextLevel(this.level);
+                 if (this.level % 3 === 0) this.baseStats.strength++; if (this.level % 3 === 1) this.baseStats.dexterity++; if (this.level % 3 === 2) this.baseStats.intelligence++;
+                 this.updateStats(); this.hp = this.maxHp; this.mana = this.maxMana;
+                 console.log(`${this.name} reached Level ${this.level}!`); this.game.addFloatingText(`LEVEL UP! (${this.level})`, this.x, this.y - this.height, 'levelup'); this.game.showMessage(`${this.name} reached Level ${this.level}!`, 3000);
+                 this.game.updatePartyUI();
+             }
+             gainSkillExp(skillName, amount) {
+                 // (gainSkillExp logic remains the same)
+                 if (!this.skills[skillName]) return; const skill = this.skills[skillName]; skill.exp += amount;
+                 while(skill.exp >= skill.nextLevel) { skill.level++; skill.exp -= skill.nextLevel; skill.nextLevel = Math.floor(skill.nextLevel * 1.2); console.log(`${this.name}'s ${skillName} skill increased to ${skill.level}!`); this.updateStats(); }
+             }
+             equipItem(itemToEquip) {
+                 // (equipItem logic remains the same)
+                 const slot = itemToEquip.getEquipmentSlot(); if (!slot) { this.game.showMessage(`Cannot equip ${itemToEquip.name}.`); return; }
+                 const invIndex = this.inventory.indexOf(itemToEquip); if (invIndex === -1) { console.error("Trying to equip item not in inventory:", itemToEquip.name); return; }
+                 this.inventory.splice(invIndex, 1);
+                 const currentItem = this.equipment[slot]; if (currentItem) { this.inventory.push(currentItem); }
+                 this.equipment[slot] = itemToEquip; this.game.showMessage(`Equipped ${itemToEquip.name}.`);
+                 this.updateStats(); this.game.updateInventory();
+             }
+             setTarget(entity) { this.target = entity; if (entity) { this.aiState = entity.type === 'enemy' ? 'chase' : 'following'; } else { this.aiState = 'idle'; } }
+             setInteractionTarget(entity) { this.interactionTarget = entity; }
+             stopActions() { this.moveTarget = null; this.target = null; this.interactionTarget = null; this.isMoving = false; this.aiState = this.type === 'player' ? 'idle' : this.aiState; }
+             containsPoint(px, py) {
+                 // (containsPoint logic remains the same)
+                 const halfWidth = this.width / 2; const halfHeight = this.height / 2;
+                 return px >= this.x - halfWidth && px <= this.x + halfWidth && py >= this.y - halfHeight && py <= this.y + halfHeight;
+             }
+             getXpValue() { return this.xpValue + (this.level * 5); }
+             getClassType() {
+                 // (getClassType logic remains the same)
+                 let highestSkill = 'Melee'; let maxLevel = this.skills.melee.level;
+                 if (this.skills.ranged.level > maxLevel) { maxLevel = this.skills.ranged.level; highestSkill = 'Ranged'; }
+                 if (this.skills.combatMagic.level > maxLevel) { maxLevel = this.skills.combatMagic.level; highestSkill = 'Combat Magic'; }
+                 if (this.skills.natureMagic.level > maxLevel) { maxLevel = this.skills.natureMagic.level; highestSkill = 'Nature Magic'; }
+                 return highestSkill;
+             }
+        }
+
+        // --- Initialize Game ---
+        document.addEventListener('DOMContentLoaded', () => {
+             game = new DungeonSiege();
+        });
+
+    </script>
+</body>
+</html>
