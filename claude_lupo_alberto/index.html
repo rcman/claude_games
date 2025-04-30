@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lupo Alberto - HTML5 Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+        }
+        
+        canvas {
+            border: 3px solid #444;
+            background-color: #87CEEB;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.7);
+        }
+        
+        #start-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+        }
+        
+        .title {
+            font-size: 36px;
+            color: #3498db;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 3px rgba(0,0,0,0.5);
+        }
+        
+        .start-btn {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        
+        .start-btn:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="640" height="400"></canvas>
+        <div id="hud">
+            <div>SCORE: <span id="score">0</span></div>
+            <div>LIVES: <span id="lives">3</span></div>
+            <div>LEVEL: <span id="level">1</span></div>
+        </div>
+        <div id="start-screen">
+            <div class="title">LUPO ALBERTO</div>
+            <button class="start-btn" id="startGame">START GAME</button>
+        </div>
+    </div>
+    
+    <script>
+        // Game Constants and Variables
+        const GRAVITY = 0.4;
+        const JUMP_FORCE = -10;
+        const PLAYER_SPEED = 5;
+        const PLATFORM_HEIGHT = 20;
+        
+        let game = {
+            canvas: document.getElementById('gameCanvas'),
+            ctx: null,
+            width: 640,
+            height: 400,
+            running: false,
+            frameCount: 0,
+            score: 0,
+            lives: 3,
+            level: 1,
+            platforms: [],
+            collectibles: [],
+            enemies: [],
+            scrollOffset: 0,
+            levelComplete: false
+        };
+        
+        // Player object
+        let player = {
+            x: 50,
+            y: 200,
+            width: 30,
+            height: 50,
+            velocityX: 0,
+            velocityY: 0,
+            jumping: false,
+            direction: 1, // 1 = right, -1 = left
+            color: '#3498db',  // Blue color for Lupo Alberto
+            update: function() {
+                // Apply gravity
+                this.velocityY += GRAVITY;
+                
+                // Apply velocities
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+                
+                // Ground collision
+                if (this.y + this.height > game.height - PLATFORM_HEIGHT) {
+                    this.y = game.height - this.height - PLATFORM_HEIGHT;
+                    this.velocityY = 0;
+                    this.jumping = false;
+                }
+                
+                // Left boundary
+                if (this.x < 0) {
+                    this.x = 0;
+                }
+                
+                // Platform collision
+                game.platforms.forEach(platform => {
+                    if (this.velocityY > 0 &&
+                        this.x + this.width > platform.x - game.scrollOffset &&
+                        this.x < platform.x + platform.width - game.scrollOffset &&
+                        this.y + this.height >= platform.y &&
+                        this.y + this.height <= platform.y + 20) {
+                        
+                        this.y = platform.y - this.height;
+                        this.velocityY = 0;
+                        this.jumping = false;
+                    }
+                });
+                
+                // Collectible collision
+                for (let i = game.collectibles.length - 1; i >= 0; i--) {
+                    const collectible = game.collectibles[i];
+                    if (this.x + this.width > collectible.x - game.scrollOffset &&
+                        this.x < collectible.x + collectible.width - game.scrollOffset &&
+                        this.y + this.height > collectible.y &&
+                        this.y < collectible.y + collectible.height) {
+                        
+                        game.collectibles.splice(i, 1);
+                        game.score += 100;
+                        updateHUD();
+                    }
+                }
+                
+                // Enemy collision
+                for (let i = 0; i < game.enemies.length; i++) {
+                    const enemy = game.enemies[i];
+                    if (this.x + this.width > enemy.x - game.scrollOffset &&
+                        this.x < enemy.x + enemy.width - game.scrollOffset &&
+                        this.y + this.height > enemy.y &&
+                        this.y < enemy.y + enemy.height) {
+                        
+                        // Player loses a life when touching an enemy
+                        this.reset();
+                        game.lives--;
+                        updateHUD();
+                        
+                        if (game.lives <= 0) {
+                            endGame();
+                        }
+                        break;
+                    }
+                }
+                
+                // Level completion check
+                if (this.x > 2500 - game.scrollOffset) {
+                    if (!game.levelComplete) {
+                        game.levelComplete = true;
+                        setTimeout(() => {
+                            nextLevel();
+                        }, 1000);
+                    }
+                }
+            },
+            draw: function() {
+                game.ctx.fillStyle = this.color;
+                game.ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw eyes (simple face)
+                game.ctx.fillStyle = 'white';
+                game.ctx.fillRect(this.x + (this.direction === 1 ? 20 : 5), this.y + 10, 5, 5);
+                game.ctx.fillStyle = 'black';
+                game.ctx.fillRect(this.x + (this.direction === 1 ? 22 : 7), this.y + 12, 2, 2);
+                
+                // Draw snout
+                game.ctx.fillStyle = '#2980b9';
+                game.ctx.fillRect(this.x + (this.direction === 1 ? 25 : 0), this.y + 15, 10 * this.direction, 10);
+            },
+            jump: function() {
+                if (!this.jumping) {
+                    this.velocityY = JUMP_FORCE;
+                    this.jumping = true;
+                }
+            },
+            moveLeft: function() {
+                this.velocityX = -PLAYER_SPEED;
+                this.direction = -1;
+            },
+            moveRight: function() {
+                this.velocityX = PLAYER_SPEED;
+                this.direction = 1;
+            },
+            stop: function() {
+                this.velocityX = 0;
+            },
+            reset: function() {
+                this.x = 50;
+                this.y = 200;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                game.scrollOffset = 0;
+            }
+        };
+        
+        // Initialize the game
+        function init() {
+            game.ctx = game.canvas.getContext('2d');
+            
+            document.getElementById('startGame').addEventListener('click', startGame);
+            
+            // Set up key listeners
+            window.addEventListener('keydown', function(e) {
+                if (!game.running) return;
+                
+                switch(e.key) {
+                    case 'ArrowLeft':
+                        player.moveLeft();
+                        break;
+                    case 'ArrowRight':
+                        player.moveRight();
+                        break;
+                    case 'ArrowUp':
+                    case ' ':
+                        player.jump();
+                        break;
+                }
+            });
+            
+            window.addEventListener('keyup', function(e) {
+                if (!game.running) return;
+                
+                switch(e.key) {
+                    case 'ArrowLeft':
+                    case 'ArrowRight':
+                        player.stop();
+                        break;
+                }
+            });
+        }
+        
+        // Start the game
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            game.running = true;
+            resetGame();
+            loadLevel(game.level);
+            gameLoop();
+        }
+        
+        // End the game
+        function endGame() {
+            game.running = false;
+            let startScreen = document.getElementById('start-screen');
+            let title = startScreen.querySelector('.title');
+            title.textContent = 'GAME OVER';
+            let button = startScreen.querySelector('.start-btn');
+            button.textContent = 'PLAY AGAIN';
+            startScreen.style.display = 'flex';
+        }
+        
+        // Reset game state
+        function resetGame() {
+            game.score = 0;
+            game.lives = 3;
+            game.level = 1;
+            player.reset();
+            updateHUD();
+        }
+        
+        // Update the HUD
+        function updateHUD() {
+            document.getElementById('score').textContent = game.score;
+            document.getElementById('lives').textContent = game.lives;
+            document.getElementById('level').textContent = game.level;
+        }
+        
+        // Load a level
+        function loadLevel(level) {
+            game.platforms = [];
+            game.collectibles = [];
+            game.enemies = [];
+            game.levelComplete = false;
+            
+            // Ground platform (always present)
+            game.platforms.push({
+                x: 0,
+                y: game.height - PLATFORM_HEIGHT,
+                width: 3000,
+                height: PLATFORM_HEIGHT,
+                color: '#8B4513'  // Brown for ground
+            });
+            
+            // Level-specific platforms
+            if (level === 1) {
+                // Level 1: Basic platforms
+                game.platforms.push(
+                    { x: 200, y: 300, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 350, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 500, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 650, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 800, y: 300, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 950, y: 200, width: 150, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1200, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1400, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1600, y: 300, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1800, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 2000, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 2200, y: 250, width: 300, height: PLATFORM_HEIGHT, color: '#8B4513' }
+                );
+                
+                // Collectibles (carrots for Lupo Alberto)
+                for (let i = 0; i < 10; i++) {
+                    game.collectibles.push({
+                        x: 300 + i * 200,
+                        y: 150,
+                        width: 15,
+                        height: 20,
+                        color: '#FFA500'  // Orange for carrots
+                    });
+                }
+                
+                // Enemies (cats - Mose the cat is the nemesis of Lupo Alberto)
+                game.enemies.push(
+                    { x: 400, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1 },
+                    { x: 800, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1 },
+                    { x: 1200, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1 },
+                    { x: 1600, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1 },
+                    { x: 2000, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1 }
+                );
+            } else if (level === 2) {
+                // Level 2: More complex platforms and more enemies
+                game.platforms.push(
+                    { x: 150, y: 320, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 300, y: 280, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 450, y: 240, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 600, y: 200, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 750, y: 240, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 900, y: 280, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1050, y: 320, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1200, y: 280, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1350, y: 240, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1500, y: 200, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1650, y: 240, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1800, y: 280, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1950, y: 320, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 2100, y: 280, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 2250, y: 240, width: 80, height: PLATFORM_HEIGHT, color: '#8B4513' }
+                );
+                
+                // More collectibles
+                for (let i = 0; i < 15; i++) {
+                    game.collectibles.push({
+                        x: 200 + i * 150,
+                        y: 150,
+                        width: 15,
+                        height: 20,
+                        color: '#FFA500'
+                    });
+                }
+                
+                // More enemies with different speeds
+                game.enemies.push(
+                    { x: 300, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1.5 },
+                    { x: 600, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -1.5 },
+                    { x: 900, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1.5 },
+                    { x: 1200, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -1.5 },
+                    { x: 1500, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1.5 },
+                    { x: 1800, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -1.5 },
+                    { x: 2100, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 1.5 }
+                );
+            } else if (level === 3) {
+                // Level 3: Even more complex with moving platforms
+                game.platforms.push(
+                    { x: 100, y: 300, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 300, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 500, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 700, y: 150, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 900, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1100, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1300, y: 300, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1500, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1700, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 1900, y: 150, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 2100, y: 200, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' },
+                    { x: 2300, y: 250, width: 100, height: PLATFORM_HEIGHT, color: '#8B4513' }
+                );
+                
+                // Level 3 collectibles
+                for (let i = 0; i < 20; i++) {
+                    game.collectibles.push({
+                        x: 150 + i * 120,
+                        y: 100,
+                        width: 15,
+                        height: 20,
+                        color: '#FFA500'
+                    });
+                }
+                
+                // Level 3 enemies (more and faster)
+                game.enemies.push(
+                    { x: 200, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 2 },
+                    { x: 400, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -2 },
+                    { x: 600, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 2 },
+                    { x: 800, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -2 },
+                    { x: 1000, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 2 },
+                    { x: 1200, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -2 },
+                    { x: 1400, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 2 },
+                    { x: 1600, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -2 },
+                    { x: 1800, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: 2 },
+                    { x: 2000, y: 350, width: 30, height: 30, color: '#A0A0A0', velocityX: -2 }
+                );
+            }
+        }
+        
+        // Move to the next level
+        function nextLevel() {
+            game.level++;
+            player.reset();
+            
+            if (game.level > 3) {
+                // Game completed
+                game.running = false;
+                let startScreen = document.getElementById('start-screen');
+                let title = startScreen.querySelector('.title');
+                title.textContent = 'YOU WIN!';
+                let button = startScreen.querySelector('.start-btn');
+                button.textContent = 'PLAY AGAIN';
+                startScreen.style.display = 'flex';
+                game.level = 1;
+            } else {
+                loadLevel(game.level);
+                updateHUD();
+            }
+        }
+        
+        // Game Loop
+        function gameLoop() {
+            if (!game.running) return;
+            
+            // Clear canvas
+            game.ctx.clearRect(0, 0, game.width, game.height);
+            
+            // Update game state
+            update();
+            
+            // Draw everything
+            draw();
+            
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Update game state
+        function update() {
+            game.frameCount++;
+            
+            // Update player
+            player.update();
+            
+            // Scroll the level
+            if (player.x > game.width / 2 && player.velocityX > 0) {
+                game.scrollOffset += player.velocityX;
+                player.x = game.width / 2;
+            }
+            
+            // Update enemies
+            game.enemies.forEach(enemy => {
+                enemy.x += enemy.velocityX;
+                
+                // Make enemies patrol platforms
+                if (enemy.x > 300 + Math.random() * 100) {
+                    enemy.velocityX = -enemy.velocityX;
+                }
+                if (enemy.x < 50) {
+                    enemy.velocityX = Math.abs(enemy.velocityX);
+                }
+            });
+        }
+        
+        // Draw everything
+        function draw() {
+            // Draw sky background
+            game.ctx.fillStyle = '#87CEEB';
+            game.ctx.fillRect(0, 0, game.width, game.height);
+            
+            // Draw clouds
+            game.ctx.fillStyle = 'white';
+            for (let i = 0; i < 5; i++) {
+                let cloudX = (i * 200 - (game.scrollOffset * 0.2) % 1000);
+                while (cloudX < -100) cloudX += 1000;
+                
+                game.ctx.beginPath();
+                game.ctx.arc(cloudX, 50, 30, 0, Math.PI * 2);
+                game.ctx.arc(cloudX + 25, 40, 25, 0, Math.PI * 2);
+                game.ctx.arc(cloudX - 25, 40, 25, 0, Math.PI * 2);
+                game.ctx.fill();
+            }
+            
+            // Draw platforms
+            game.platforms.forEach(platform => {
+                game.ctx.fillStyle = platform.color;
+                game.ctx.fillRect(platform.x - game.scrollOffset, platform.y, platform.width, platform.height);
+            });
+            
+            // Draw collectibles
+            game.collectibles.forEach(collectible => {
+                game.ctx.fillStyle = collectible.color;
+                game.ctx.fillRect(collectible.x - game.scrollOffset, collectible.y, collectible.width, collectible.height);
+            });
+            
+            // Draw enemies
+            game.enemies.forEach(enemy => {
+                game.ctx.fillStyle = enemy.color;
+                game.ctx.fillRect(enemy.x - game.scrollOffset, enemy.y, enemy.width, enemy.height);
+                
+                // Draw cat ears
+                game.ctx.beginPath();
+                game.ctx.moveTo(enemy.x - game.scrollOffset, enemy.y);
+                game.ctx.lineTo(enemy.x - game.scrollOffset + 10, enemy.y - 10);
+                game.ctx.lineTo(enemy.x - game.scrollOffset + 20, enemy.y);
+                game.ctx.fill();
+                
+                // Draw cat eyes
+                game.ctx.fillStyle = 'yellow';
+                game.ctx.fillRect(enemy.x - game.scrollOffset + 5, enemy.y + 8, 7, 5);
+                game.ctx.fillRect(enemy.x - game.scrollOffset + 18, enemy.y + 8, 7, 5);
+                
+                // Draw cat pupils
+                game.ctx.fillStyle = 'black';
+                game.ctx.fillRect(enemy.x - game.scrollOffset + 7, enemy.y + 10, 3, 3);
+                game.ctx.fillRect(enemy.x - game.scrollOffset + 20, enemy.y + 10, 3, 3);
+            });
+            
+            // Draw player
+            player.draw();
+        }
+        
+        // Start the game when loaded
+        window.onload = init;
+    </script>
+</body>
+</html>
