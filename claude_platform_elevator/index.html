@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Platform Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            overflow: hidden;
+        }
+        canvas {
+            border: 2px solid #333;
+            display: block;
+            max-width: 100%;
+            max-height: 100vh;
+        }
+        #gameUI {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameUI">
+        Level: <span id="levelDisplay">1</span> | 
+        Keys: <span id="keysDisplay">0</span>/<span id="totalKeysDisplay">0</span> | 
+        Ammo: <span id="ammoDisplay">20</span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // Game setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas to 1920x1080
+        canvas.width = 1920;
+        canvas.height = 1080;
+        
+        // UI elements
+        const levelDisplay = document.getElementById('levelDisplay');
+        const keysDisplay = document.getElementById('keysDisplay');
+        const totalKeysDisplay = document.getElementById('totalKeysDisplay');
+        const ammoDisplay = document.getElementById('ammoDisplay');
+        
+        // Game constants
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 15;
+        const PLATFORM_HEIGHT = 40;
+        const PLATFORM_WIDTH = 300;
+        const ELEVATOR_WIDTH = 120;
+        const ELEVATOR_HEIGHT = 20;
+        const LOCKER_WIDTH = 40;
+        const LOCKER_HEIGHT = 80;
+        const KEY_SIZE = 30;
+        const BULLET_SPEED = 15;
+        const BULLET_SIZE = 8;
+        const ENEMY_SIZE = 40;
+        const AMMO_PER_LOCKER = 10;
+        
+        // Game state
+        let gameState = {
+            player: {
+                x: canvas.width / 2,
+                y: canvas.height - 100,
+                width: 50,
+                height: 80,
+                velocityX: 0,
+                velocityY: 0,
+                isJumping: false,
+                isGrounded: false,
+                ammo: 20,
+                keys: 0,
+            },
+            platforms: [],
+            elevators: [
+                {
+                    x: 40,
+                    y: canvas.height - 200,
+                    width: ELEVATOR_WIDTH,
+                    height: ELEVATOR_HEIGHT,
+                    velocityY: -3,
+                    minY: 100,
+                    maxY: canvas.height - 200
+                },
+                {
+                    x: canvas.width - ELEVATOR_WIDTH - 40,
+                    y: canvas.height - 200,
+                    width: ELEVATOR_WIDTH,
+                    height: ELEVATOR_HEIGHT,
+                    velocityY: -3,
+                    minY: 100,
+                    maxY: canvas.height - 200
+                }
+            ],
+            bullets: [],
+            enemies: [],
+            keys: [],
+            lockers: [],
+            currentLevel: 1,
+            totalKeysNeeded: 0,
+            keysCollected: 0,
+            levelComplete: false
+        };
+
+        // Generate a level with platforms, enemies, keys, and lockers
+        function generateLevel(level) {
+            // Reset game elements
+            gameState.platforms = [];
+            gameState.enemies = [];
+            gameState.keys = [];
+            gameState.lockers = [];
+            gameState.bullets = [];
+            gameState.levelComplete = false;
+            
+            // Add base platform
+            gameState.platforms.push({
+                x: 0,
+                y: canvas.height - 40,
+                width: canvas.width,
+                height: PLATFORM_HEIGHT
+            });
+            
+            // Generate platforms (more with higher levels)
+            const numPlatforms = 5 + level * 2;
+            for (let i = 0; i < numPlatforms; i++) {
+                let x = Math.random() * (canvas.width - PLATFORM_WIDTH - 200) + 100;
+                let y = Math.random() * (canvas.height - 300) + 100;
+                
+                // Ensure platforms are not too close to each other
+                let validPosition = true;
+                for (let platform of gameState.platforms) {
+                    const distX = Math.abs(x - platform.x);
+                    const distY = Math.abs(y - platform.y);
+                    if (distX < PLATFORM_WIDTH && distY < 100) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+                
+                if (validPosition) {
+                    gameState.platforms.push({
+                        x: x,
+                        y: y,
+                        width: PLATFORM_WIDTH,
+                        height: PLATFORM_HEIGHT
+                    });
+                } else {
+                    i--; // Try again
+                }
+            }
+            
+            // Generate keys (more with higher levels)
+            const numKeys = 2 + Math.min(level, 5);
+            gameState.totalKeysNeeded = numKeys;
+            for (let i = 0; i < numKeys; i++) {
+                let platform = gameState.platforms[Math.floor(Math.random() * gameState.platforms.length)];
+                gameState.keys.push({
+                    x: platform.x + Math.random() * (platform.width - KEY_SIZE),
+                    y: platform.y - KEY_SIZE - 10,
+                    width: KEY_SIZE,
+                    height: KEY_SIZE,
+                    collected: false
+                });
+            }
+            
+            // Generate enemies (more with higher levels)
+            const numEnemies = 2 + level * 2;
+            for (let i = 0; i < numEnemies; i++) {
+                let platform = gameState.platforms[Math.floor(Math.random() * gameState.platforms.length)];
+                gameState.enemies.push({
+                    x: platform.x + Math.random() * (platform.width - ENEMY_SIZE),
+                    y: platform.y - ENEMY_SIZE,
+                    width: ENEMY_SIZE,
+                    height: ENEMY_SIZE,
+                    velocityX: 2 + Math.random() * level,
+                    platform: platform,
+                    health: 1 + Math.floor(level / 2),
+                    intelligence: Math.min(0.5 + level * 0.1, 1),
+                    fireRate: Math.max(100 - level * 10, 30)
+                });
+            }
+            
+            // Generate lockers
+            const numLockers = 1 + Math.floor(level / 2);
+            for (let i = 0; i < numLockers; i++) {
+                let platform = gameState.platforms[Math.floor(Math.random() * gameState.platforms.length)];
+                gameState.lockers.push({
+                    x: platform.x + Math.random() * (platform.width - LOCKER_WIDTH),
+                    y: platform.y - LOCKER_HEIGHT,
+                    width: LOCKER_WIDTH,
+                    height: LOCKER_HEIGHT,
+                    opened: false
+                });
+            }
+            
+            // Update UI
+            levelDisplay.textContent = level;
+            totalKeysDisplay.textContent = gameState.totalKeysNeeded;
+            keysDisplay.textContent = gameState.keysCollected;
+        }
+
+        // Update player position and handle collisions
+        function updatePlayer() {
+            // Apply gravity
+            gameState.player.velocityY += GRAVITY;
+            
+            // Update position
+            gameState.player.x += gameState.player.velocityX;
+            gameState.player.y += gameState.player.velocityY;
+            
+            // Check for wall collisions
+            if (gameState.player.x < 0) {
+                gameState.player.x = 0;
+            }
+            if (gameState.player.x + gameState.player.width > canvas.width) {
+                gameState.player.x = canvas.width - gameState.player.width;
+            }
+            
+            // Floor collision
+            if (gameState.player.y + gameState.player.height > canvas.height) {
+                gameState.player.y = canvas.height - gameState.player.height;
+                gameState.player.velocityY = 0;
+                gameState.player.isGrounded = true;
+                gameState.player.isJumping = false;
+            } else {
+                gameState.player.isGrounded = false;
+            }
+            
+            // Platform collisions
+            for (let platform of gameState.platforms) {
+                if (checkCollision(gameState.player, platform) && gameState.player.velocityY > 0) {
+                    // Only collide if player is falling and above the platform
+                    if (gameState.player.y + gameState.player.height - gameState.player.velocityY <= platform.y) {
+                        gameState.player.y = platform.y - gameState.player.height;
+                        gameState.player.velocityY = 0;
+                        gameState.player.isGrounded = true;
+                        gameState.player.isJumping = false;
+                    }
+                }
+            }
+            
+            // Elevator collisions
+            for (let elevator of gameState.elevators) {
+                if (checkCollision(gameState.player, elevator) && gameState.player.velocityY > 0) {
+                    // Only collide if player is falling and above the elevator
+                    if (gameState.player.y + gameState.player.height - gameState.player.velocityY <= elevator.y) {
+                        gameState.player.y = elevator.y - gameState.player.height;
+                        gameState.player.velocityY = 0;
+                        gameState.player.isGrounded = true;
+                        gameState.player.isJumping = false;
+                    }
+                }
+            }
+            
+            // Handle player movement with elevators
+            for (let elevator of gameState.elevators) {
+                // Check if player is standing on the elevator
+                if (gameState.player.isGrounded && 
+                    gameState.player.x + gameState.player.width > elevator.x && 
+                    gameState.player.x < elevator.x + elevator.width &&
+                    Math.abs(gameState.player.y + gameState.player.height - elevator.y) < 5) {
+                    
+                    // Move player with elevator
+                    gameState.player.y += elevator.velocityY;
+                }
+            }
+            
+            // Key collisions
+            for (let key of gameState.keys) {
+                if (!key.collected && checkCollision(gameState.player, key)) {
+                    key.collected = true;
+                    gameState.keysCollected++;
+                    keysDisplay.textContent = gameState.keysCollected;
+                    
+                    // Check if all keys collected
+                    if (gameState.keysCollected >= gameState.totalKeysNeeded) {
+                        gameState.levelComplete = true;
+                    }
+                }
+            }
+            
+            // Locker collisions
+            for (let locker of gameState.lockers) {
+                if (!locker.opened && checkCollision(gameState.player, locker) && 
+                    gameState.player.x + gameState.player.width / 2 > locker.x && 
+                    gameState.player.x + gameState.player.width / 2 < locker.x + locker.width) {
+                    locker.opened = true;
+                    gameState.player.ammo += AMMO_PER_LOCKER;
+                    ammoDisplay.textContent = gameState.player.ammo;
+                }
+            }
+        }
+
+        // Update elevators
+        function updateElevators() {
+            for (let elevator of gameState.elevators) {
+                elevator.y += elevator.velocityY;
+                
+                // Reverse direction at boundaries
+                if (elevator.y <= elevator.minY || elevator.y >= elevator.maxY) {
+                    elevator.velocityY *= -1;
+                }
+            }
+        }
+
+        // Update bullets
+        function updateBullets() {
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                bullet.x += bullet.velocityX;
+                
+                // Remove bullets that go off screen
+                if (bullet.x < 0 || bullet.x > canvas.width) {
+                    gameState.bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for enemy collisions
+                for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                    const enemy = gameState.enemies[j];
+                    if (bullet.fromPlayer && checkCollision(bullet, enemy)) {
+                        enemy.health--;
+                        gameState.bullets.splice(i, 1);
+                        
+                        if (enemy.health <= 0) {
+                            gameState.enemies.splice(j, 1);
+                        }
+                        break;
+                    }
+                }
+                
+                // Check for player collisions
+                if (!bullet.fromPlayer && checkCollision(bullet, gameState.player)) {
+                    // Player hit - reset level
+                    generateLevel(gameState.currentLevel);
+                    gameState.player.x = canvas.width / 2;
+                    gameState.player.y = canvas.height - 100;
+                    gameState.player.velocityX = 0;
+                    gameState.player.velocityY = 0;
+                    break;
+                }
+            }
+        }
+
+        // Update enemies based on their intelligence level
+        function updateEnemies() {
+            for (let enemy of gameState.enemies) {
+                // Basic movement
+                enemy.x += enemy.velocityX;
+                
+                // Platform boundaries
+                if (enemy.x <= enemy.platform.x || enemy.x + enemy.width >= enemy.platform.x + enemy.platform.width) {
+                    enemy.velocityX *= -1;
+                }
+                
+                // Higher intelligence enemies will chase player if on same platform
+                if (Math.random() < enemy.intelligence) {
+                    // Check if player is on the same platform
+                    if (gameState.player.y + gameState.player.height <= enemy.platform.y + 10 && 
+                        gameState.player.y + gameState.player.height >= enemy.platform.y - 10 &&
+                        gameState.player.x + gameState.player.width / 2 >= enemy.platform.x && 
+                        gameState.player.x + gameState.player.width / 2 <= enemy.platform.x + enemy.platform.width) {
+                        
+                        // Move towards player
+                        if (gameState.player.x < enemy.x) {
+                            enemy.velocityX = -Math.abs(enemy.velocityX);
+                        } else {
+                            enemy.velocityX = Math.abs(enemy.velocityX);
+                        }
+                        
+                        // Higher level enemies shoot at player
+                        if (gameState.currentLevel >= 3 && Math.random() < 0.01 * enemy.intelligence) {
+                            if ((enemy.x < gameState.player.x && enemy.velocityX > 0) || 
+                                (enemy.x > gameState.player.x && enemy.velocityX < 0)) {
+                                const bulletX = enemy.x + enemy.width / 2;
+                                const bulletY = enemy.y + enemy.height / 2;
+                                const direction = bulletX < gameState.player.x ? 1 : -1;
+                                
+                                gameState.bullets.push({
+                                    x: bulletX,
+                                    y: bulletY,
+                                    width: BULLET_SIZE,
+                                    height: BULLET_SIZE,
+                                    velocityX: direction * BULLET_SPEED,
+                                    fromPlayer: false
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Helper function to check for collisions
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        // Draw game elements
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw platforms
+            ctx.fillStyle = '#8B4513';
+            for (let platform of gameState.platforms) {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            }
+            
+            // Draw elevators
+            ctx.fillStyle = '#888888';
+            for (let elevator of gameState.elevators) {
+                ctx.fillRect(elevator.x, elevator.y, elevator.width, elevator.height);
+            }
+            
+            // Draw keys
+            ctx.fillStyle = '#FFD700';
+            for (let key of gameState.keys) {
+                if (!key.collected) {
+                    // Draw a key shape
+                    ctx.beginPath();
+                    ctx.arc(key.x + key.width/2, key.y + key.width/2, key.width/3, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillRect(key.x + key.width/2 - 5, key.y + key.width/2 + 10, 10, 15);
+                }
+            }
+            
+            // Draw lockers
+            for (let locker of gameState.lockers) {
+                ctx.fillStyle = locker.opened ? '#555555' : '#333333';
+                ctx.fillRect(locker.x, locker.y, locker.width, locker.height);
+                
+                // Draw handle
+                ctx.fillStyle = '#CCCCCC';
+                ctx.fillRect(locker.x + locker.width - 10, locker.y + locker.height/2 - 5, 5, 10);
+            }
+            
+            // Draw bullets
+            ctx.fillStyle = '#FF0000';
+            for (let bullet of gameState.bullets) {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, BULLET_SIZE/2, 0, Math.PI*2);
+                ctx.fill();
+            }
+            
+            // Draw enemies
+            ctx.fillStyle = '#FF0000';
+            for (let enemy of gameState.enemies) {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                // Draw eyes
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(enemy.x + 8, enemy.y + 10, 10, 10);
+                ctx.fillRect(enemy.x + enemy.width - 18, enemy.y + 10, 10, 10);
+                
+                // Draw health bar
+                ctx.fillStyle = '#00FF00';
+                const healthBarWidth = enemy.width * (enemy.health / (1 + Math.floor(gameState.currentLevel / 2)));
+                ctx.fillRect(enemy.x, enemy.y - 10, healthBarWidth, 5);
+            }
+            
+            // Draw player
+            ctx.fillStyle = '#0000FF';
+            ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+            
+            // Draw player head
+            ctx.fillStyle = '#ADD8E6';
+            ctx.beginPath();
+            ctx.arc(gameState.player.x + gameState.player.width/2, gameState.player.y + 15, 15, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Draw game completion messages
+            if (gameState.levelComplete) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Level Complete!', canvas.width / 2, canvas.height / 2 - 40);
+                ctx.font = '24px Arial';
+                ctx.fillText('Press SPACE to continue', canvas.width / 2, canvas.height / 2 + 40);
+            }
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (!gameState.levelComplete) {
+                updatePlayer();
+                updateElevators();
+                updateBullets();
+                updateEnemies();
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize level
+        generateLevel(gameState.currentLevel);
+        gameLoop();
+
+        // Handle keyboard input
+        const keys = {};
+        
+        window.addEventListener('keydown', function(e) {
+            keys[e.code] = true;
+            
+            // Jump
+            if (e.code === 'Space' && gameState.player.isGrounded && !gameState.player.isJumping) {
+                gameState.player.velocityY = -JUMP_FORCE;
+                gameState.player.isJumping = true;
+                gameState.player.isGrounded = false;
+            }
+            
+            // Shoot
+            if (e.code === 'KeyF' && gameState.player.ammo > 0) {
+                const bulletX = gameState.player.x + gameState.player.width / 2;
+                const bulletY = gameState.player.y + gameState.player.height / 2;
+                const direction = keys['ArrowRight'] ? 1 : (keys['ArrowLeft'] ? -1 : 1);
+                
+                gameState.bullets.push({
+                    x: bulletX,
+                    y: bulletY,
+                    width: BULLET_SIZE,
+                    height: BULLET_SIZE,
+                    velocityX: direction * BULLET_SPEED,
+                    fromPlayer: true
+                });
+                
+                gameState.player.ammo--;
+                ammoDisplay.textContent = gameState.player.ammo;
+            }
+            
+            // Next level
+            if (e.code === 'Space' && gameState.levelComplete) {
+                gameState.currentLevel++;
+                gameState.keysCollected = 0;
+                generateLevel(gameState.currentLevel);
+                gameState.player.x = canvas.width / 2;
+                gameState.player.y = canvas.height - 100;
+                gameState.player.velocityX = 0;
+                gameState.player.velocityY = 0;
+            }
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            keys[e.code] = false;
+        });
+        
+        // Update player movement based on keys pressed
+        function updatePlayerMovement() {
+            // Reset horizontal velocity
+            gameState.player.velocityX = 0;
+            
+            if (keys['ArrowLeft']) {
+                gameState.player.velocityX = -PLAYER_SPEED;
+            }
+            
+            if (keys['ArrowRight']) {
+                gameState.player.velocityX = PLAYER_SPEED;
+            }
+            
+            requestAnimationFrame(updatePlayerMovement);
+        }
+        
+        updatePlayerMovement();
+    </script>
+</body>
+</html>
