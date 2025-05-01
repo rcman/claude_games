@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigDug HTML5 Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            position: relative;
+        }
+        #game-canvas {
+            border: 2px solid #444;
+            background-color: #000;
+        }
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            text-shadow: 2px 2px 0px black;
+            font-size: 16px;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+        }
+        #start-screen h1 {
+            font-size: 32px;
+            margin-bottom: 30px;
+            color: #FF6347;
+            text-shadow: 2px 2px 0px black;
+        }
+        #start-screen button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #FF6347;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #start-screen button:hover {
+            background-color: #FF8C77;
+        }
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+        }
+        #game-over h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #FF6347;
+            text-shadow: 2px 2px 0px black;
+        }
+        #game-over button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #FF6347;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        #game-over button:hover {
+            background-color: #FF8C77;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="640" height="480"></canvas>
+        <div id="ui-container">
+            <div id="score">Score: 0</div>
+            <div id="lives">Lives: 3</div>
+            <div id="level">Level: 1</div>
+        </div>
+        <div id="start-screen">
+            <h1>DigDug</h1>
+            <button id="start-button">Start Game</button>
+        </div>
+        <div id="game-over">
+            <h2>Game Over</h2>
+            <div id="final-score">Score: 0</div>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const TILE_SIZE = 32;
+        const GRID_WIDTH = 20;
+        const GRID_HEIGHT = 15;
+        const PLAYER_SPEED = 2;
+        const ENEMY_SPEED = 1.2;
+        const PUMP_SPEED = 4;
+        const INFLATION_MAX = 3;
+        const ROCK_FALL_SPEED = 4;
+
+        // Game state
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let gameRunning = false;
+        let gameTime = 0;
+
+        // Game elements
+        let player;
+        let enemies = [];
+        let rocks = [];
+        let dirt = [];
+        let tunnels = [];
+        let pump = null;
+
+        // Input state
+        const keys = {};
+        
+        // Audio context and sounds
+        let audioCtx;
+        let sounds = {};
+
+        // Generate color palette
+        const COLORS = {
+            player: '#FF6347', // Tomato
+            playerOutline: '#B22222', // Fire Brick
+            enemy1: '#7FFF00', // Chartreuse (Pooka)
+            enemy2: '#FF00FF', // Magenta (Fygar)
+            enemyInflated: '#FFD700', // Gold
+            rock: '#A9A9A9', // Dark Gray
+            dirt: '#D2691E', // Chocolate
+            tunnel: '#000000', // Black
+            pump: '#FFFFFF', // White
+            pumpLine: '#00FFFF' // Cyan
+        };
+
+        // Canvas and context
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI elements
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const levelDisplay = document.getElementById('level');
+        const startScreen = document.getElementById('start-screen');
+        const startButton = document.getElementById('start-button');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+
+        // Initialize the game
+        function init() {
+            // Set up event listeners
+            document.addEventListener('keydown', (e) => { keys[e.key] = true; });
+            document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+            
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', restartGame);
+            
+            // Initialize audio
+            initAudio();
+            
+            // Create initial level
+            createLevel();
+        }
+
+        // Initialize audio context and sounds
+        function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create sound effects
+            sounds.dig = createDigSound();
+            sounds.pump = createPumpSound();
+            sounds.pop = createPopSound();
+            sounds.rockFall = createRockFallSound();
+            sounds.death = createDeathSound();
+        }
+
+        // Create a digging sound effect
+        function createDigSound() {
+            return function() {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(120, audioCtx.currentTime);
+                oscillator.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.1);
+                
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            };
+        }
+
+        // Create a pump sound effect
+        function createPumpSound() {
+            return function() {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(220, audioCtx.currentTime);
+                oscillator.frequency.linearRampToValueAtTime(440, audioCtx.currentTime + 0.05);
+                
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            };
+        }
+
+        // Create a pop sound effect
+        function createPopSound() {
+            return function() {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.2);
+                
+                gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.2);
+            };
+        }
+
+        // Create a rock fall sound effect
+        function createRockFallSound() {
+            return function() {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+                oscillator.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+                
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+            };
+        }
+
+        // Create a death sound effect
+        function createDeathSound() {
+            return function() {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
+                oscillator.frequency.linearRampToValueAtTime(110, audioCtx.currentTime + 0.8);
+                
+                gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.8);
+            };
+        }
+
+        // Create a level
+        function createLevel() {
+            // Clear previous level
+            dirt = [];
+            tunnels = [];
+            enemies = [];
+            rocks = [];
+            
+            // Create dirt grid
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                for (let y = 2; y < GRID_HEIGHT; y++) {
+                    dirt.push({
+                        x: x * TILE_SIZE,
+                        y: y * TILE_SIZE,
+                        width: TILE_SIZE,
+                        height: TILE_SIZE
+                    });
+                }
+            }
+            
+            // Create player
+            player = {
+                x: Math.floor(GRID_WIDTH / 2) * TILE_SIZE,
+                y: TILE_SIZE, // Start at top
+                width: TILE_SIZE - 6,
+                height: TILE_SIZE - 6,
+                direction: 'down',
+                isDead: false,
+                deathAnim: 0,
+                respawnTimer: 0
+            };
+            
+            // Create rocks (2-4 rocks per level)
+            const numRocks = 2 + Math.min(2, level - 1);
+            for (let i = 0; i < numRocks; i++) {
+                let x, y;
+                let validPlacement = false;
+                
+                // Make sure rocks don't overlap
+                while (!validPlacement) {
+                    x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                    y = Math.floor(Math.random() * (GRID_HEIGHT - 6)) + 4;
+                    validPlacement = true;
+                    
+                    // Check if position is too close to existing rocks
+                    for (const rock of rocks) {
+                        const tileX = Math.floor(rock.x / TILE_SIZE);
+                        const tileY = Math.floor(rock.y / TILE_SIZE);
+                        if (Math.abs(tileX - x) < 2 && Math.abs(tileY - y) < 2) {
+                            validPlacement = false;
+                            break;
+                        }
+                    }
+                }
+                
+                rocks.push({
+                    x: x * TILE_SIZE,
+                    y: y * TILE_SIZE,
+                    width: TILE_SIZE,
+                    height: TILE_SIZE,
+                    isFalling: false
+                });
+            }
+            
+            // Create enemies (4-8 enemies per level)
+            const numEnemies = 4 + Math.min(4, level - 1);
+            for (let i = 0; i < numEnemies; i++) {
+                let x, y;
+                let validPlacement = false;
+                
+                // Make sure enemies don't overlap
+                while (!validPlacement) {
+                    x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                    y = Math.floor(Math.random() * (GRID_HEIGHT - 6)) + 4;
+                    validPlacement = true;
+                    
+                    // Check if position is too close to existing enemies or rocks
+                    for (const enemy of enemies) {
+                        const tileX = Math.floor(enemy.x / TILE_SIZE);
+                        const tileY = Math.floor(enemy.y / TILE_SIZE);
+                        if (Math.abs(tileX - x) < 2 && Math.abs(tileY - y) < 2) {
+                            validPlacement = false;
+                            break;
+                        }
+                    }
+                    
+                    for (const rock of rocks) {
+                        const tileX = Math.floor(rock.x / TILE_SIZE);
+                        const tileY = Math.floor(rock.y / TILE_SIZE);
+                        if (Math.abs(tileX - x) < 2 && Math.abs(tileY - y) < 2) {
+                            validPlacement = false;
+                            break;
+                        }
+                    }
+                }
+                
+                enemies.push({
+                    x: x * TILE_SIZE,
+                    y: y * TILE_SIZE,
+                    width: TILE_SIZE - 6,
+                    height: TILE_SIZE - 6,
+                    type: i % 2 === 0 ? 'pooka' : 'fygar', // Alternate enemy types
+                    direction: ['left', 'right', 'up', 'down'][Math.floor(Math.random() * 4)],
+                    state: 'normal',
+                    inflationLevel: 0,
+                    targetX: null,
+                    targetY: null,
+                    ghostTimer: 0,
+                    breakoutTimer: 0
+                });
+            }
+        }
+
+        // Start the game
+        function startGame() {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            
+            startScreen.style.display = 'none';
+            gameRunning = true;
+            gameLoop();
+        }
+
+        // Restart the game
+        function restartGame() {
+            score = 0;
+            lives = 3;
+            level = 1;
+            updateUI();
+            createLevel();
+            gameOverScreen.style.display = 'none';
+            gameRunning = true;
+            gameLoop();
+        }
+
+        // Update the UI displays
+        function updateUI() {
+            scoreDisplay.textContent = `Score: ${score}`;
+            livesDisplay.textContent = `Lives: ${lives}`;
+            levelDisplay.textContent = `Level: ${level}`;
+        }
+
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            finalScoreDisplay.textContent = `Score: ${score}`;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        // Check if a tile contains dirt
+        function isDirtAt(x, y) {
+            const tileX = Math.floor(x / TILE_SIZE);
+            const tileY = Math.floor(y / TILE_SIZE);
+            
+            for (const d of dirt) {
+                const dTileX = Math.floor(d.x / TILE_SIZE);
+                const dTileY = Math.floor(d.y / TILE_SIZE);
+                if (dTileX === tileX && dTileY === tileY) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Check if a position is in a tunnel
+        function isInTunnel(x, y) {
+            const tileX = Math.floor(x / TILE_SIZE);
+            const tileY = Math.floor(y / TILE_SIZE);
+            
+            for (const t of tunnels) {
+                const tTileX = Math.floor(t.x / TILE_SIZE);
+                const tTileY = Math.floor(t.y / TILE_SIZE);
+                if (tTileX === tileX && tTileY === tileY) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Dig a tunnel at a position
+        function digTunnel(x, y) {
+            const tileX = Math.floor(x / TILE_SIZE);
+            const tileY = Math.floor(y / TILE_SIZE);
+            
+            // Check if this tile already has a tunnel
+            if (isInTunnel(x, y)) {
+                return;
+            }
+            
+            // Check if this tile has dirt
+            let dirtIndex = -1;
+            for (let i = 0; i < dirt.length; i++) {
+                const d = dirt[i];
+                const dTileX = Math.floor(d.x / TILE_SIZE);
+                const dTileY = Math.floor(d.y / TILE_SIZE);
+                if (dTileX === tileX && dTileY === tileY) {
+                    dirtIndex = i;
+                    break;
+                }
+            }
+            
+            // If dirt was found, remove it and create a tunnel
+            if (dirtIndex >= 0) {
+                dirt.splice(dirtIndex, 1);
+                tunnels.push({
+                    x: tileX * TILE_SIZE,
+                    y: tileY * TILE_SIZE,
+                    width: TILE_SIZE,
+                    height: TILE_SIZE
+                });
+                
+                // Play digging sound
+                sounds.dig();
+            }
+        }
+
+        // Check collision between two objects
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        // Check if player can move in a direction
+        function canMove(obj, dx, dy) {
+            const newX = obj.x + dx;
+            const newY = obj.y + dy;
+            
+            // Check boundaries
+            if (newX < 0 || newX + obj.width > canvas.width ||
+                newY < 0 || newY + obj.height > canvas.height) {
+                return false;
+            }
+            
+            // Check rock collisions for player
+            if (obj === player) {
+                for (const rock of rocks) {
+                    if (checkCollision({
+                        x: newX,
+                        y: newY,
+                        width: obj.width,
+                        height: obj.height
+                    }, rock)) {
+                        return false;
+                    }
+                }
+            }
+            
+            return true;
+        }
+
+        // Update player
+        function updatePlayer() {
+            if (player.isDead) {
+                player.deathAnim += 0.05;
+                if (player.deathAnim >= 1) {
+                    player.respawnTimer++;
+                    if (player.respawnTimer >= 60) {
+                        player.isDead = false;
+                        player.deathAnim = 0;
+                        player.respawnTimer = 0;
+                        player.x = Math.floor(GRID_WIDTH / 2) * TILE_SIZE;
+                        player.y = TILE_SIZE;
+                        player.direction = 'down';
+                    }
+                }
+                return;
+            }
+            
+            let dx = 0;
+            let dy = 0;
+            
+            // Determine movement direction
+            if (keys['ArrowLeft'] || keys['a']) {
+                dx = -PLAYER_SPEED;
+                player.direction = 'left';
+            } else if (keys['ArrowRight'] || keys['d']) {
+                dx = PLAYER_SPEED;
+                player.direction = 'right';
+            } else if (keys['ArrowUp'] || keys['w']) {
+                dy = -PLAYER_SPEED;
+                player.direction = 'up';
+            } else if (keys['ArrowDown'] || keys['s']) {
+                dy = PLAYER_SPEED;
+                player.direction = 'down';
+            }
+            
+            // Move player if valid
+            if (dx !== 0 || dy !== 0) {
+                if (canMove(player, dx, dy)) {
+                    player.x += dx;
+                    player.y += dy;
+                    
+                    // Dig tunnel
+                    if (isDirtAt(player.x + player.width / 2, player.y + player.height / 2)) {
+                        digTunnel(player.x + player.width / 2, player.y + player.height / 2);
+                    }
+                }
+            }
+            
+            // Inflate pump with spacebar
+            if (keys[' '] && pump === null) {
+                // Create pump in player's direction
+                pump = {
+                    x: player.x + player.width / 2,
+                    y: player.y + player.height / 2,
+                    direction: player.direction,
+                    length: 0,
+                    maxLength: TILE_SIZE * 3,
+                    target: null
+                };
+                
+                // Find pump target (enemy)
+                for (const enemy of enemies) {
+                    if (enemy.state === 'ghost' || enemy.inflationLevel > 0) continue;
+                    
+                    let hitX = false;
+                    let hitY = false;
+                    
+                    // Check horizontal alignment
+                    if (pump.direction === 'left' || pump.direction === 'right') {
+                        if (enemy.y + 10 <= player.y + player.height && 
+                            enemy.y + enemy.height - 10 >= player.y) {
+                            hitY = true;
+                        }
+                    }
+                    
+                    // Check vertical alignment
+                    if (pump.direction === 'up' || pump.direction === 'down') {
+                        if (enemy.x + 10 <= player.x + player.width && 
+                            enemy.x + enemy.width - 10 >= player.x) {
+                            hitX = true;
+                        }
+                    }
+                    
+                    // Check direction-specific conditions
+                    if (pump.direction === 'left' && hitY && enemy.x < player.x && 
+                        player.x - enemy.x < pump.maxLength) {
+                        pump.target = enemy;
+                        break;
+                    } else if (pump.direction === 'right' && hitY && enemy.x > player.x && 
+                              enemy.x - player.x < pump.maxLength) {
+                        pump.target = enemy;
+                        break;
+                    } else if (pump.direction === 'up' && hitX && enemy.y < player.y && 
+                              player.y - enemy.y < pump.maxLength) {
+                        pump.target = enemy;
+                        break;
+                    } else if (pump.direction === 'down' && hitX && enemy.y > player.y && 
+                              enemy.y - player.y < pump.maxLength) {
+                        pump.target = enemy;
+                        break;
+                    }
+                }
+            }
+            
+            // Check for enemy collisions (when not pumping)
+            if (pump === null) {
+                for (const enemy of enemies) {
+                    if (enemy.state === 'ghost') continue;
+                    
+                    if (checkCollision(player, enemy)) {
+                        if (enemy.inflationLevel === 0) {
+                            // Player dies
+                            player.isDead = true;
+                            sounds.death();
+                            lives--;
+                            updateUI();
+                            
+                            if (lives <= 0) {
+                                gameOver();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Check for rock collisions
+            for (const rock of rocks) {
+                if (rock.isFalling && checkCollision(player, rock)) {
+                    // Player dies from falling rock
+                    player.isDead = true;
+                    sounds.death();
+                    lives--;
+                    updateUI();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+
+        // Update pump
+        function updatePump() {
+            if (pump === null) return;
+            
+            if (keys[' ']) {
+                // Extend pump
+                if (pump.length < pump.maxLength) {
+                    pump.length += PUMP_SPEED;
+                    sounds.pump();
+                }
+                
+                // If target is hit, inflate it
+                if (pump.target) {
+                    if (pump.length >= distanceBetween(
+                        player.x + player.width / 2, player.y + player.height / 2,
+                        pump.target.x + pump.target.width / 2, pump.target.y + pump.target.height / 2
+                    )) {
+                        pump.target.inflationLevel += 0.03;
+                        
+                        if (pump.target.inflationLevel >= INFLATION_MAX) {
+                            // Enemy pops
+                            score += pump.target.type === 'pooka' ? 200 : 400;
+                            updateUI();
+                            sounds.pop();
+                            
+                            // Remove enemy
+                            const index = enemies.indexOf(pump.target);
+                            if (index !== -1) {
+                                enemies.splice(index, 1);
+                            }
+                            
+                            // Release pump
+                            pump = null;
+                            
+                            // Check if level is cleared
+                            if (enemies.length === 0) {
+                                level++;
+                                updateUI();
+                                createLevel();
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Release pump
+                pump = null;
+                
+                // Reset inflation for all enemies
+                for (const enemy of enemies) {
+                    if (enemy.inflationLevel > 0 && enemy.inflationLevel < INFLATION_MAX) {
+                        enemy.inflationLevel = 0;
+                        enemy.breakoutTimer = 30; // Brief stun after deflating
+                    }
+                }
+            }
+        }
+
+        // Calculate distance between two points
+        function distanceBetween(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        // Update enemies
+        function updateEnemies() {
+            for (const enemy of enemies) {
+                // Skip if enemy is being inflated
+                if (enemy.inflationLevel > 0) {
+                    continue;
+                }
+                
+                // Handle ghost state (passing through dirt)
+                if (enemy.state === 'ghost') {
+                    enemy.ghostTimer++;
+                    
+                    // Move toward target
+                    if (enemy.targetX !== null && enemy.targetY !== null) {
+                        const dx = enemy.targetX - enemy.x;
+                        const dy = enemy.targetY - enemy.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (dist > 1) {
+                            enemy.x += (dx / dist) * (ENEMY_SPEED * 0.8);
+                            enemy.y += (dy / dist) * (ENEMY_SPEED * 0.8);
+                        } else {
+                            // Reached target, exit ghost mode
+                            enemy.state = 'normal';
+                            enemy.ghostTimer = 0;
+                            enemy.targetX = null;
+                            enemy.targetY = null;
+                        }
+                    }
+                    
+                    continue;
+                }
+                
+                // Handle breakout cooldown
+                if (enemy.breakoutTimer > 0) {
+                    enemy.breakoutTimer--;
+                    continue;
+                }
+                
+                // Regular enemy movement
+                let dx = 0;
+                let dy = 0;
+                
+                // Determine movement direction
+                if (enemy.direction === 'left') {
+                    dx = -ENEMY_SPEED;
+                } else if (enemy.direction === 'right') {
+                    dx = ENEMY_SPEED;
+                } else if (enemy.direction === 'up') {
+                    dy = -ENEMY_SPEED;
+                } else if (enemy.direction === 'down') {
+                    dy = ENEMY_SPEED;
+                }
+                
+                // Try to move
+                let canMoveInDirection = false;
+                
+                if (!isDirtAt(enemy.x + enemy.width / 2 + dx, enemy.y + enemy.width / 2 + dy) &&
+                    canMove(enemy, dx, dy)) {
+                    // Can move if in tunnel
+                    if (isInTunnel(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2)) {
+                        canMoveInDirection = true;
+                    }
+                }
+                
+                if (canMoveInDirection) {
+                    // Move enemy
+                    enemy.x += dx;
+                    enemy.y += dy;
+                } else {
+                    // Change direction or enter ghost mode
+                    if (Math.random() < 0.15) {
+                        if (Math.random() < 0.2 && gameTime > 300) {
+                            // Enter ghost mode occasionally after first 5 seconds
+                            enemy.state = 'ghost';
+                            
+                            // Find a tunnel to target
+                            let tunnelTiles = [];
+                            for (const tunnel of tunnels) {
+                                tunnelTiles.push({
+                                    x: tunnel.x + TILE_SIZE / 2,
+                                    y: tunnel.y + TILE_SIZE / 2
+                                });
+                            }
+                            
+                            if (tunnelTiles.length > 0) {
+                                // Pick a random tunnel
+                                const target = tunnelTiles[Math.floor(Math.random() * tunnelTiles.length)];
+                                enemy.targetX = target.x - enemy.width / 2;
+                                enemy.targetY = target.y - enemy.height / 2;
+                            } else {
+                                // No tunnels yet, go back to normal
+                                enemy.state = 'normal';
+                            }
+                        } else {
+                            // Just change direction
+                            const directions = ['left', 'right', 'up', 'down'];
+                            enemy.direction = directions[Math.floor(Math.random() * 4)];
+                        }
+                    } else if (Math.random() < 0.01) {
+                        // Occasionally change direction even when movement is possible
+                        const directions = ['left', 'right', 'up', 'down'];
+                        enemy.direction = directions[Math.floor(Math.random() * 4)];
+                    }
+                }
+                
+                // Fygar fire breath (occasional attack for Fygar type enemies)
+                if (enemy.type === 'fygar' && Math.random() < 0.005 && 
+                    (enemy.direction === 'left' || enemy.direction === 'right')) {
+                    // TODO: Add fire breath attack animation and damage
+                }
+            }
+        }
+
+        // Update rocks
+        function updateRocks() {
+            for (const rock of rocks) {
+                // Check if rock should start falling
+                if (!rock.isFalling) {
+                    const tileX = Math.floor(rock.x / TILE_SIZE);
+                    const tileY = Math.floor(rock.y / TILE_SIZE);
+                    
+                    // Check if the tile below is empty (no dirt)
+                    const belowIsEmpty = !isDirtAt(rock.x + TILE_SIZE / 2, rock.y + TILE_SIZE + 1);
+                    
+                    if (belowIsEmpty) {
+                        rock.isFalling = true;
+                        sounds.rockFall();
+                    }
+                } else {
+                    // Continue falling
+                    rock.y += ROCK_FALL_SPEED;
+                    
+                    // Check if landed on dirt or bottom of screen
+                    if (rock.y + rock.height >= canvas.height || 
+                        isDirtAt(rock.x + TILE_SIZE / 2, rock.y + TILE_SIZE + 1)) {
+                        rock.isFalling = false;
+                        
+                        // Snap to grid
+                        rock.y = Math.floor(rock.y / TILE_SIZE) * TILE_SIZE;
+                        
+                        // Check if rock crushed any enemies
+                        for (let i = enemies.length - 1; i >= 0; i--) {
+                            const enemy = enemies[i];
+                            if (checkCollision(rock, enemy)) {
+                                // Enemy is crushed
+                                enemies.splice(i, 1);
+                                score += 1000;
+                                updateUI();
+                                
+                                // Check if level is cleared
+                                if (enemies.length === 0) {
+                                    level++;
+                                    updateUI();
+                                    createLevel();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Draw player
+        function drawPlayer() {
+            if (player.isDead) {
+                // Death animation
+                ctx.save();
+                ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+                ctx.rotate(player.deathAnim * Math.PI);
+                ctx.scale(1 - player.deathAnim * 0.5, 1 - player.deathAnim * 0.5);
+                
+                // Flashing effect
+                if (Math.floor(player.deathAnim * 10) % 2 === 0) {
+                    ctx.fillStyle = COLORS.player;
+                } else {
+                    ctx.fillStyle = 'white';
+                }
+                
+                ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height);
+                ctx.restore();
+                return;
+            }
+            
+            // Draw player body
+            ctx.fillStyle = COLORS.player;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw player outline
+            ctx.strokeStyle = COLORS.playerOutline;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(player.x, player.y, player.width, player.height);
+            
+            // Draw player direction indicator (eyes)
+            ctx.fillStyle = 'white';
+            
+            if (player.direction === 'left') {
+                ctx.fillRect(player.x + 4, player.y + 10, 6, 6);
+            } else if (player.direction === 'right') {
+                ctx.fillRect(player.x + player.width - 10, player.y + 10, 6, 6);
+            } else if (player.direction === 'up') {
+                ctx.fillRect(player.x + 10, player.y + 4, 6, 6);
+                ctx.fillRect(player.x + player.width - 16, player.y + 4, 6, 6);
+            } else if (player.direction === 'down') {
+                ctx.fillRect(player.x + 10, player.y + player.height - 10, 6, 6);
+                ctx.fillRect(player.x + player.width - 16, player.y + player.height - 10, 6, 6);
+            }
+        }
+
+        // Draw enemies
+        function drawEnemies() {
+            for (const enemy of enemies) {
+                // Draw enemy body (different color based on type)
+                if (enemy.inflationLevel > 0) {
+                    // Inflated enemy
+                    ctx.fillStyle = COLORS.enemyInflated;
+                    
+                    // Scale up based on inflation level
+                    const scale = 1 + enemy.inflationLevel * 0.5;
+                    
+                    ctx.save();
+                    ctx.translate(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                    ctx.scale(scale, scale);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, enemy.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                } else {
+                    // Normal enemy
+                    if (enemy.state === 'ghost') {
+                        // Ghost mode (semi-transparent)
+                        ctx.globalAlpha = 0.5;
+                    }
+                    
+                    ctx.fillStyle = enemy.type === 'pooka' ? COLORS.enemy1 : COLORS.enemy2;
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    
+                    // Draw eyes
+                    ctx.fillStyle = 'white';
+                    if (enemy.direction === 'left') {
+                        ctx.fillRect(enemy.x + 4, enemy.y + 10, 6, 6);
+                    } else if (enemy.direction === 'right') {
+                        ctx.fillRect(enemy.x + enemy.width - 10, enemy.y + 10, 6, 6);
+                    } else if (enemy.direction === 'up') {
+                        ctx.fillRect(enemy.x + 8, enemy.y + 4, 6, 6);
+                    } else if (enemy.direction === 'down') {
+                        ctx.fillRect(enemy.x + 8, enemy.y + enemy.height - 10, 6, 6);
+                    }
+                    
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+        }
+
+        // Draw pump
+        function drawPump() {
+            if (pump === null) return;
+            
+            const startX = player.x + player.width / 2;
+            const startY = player.y + player.height / 2;
+            let endX = startX;
+            let endY = startY;
+            
+            // Calculate end position based on direction and length
+            if (pump.direction === 'left') {
+                endX = startX - pump.length;
+            } else if (pump.direction === 'right') {
+                endX = startX + pump.length;
+            } else if (pump.direction === 'up') {
+                endY = startY - pump.length;
+            } else if (pump.direction === 'down') {
+                endY = startY + pump.length;
+            }
+            
+            // Draw pump line
+            ctx.strokeStyle = COLORS.pumpLine;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+            
+            // Draw pump handle
+            if (pump.target) {
+                ctx.fillStyle = COLORS.pump;
+                ctx.beginPath();
+                ctx.arc(endX, endY, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Draw rocks
+        function drawRocks() {
+            for (const rock of rocks) {
+                ctx.fillStyle = COLORS.rock;
+                ctx.fillRect(rock.x, rock.y, rock.width, rock.height);
+                
+                // Add rock texture
+                ctx.strokeStyle = '#888';
+                ctx.lineWidth = 1;
+                
+                // Horizontal lines
+                for (let i = 1; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(rock.x, rock.y + i * rock.height / 3);
+                    ctx.lineTo(rock.x + rock.width, rock.y + i * rock.height / 3);
+                    ctx.stroke();
+                }
+                
+                // Vertical lines
+                for (let i = 1; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(rock.x + i * rock.width / 3, rock.y);
+                    ctx.lineTo(rock.x + i * rock.width / 3, rock.y + rock.height);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Draw dirt
+        function drawDirt() {
+            ctx.fillStyle = COLORS.dirt;
+            
+            for (const d of dirt) {
+                // Fill with small dots to represent dirt
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        ctx.fillRect(
+                            d.x + i * TILE_SIZE / 4 + 2,
+                            d.y + j * TILE_SIZE / 4 + 2,
+                            TILE_SIZE / 4 - 4,
+                            TILE_SIZE / 4 - 4
+                        );
+                    }
+                }
+            }
+        }
+
+        // Draw tunnels
+        function drawTunnels() {
+            ctx.fillStyle = COLORS.tunnel;
+            
+            for (const t of tunnels) {
+                ctx.fillRect(t.x, t.y, t.width, t.height);
+            }
+        }
+
+        // Draw the game
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw tunnels
+            drawTunnels();
+            
+            // Draw dirt
+            drawDirt();
+            
+            // Draw rocks
+            drawRocks();
+            
+            // Draw player
+            drawPlayer();
+            
+            // Draw enemies
+            drawEnemies();
+            
+            // Draw pump
+            drawPump();
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // Update game elements
+            updatePlayer();
+            updatePump();
+            updateEnemies();
+            updateRocks();
+            
+            // Draw everything
+            draw();
+            
+            // Increase game time
+            gameTime++;
+            
+            // Continue loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize the game when the page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
