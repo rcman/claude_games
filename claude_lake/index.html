@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic Water Effect</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+        }
+        canvas {
+            display: block;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .controls button {
+            margin: 5px;
+            padding: 5px 10px;
+        }
+        .controls label {
+            display: block;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="waterCanvas"></canvas>
+    <div class="controls">
+        <h3>Water Controls</h3>
+        <label>
+            Wave Height:
+            <input type="range" id="waveHeight" min="1" max="20" value="6">
+        </label>
+        <label>
+            Wave Speed:
+            <input type="range" id="waveSpeed" min="1" max="20" value="10">
+        </label>
+        <label>
+            Wave Count:
+            <input type="range" id="waveCount" min="1" max="10" value="3">
+        </label>
+        <label>
+            Ripple:
+            <input type="range" id="ripple" min="0" max="100" value="50">
+        </label>
+        <label>
+            Water Color:
+            <input type="color" id="waterColor" value="#0077be">
+        </label>
+        <button id="resetButton">Reset</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('waterCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Controls
+        const waveHeightInput = document.getElementById('waveHeight');
+        const waveSpeedInput = document.getElementById('waveSpeed');
+        const waveCountInput = document.getElementById('waveCount');
+        const rippleInput = document.getElementById('ripple');
+        const waterColorInput = document.getElementById('waterColor');
+        const resetButton = document.getElementById('resetButton');
+        
+        // Default settings
+        let settings = {
+            waveHeight: 6,
+            waveSpeed: 10,
+            waveCount: 3,
+            ripple: 50,
+            waterColor: '#0077be'
+        };
+        
+        // Set canvas dimensions
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        // Initialize
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Wave animation properties
+        let time = 0;
+        let mouseX = canvas.width / 2;
+        let mouseY = canvas.height / 2;
+        
+        // Mouse interaction
+        canvas.addEventListener('mousemove', function(e) {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+        
+        // Touch interaction
+        canvas.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        });
+        
+        // Control event listeners
+        waveHeightInput.addEventListener('input', function() {
+            settings.waveHeight = parseInt(this.value);
+        });
+        
+        waveSpeedInput.addEventListener('input', function() {
+            settings.waveSpeed = parseInt(this.value);
+        });
+        
+        waveCountInput.addEventListener('input', function() {
+            settings.waveCount = parseInt(this.value);
+        });
+        
+        rippleInput.addEventListener('input', function() {
+            settings.ripple = parseInt(this.value);
+        });
+        
+        waterColorInput.addEventListener('input', function() {
+            settings.waterColor = this.value;
+        });
+        
+        resetButton.addEventListener('click', function() {
+            waveHeightInput.value = 6;
+            waveSpeedInput.value = 10;
+            waveCountInput.value = 3;
+            rippleInput.value = 50;
+            waterColorInput.value = '#0077be';
+            
+            settings.waveHeight = 6;
+            settings.waveSpeed = 10;
+            settings.waveCount = 3;
+            settings.ripple = 50;
+            settings.waterColor = '#0077be';
+        });
+        
+        // Create a reflection gradient
+        function createReflectionGradient(y, waterColor) {
+            const gradient = ctx.createLinearGradient(0, y - 100, 0, y + canvas.height);
+            
+            // Parse the water color to add transparency variations
+            const r = parseInt(waterColor.substr(1, 2), 16);
+            const g = parseInt(waterColor.substr(3, 2), 16);
+            const b = parseInt(waterColor.substr(5, 2), 16);
+            
+            gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.8)`);
+            gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.6)`);
+            gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.4)`);
+            
+            return gradient;
+        }
+        
+        // Draw water waves
+        function drawWater() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate wave settings
+            const waveHeight = settings.waveHeight;
+            const waveCount = settings.waveCount;
+            const rippleEffect = settings.ripple / 100;
+            
+            // Water starting position (middle of the screen)
+            const waterLevel = canvas.height / 2;
+            
+            // Draw sky (above water)
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, waterLevel);
+            
+            // Draw sand (below water)
+            ctx.fillStyle = '#C2B280';
+            ctx.fillRect(0, waterLevel, canvas.width, canvas.height - waterLevel);
+            
+            // Create path for the water surface
+            ctx.beginPath();
+            ctx.moveTo(0, waterLevel);
+            
+            // Draw the water waves
+            for (let x = 0; x <= canvas.width; x++) {
+                // Base wave
+                let y = waterLevel;
+                
+                // Add multiple sine waves with different frequencies
+                for (let i = 1; i <= waveCount; i++) {
+                    const frequency = 0.01 * i;
+                    y += Math.sin(x * frequency + time * (0.05 * settings.waveSpeed / 10) * i) * 
+                         (waveHeight / i);
+                }
+                
+                // Add ripple effect based on mouse position
+                const distX = x - mouseX;
+                const distY = waterLevel - mouseY;
+                const dist = Math.sqrt(distX * distX + distY * distY);
+                
+                if (dist < 150) {
+                    y += Math.sin(dist * 0.05 - time) * (20 * rippleEffect) * (1 - dist / 150);
+                }
+                
+                ctx.lineTo(x, y);
+            }
+            
+            // Complete the water shape
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.closePath();
+            
+            // Fill water with gradient
+            ctx.fillStyle = createReflectionGradient(waterLevel, settings.waterColor);
+            ctx.fill();
+            
+            // Add surface highlights
+            ctx.beginPath();
+            ctx.moveTo(0, waterLevel);
+            
+            for (let x = 0; x <= canvas.width; x++) {
+                let y = waterLevel;
+                
+                for (let i = 1; i <= waveCount; i++) {
+                    const frequency = 0.01 * i;
+                    y += Math.sin(x * frequency + time * (0.05 * settings.waveSpeed / 10) * i) * 
+                         (waveHeight / i);
+                }
+                
+                // Add ripple effect
+                const distX = x - mouseX;
+                const distY = waterLevel - mouseY;
+                const dist = Math.sqrt(distX * distX + distY * distY);
+                
+                if (dist < 150) {
+                    y += Math.sin(dist * 0.05 - time) * (20 * rippleEffect) * (1 - dist / 150);
+                }
+                
+                ctx.lineTo(x, y);
+            }
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Draw some underwater details (plants, rocks)
+            drawUnderwaterDetails(waterLevel);
+            
+            // Update time for animation
+            time += 0.05;
+            
+            // Continue animation
+            requestAnimationFrame(drawWater);
+        }
+        
+        // Draw underwater details
+        function drawUnderwaterDetails(waterLevel) {
+            // Draw underwater plants
+            for (let i = 0; i < 5; i++) {
+                const x = canvas.width * (i + 0.5) / 5;
+                const height = 30 + Math.random() * 50;
+                
+                // Plant stem
+                ctx.beginPath();
+                ctx.moveTo(x, canvas.height);
+                
+                // Wavy stem
+                for (let y = canvas.height; y > canvas.height - height; y -= 5) {
+                    const waviness = 5 * Math.sin((y * 0.1) + time * 0.2);
+                    ctx.lineTo(x + waviness, y);
+                }
+                
+                ctx.strokeStyle = '#0A5F38';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Draw rocks
+            for (let i = 0; i < 8; i++) {
+                const x = canvas.width * Math.random();
+                const y = waterLevel + 30 + Math.random() * (canvas.height - waterLevel - 60);
+                const size = 5 + Math.random() * 15;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = '#555';
+                ctx.fill();
+            }
+            
+            // Draw some fish
+            const fishTime = time * 0.5;
+            for (let i = 0; i < 3; i++) {
+                const y = waterLevel + 50 + i * 40;
+                const x = (canvas.width * 0.3) + Math.sin(fishTime + i) * (canvas.width * 0.2);
+                const direction = Math.cos(fishTime + i) > 0 ? 1 : -1;
+                
+                // Fish body
+                ctx.beginPath();
+                ctx.ellipse(x, y, 15, 8, 0, 0, Math.PI * 2);
+                ctx.fillStyle = i % 2 === 0 ? '#F39C12' : '#3498DB';
+                ctx.fill();
+                
+                // Fish tail
+                ctx.beginPath();
+                ctx.moveTo(x - (15 * direction), y);
+                ctx.lineTo(x - (25 * direction), y - 8);
+                ctx.lineTo(x - (25 * direction), y + 8);
+                ctx.closePath();
+                ctx.fillStyle = i % 2 === 0 ? '#E67E22' : '#2980B9';
+                ctx.fill();
+                
+                // Fish eye
+                ctx.beginPath();
+                ctx.arc(x + (8 * direction), y - 2, 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+            }
+        }
+        
+        // Start animation
+        drawWater();
+    </script>
+</body>
+</html>

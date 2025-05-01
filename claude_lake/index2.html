@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic 3D Water</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black;
+        }
+        canvas {
+            display: block;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+            color: #333;
+            font-family: Arial, sans-serif;
+            z-index: 100;
+        }
+        .controls h3 {
+            margin-top: 0;
+        }
+        .controls label {
+            display: block;
+            margin: 8px 0;
+        }
+        .controls input {
+            width: 100%;
+        }
+        .controls button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: #0077be;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background: #005f8f;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h3>Water Properties</h3>
+        <label>
+            Wave Speed
+            <input type="range" id="waveSpeed" min="0.1" max="3" step="0.1" value="1.0">
+        </label>
+        <label>
+            Wave Height
+            <input type="range" id="waveHeight" min="0.1" max="2" step="0.1" value="0.8">
+        </label>
+        <label>
+            Wave Scale
+            <input type="range" id="waveScale" min="0.5" max="5" step="0.1" value="1.5">
+        </label>
+        <label>
+            Water Color
+            <input type="color" id="waterColor" value="#0077be">
+        </label>
+        <label>
+            Water Opacity
+            <input type="range" id="waterOpacity" min="0.1" max="1.0" step="0.05" value="0.8">
+        </label>
+        <label>
+            Reflection
+            <input type="range" id="reflection" min="0" max="1" step="0.05" value="0.5">
+        </label>
+        <label>
+            Sunlight Intensity
+            <input type="range" id="sunlightIntensity" min="0.1" max="2" step="0.1" value="1.0">
+        </label>
+        <label>
+            Camera Altitude
+            <input type="range" id="cameraHeight" min="5" max="50" step="1" value="20">
+        </label>
+        <button id="resetButton">Reset Settings</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <script>
+        // Create renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.8;
+        document.body.appendChild(renderer.domElement);
+
+        // Create scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);  // Sky blue background
+
+        // Create camera
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 20, 100);
+        camera.lookAt(0, 0, 0);
+
+        // Controls
+        const waveSpeedInput = document.getElementById('waveSpeed');
+        const waveHeightInput = document.getElementById('waveHeight');
+        const waveScaleInput = document.getElementById('waveScale');
+        const waterColorInput = document.getElementById('waterColor');
+        const waterOpacityInput = document.getElementById('waterOpacity');
+        const reflectionInput = document.getElementById('reflection');
+        const sunlightIntensityInput = document.getElementById('sunlightIntensity');
+        const cameraHeightInput = document.getElementById('cameraHeight');
+        const resetButton = document.getElementById('resetButton');
+
+        // Default settings
+        const settings = {
+            waveSpeed: 1.0,
+            waveHeight: 0.8,
+            waveScale: 1.5,
+            waterColor: '#0077be',
+            waterOpacity: 0.8,
+            reflection: 0.5,
+            sunlightIntensity: 1.0,
+            cameraHeight: 20
+        };
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, settings.sunlightIntensity);
+        dirLight.position.set(50, 100, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.left = -100;
+        dirLight.shadow.camera.right = 100;
+        dirLight.shadow.camera.top = 100;
+        dirLight.shadow.camera.bottom = -100;
+        scene.add(dirLight);
+
+        // Skybox
+        const skyboxGeometry = new THREE.BoxGeometry(1000, 1000, 1000);
+        const skyboxMaterials = Array(6).fill().map(() => {
+            return new THREE.MeshBasicMaterial({
+                color: 0x87ceeb,
+                side: THREE.BackSide
+            });
+        });
+        const skybox = new THREE.Mesh(skyboxGeometry, skyboxMaterials);
+        scene.add(skybox);
+
+        // Terrain (lake bed)
+        const terrainGeometry = new THREE.PlaneGeometry(500, 500, 100, 100);
+        const terrainMaterial = new THREE.MeshStandardMaterial({
+            color: 0xc2b280,
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+        terrain.rotation.x = -Math.PI / 2;
+        terrain.position.y = -25;
+        scene.add(terrain);
+
+        // Perturb the terrain to create an uneven lake bed
+        const terrainPositions = terrain.geometry.attributes.position.array;
+        for (let i = 0; i < terrainPositions.length; i += 3) {
+            if (Math.abs(terrainPositions[i]) > 150 || Math.abs(terrainPositions[i + 2]) > 150) {
+                terrainPositions[i + 1] += (Math.random() * 10) - 2;
+            } else {
+                terrainPositions[i + 1] += (Math.random() * 3) - 1;
+            }
+        }
+        terrain.geometry.attributes.position.needsUpdate = true;
+        terrain.geometry.computeVertexNormals();
+
+        // Create water surface
+        const waterGeometry = new THREE.PlaneGeometry(400, 400, 128, 128);
+        const waterMaterial = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(settings.waterColor),
+            transparent: true,
+            opacity: settings.waterOpacity,
+            roughness: 0.2,
+            metalness: 0.8,
+            envMapIntensity: settings.reflection,
+            side: THREE.DoubleSide
+        });
+
+        const water = new THREE.Mesh(waterGeometry, waterMaterial);
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = 0;
+        scene.add(water);
+
+        // Add underwater objects
+        function createUnderwaterScene() {
+            // Underwater plants
+            for (let i = 0; i < 30; i++) {
+                const plantHeight = 5 + Math.random() * 10;
+                const plantGeometry = new THREE.CylinderGeometry(0.2, 0.6, plantHeight, 5);
+                const plantMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x0a5f38,
+                    roughness: 0.8
+                });
+                const plant = new THREE.Mesh(plantGeometry, plantMaterial);
+                
+                const x = (Math.random() * 360) - 180;
+                const z = (Math.random() * 360) - 180;
+                const distFromCenter = Math.sqrt(x*x + z*z);
+                
+                // Only place plants if they are reasonably within the lake
+                if (distFromCenter < 170) {
+                    plant.position.set(x, -15 + plantHeight/2, z);
+                    // Tilt the plants slightly in random directions
+                    plant.rotation.x = (Math.random() * 0.2) - 0.1;
+                    plant.rotation.z = (Math.random() * 0.2) - 0.1;
+                    scene.add(plant);
+                }
+            }
+            
+            // Rocks
+            for (let i = 0; i < 50; i++) {
+                const rockSize = 1 + Math.random() * 4;
+                const rockGeometry = new THREE.DodecahedronGeometry(rockSize, 0);
+                const rockMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x555555,
+                    roughness: 0.9
+                });
+                const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                
+                const x = (Math.random() * 380) - 190;
+                const z = (Math.random() * 380) - 190;
+                const distFromCenter = Math.sqrt(x*x + z*z);
+                
+                // Place more rocks around the lake edges
+                if (distFromCenter < 180) {
+                    rock.position.set(x, -15 + rockSize/2, z);
+                    rock.rotation.x = Math.random() * Math.PI;
+                    rock.rotation.y = Math.random() * Math.PI;
+                    rock.rotation.z = Math.random() * Math.PI;
+                    scene.add(rock);
+                }
+            }
+            
+            // Add fish
+            const fishColors = [0xF39C12, 0x3498DB, 0xE74C3C, 0x2ECC71, 0x9B59B6];
+            const fishGroup = new THREE.Group();
+            scene.add(fishGroup);
+            
+            for (let i = 0; i < 20; i++) {
+                const fishSize = 1 + Math.random() * 2;
+                const fishColor = fishColors[Math.floor(Math.random() * fishColors.length)];
+                
+                // Fish body
+                const bodyGeometry = new THREE.SphereGeometry(fishSize, 16, 16);
+                bodyGeometry.scale(1, 0.5, 0.5);
+                const bodyMaterial = new THREE.MeshStandardMaterial({
+                    color: fishColor,
+                    roughness: 0.6,
+                    metalness: 0.3
+                });
+                const fishBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                
+                // Fish tail
+                const tailGeometry = new THREE.ConeGeometry(fishSize * 0.5, fishSize * 0.8, 4);
+                tailGeometry.rotateZ(Math.PI / 2);
+                tailGeometry.translate(-fishSize * 0.8, 0, 0);
+                const tailMaterial = new THREE.MeshStandardMaterial({
+                    color: fishColor,
+                    roughness: 0.7
+                });
+                const fishTail = new THREE.Mesh(tailGeometry, tailMaterial);
+                
+                const fish = new THREE.Group();
+                fish.add(fishBody);
+                fish.add(fishTail);
+                
+                // Position the fish randomly under water
+                const fishX = (Math.random() * 300) - 150;
+                const fishY = -5 - (Math.random() * 15);
+                const fishZ = (Math.random() * 300) - 150;
+                fish.position.set(fishX, fishY, fishZ);
+                
+                // Random rotation
+                fish.rotation.y = Math.random() * Math.PI * 2;
+                
+                // Store initial position for animation
+                fish.userData = {
+                    originalX: fishX,
+                    originalZ: fishZ,
+                    speed: 0.1 + Math.random() * 0.3,
+                    radius: 10 + Math.random() * 30,
+                    rotationSpeed: 0.01 + Math.random() * 0.03
+                };
+                
+                fishGroup.add(fish);
+            }
+        }
+
+        createUnderwaterScene();
+
+        // Shoreline
+        const shoreGeometry = new THREE.RingGeometry(190, 210, 64);
+        const shoreMaterial = new THREE.MeshStandardMaterial({
+            color: 0xf0d68a,
+            roughness: 0.9
+        });
+        const shore = new THREE.Mesh(shoreGeometry, shoreMaterial);
+        shore.rotation.x = -Math.PI / 2;
+        shore.position.y = 0.1;
+        scene.add(shore);
+
+        // Trees and environment (simple representations)
+        function createEnvironment() {
+            // Trees around the lake
+            for (let i = 0; i < 40; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 210 + Math.random() * 40;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                
+                // Tree trunk
+                const trunkGeometry = new THREE.CylinderGeometry(2, 3, 15, 8);
+                const trunkMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x8B4513,
+                    roughness: 0.9
+                });
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.set(x, 7.5, z);
+                
+                // Tree top
+                const treeTopGeometry = new THREE.ConeGeometry(10, 25, 8);
+                const treeTopMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x2E8B57,
+                    roughness: 0.8
+                });
+                const treeTop = new THREE.Mesh(treeTopGeometry, treeTopMaterial);
+                treeTop.position.set(x, 25, z);
+                
+                scene.add(trunk);
+                scene.add(treeTop);
+            }
+        }
+
+        createEnvironment();
+
+        // Sun in the sky
+        const sunGeometry = new THREE.SphereGeometry(20, 32, 32);
+        const sunMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff80,
+            transparent: true,
+            opacity: 0.8
+        });
+        const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+        sun.position.set(dirLight.position.x * 4, dirLight.position.y * 3, dirLight.position.z * 4);
+        scene.add(sun);
+
+        // Create sun rays (light shafts)
+        const sunRaysGeometry = new THREE.CylinderGeometry(15, 5, 300, 16, 1, true);
+        const sunRaysMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffcc,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.DoubleSide
+        });
+        const sunRays = new THREE.Mesh(sunRaysGeometry, sunRaysMaterial);
+        sunRays.position.copy(sun.position);
+        sunRays.lookAt(0, 0, 0);
+        scene.add(sunRays);
+
+        // Add clouds
+        function createClouds() {
+            const cloudGroup = new THREE.Group();
+            scene.add(cloudGroup);
+            
+            for (let i = 0; i < 20; i++) {
+                const cloudParts = Math.floor(3 + Math.random() * 5);
+                const cloudSingle = new THREE.Group();
+                
+                for (let j = 0; j < cloudParts; j++) {
+                    const size = 5 + Math.random() * 15;
+                    const geometry = new THREE.SphereGeometry(size, 16, 16);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.9,
+                        roughness: 1.0
+                    });
+                    const cloudBall = new THREE.Mesh(geometry, material);
+                    
+                    // Position each cloud puff relative to the cloud's center
+                    const angle = (j / cloudParts) * Math.PI * 2;
+                    const radius = 10 + Math.random() * 5;
+                    cloudBall.position.x = Math.cos(angle) * radius;
+                    cloudBall.position.y = (Math.random() * 4) - 2;
+                    cloudBall.position.z = Math.sin(angle) * radius;
+                    
+                    cloudSingle.add(cloudBall);
+                }
+                
+                // Position the entire cloud randomly in the sky
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 300 + Math.random() * 300;
+                const height = 100 + Math.random() * 100;
+                
+                cloudSingle.position.x = Math.cos(angle) * distance;
+                cloudSingle.position.y = height;
+                cloudSingle.position.z = Math.sin(angle) * distance;
+                
+                // Store animation properties
+                cloudSingle.userData = {
+                    rotationSpeed: (Math.random() * 0.0005) + 0.0001,
+                    originalY: cloudSingle.position.y
+                };
+                
+                cloudGroup.add(cloudSingle);
+            }
+        }
+
+        createClouds();
+
+        // Animation variables
+        let time = 0;
+        const waterVertices = water.geometry.attributes.position.array;
+        const originalWaterVertices = [...waterVertices];
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Event listeners for controls
+        waveSpeedInput.addEventListener('input', function() {
+            settings.waveSpeed = parseFloat(this.value);
+        });
+
+        waveHeightInput.addEventListener('input', function() {
+            settings.waveHeight = parseFloat(this.value);
+        });
+
+        waveScaleInput.addEventListener('input', function() {
+            settings.waveScale = parseFloat(this.value);
+        });
+
+        waterColorInput.addEventListener('input', function() {
+            settings.waterColor = this.value;
+            waterMaterial.color.set(this.value);
+        });
+
+        waterOpacityInput.addEventListener('input', function() {
+            settings.waterOpacity = parseFloat(this.value);
+            waterMaterial.opacity = settings.waterOpacity;
+        });
+
+        reflectionInput.addEventListener('input', function() {
+            settings.reflection = parseFloat(this.value);
+            waterMaterial.envMapIntensity = settings.reflection;
+        });
+
+        sunlightIntensityInput.addEventListener('input', function() {
+            settings.sunlightIntensity = parseFloat(this.value);
+            dirLight.intensity = settings.sunlightIntensity;
+        });
+
+        cameraHeightInput.addEventListener('input', function() {
+            settings.cameraHeight = parseInt(this.value);
+            camera.position.y = settings.cameraHeight;
+            camera.lookAt(0, 0, 0);
+        });
+
+        resetButton.addEventListener('click', function() {
+            waveSpeedInput.value = 1.0;
+            waveHeightInput.value = 0.8;
+            waveScaleInput.value = 1.5;
+            waterColorInput.value = '#0077be';
+            waterOpacityInput.value = 0.8;
+            reflectionInput.value = 0.5;
+            sunlightIntensityInput.value = 1.0;
+            cameraHeightInput.value = 20;
+
+            settings.waveSpeed = 1.0;
+            settings.waveHeight = 0.8;
+            settings.waveScale = 1.5;
+            settings.waterColor = '#0077be';
+            settings.waterOpacity = 0.8;
+            settings.reflection = 0.5;
+            settings.sunlightIntensity = 1.0;
+            settings.cameraHeight = 20;
+
+            waterMaterial.color.set(settings.waterColor);
+            waterMaterial.opacity = settings.waterOpacity;
+            waterMaterial.envMapIntensity = settings.reflection;
+            dirLight.intensity = settings.sunlightIntensity;
+            camera.position.y = settings.cameraHeight;
+            camera.lookAt(0, 0, 0);
+        });
+
+        // Mouse interaction for camera rotation
+        let isMouseDown = false;
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetRotationY = 0;
+        let targetRotationX = 0;
+        const cameraDistance = 100;
+
+        document.addEventListener('mousedown', (event) => {
+            isMouseDown = true;
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        });
+
+        document.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            if (isMouseDown) {
+                const deltaX = event.clientX - mouseX;
+                const deltaY = event.clientY - mouseY;
+                
+                targetRotationY += deltaX * 0.01;
+                targetRotationX += deltaY * 0.01;
+                
+                // Limit vertical rotation
+                targetRotationX = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, targetRotationX));
+                
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+            }
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            time += 0.01 * settings.waveSpeed;
+            
+            // Update water surface
+            for (let i = 0; i < waterVertices.length; i += 3) {
+                const x = originalWaterVertices[i];
+                const z = originalWaterVertices[i + 2];
+                
+                // Multiple wave patterns
+                waterVertices[i + 1] = Math.sin(x * 0.05 * settings.waveScale + time) * 
+                                      Math.cos(z * 0.05 * settings.waveScale + time) * 
+                                      settings.waveHeight;
+                
+                // Add ripples
+                const distance = Math.sqrt(x * x + z * z);
+                waterVertices[i + 1] += Math.sin(distance * 0.05 - time * 1.5) * settings.waveHeight * 0.2;
+            }
+            
+            water.geometry.attributes.position.needsUpdate = true;
+            water.geometry.computeVertexNormals();
+            
+            // Smooth camera rotation
+            camera.position.x = Math.sin(targetRotationY) * cameraDistance;
+            camera.position.z = Math.cos(targetRotationY) * cameraDistance;
+            camera.position.y = settings.cameraHeight + Math.sin(targetRotationX) * cameraDistance;
+            camera.lookAt(0, 0, 0);
+            
+            // Animate fish
+            const fishGroup = scene.children.find(child => child instanceof THREE.Group);
+            if (fishGroup) {
+                fishGroup.children.forEach(fish => {
+                    const data = fish.userData;
+                    
+                    // Circular swimming pattern
+                    fish.position.x = data.originalX + Math.sin(time * data.speed) * data.radius;
+                    fish.position.z = data.originalZ + Math.cos(time * data.speed) * data.radius;
+                    
+                    // Rotate fish to face swimming direction
+                    fish.rotation.y = Math.atan2(
+                        Math.cos(time * data.speed),
+                        -Math.sin(time * data.speed)
+                    );
+                    
+                    // Add a gentle up and down motion
+                    fish.position.y += Math.sin(time * data.speed * 2) * 0.05;
+                });
+            }
+            
+            // Animate clouds
+            scene.children.forEach(child => {
+                if (child instanceof THREE.Group && child !== fishGroup) {
+                    child.children.forEach(cloud => {
+                        // Gentle rotation
+                        cloud.rotation.y += cloud.userData?.rotationSpeed || 0;
+                        
+                        // Gentle floating up and down
+                        if (cloud.userData?.originalY) {
+                            cloud.position.y = cloud.userData.originalY + 
+                                              Math.sin(time * 0.2 + cloud.position.x * 0.01) * 2;
+                        }
+                    });
+                }
+            });
+            
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D World with Lakes (HTML5/Three.js)</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: sans-serif;
+            z-index: 100; /* Ensure info is above the canvas */
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Drag to look around, Scroll to zoom</div>
+    <!-- The canvas where the 3D scene will be rendered -->
+    <!-- Three.js will create one if not found, but explicit is good -->
+    <!-- <canvas id="webglCanvas"></canvas> -->
+
+    <!-- Import Three.js library -->
+    <!-- Always check for the latest version -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Your 3D world script -->
+    <script type="module">
+        import * as THREE from 'three';
+        // Import OrbitControls for camera movement
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        // Import the Water object for realistic water
+        import { Water } from 'three/addons/objects/Water.js';
+        // Import Sky for a background
+        import { Sky } from 'three/addons/objects/Sky.js';
+
+        let scene, camera, renderer, controls, water, sun, sky;
+
+        function init() {
+            // 1. Scene
+            scene = new THREE.Scene();
+
+            // 2. Camera
+            camera = new THREE.PerspectiveCamera(
+                75, // Field of view
+                window.innerWidth / window.innerHeight, // Aspect ratio
+                0.1, // Near clipping plane
+                2000 // Far clipping plane
+            );
+            camera.position.set(50, 50, 100); // Position the camera
+            camera.lookAt(0, 0, 0); // Make camera look at the center
+
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true }); // Enable anti-aliasing
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI displays
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; // For better color/lighting
+            document.body.appendChild(renderer.domElement); // Add canvas to the page
+
+            // 4. Lighting & Sun
+            sun = new THREE.Vector3(); // Used for sky and water simulation
+
+            // Ambient Light (basic overall light)
+            const ambientLight = new THREE.AmbientLight(0xcccccc, 0.5);
+            scene.add(ambientLight);
+
+            // Directional Light (simulates sunlight)
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0); // Increased intensity
+            directionalLight.position.set(50, 100, 20); // Position the light source
+            directionalLight.castShadow = true; // Enable shadows (optional, can impact performance)
+             // Configure shadow properties (optional)
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 500;
+            scene.add(directionalLight);
+
+
+            // 5. Sky
+            sky = new Sky();
+            sky.scale.setScalar(10000); // Make sky large
+            scene.add(sky);
+
+            const skyUniforms = sky.material.uniforms;
+            skyUniforms['turbidity'].value = 10;
+            skyUniforms['rayleigh'].value = 2;
+            skyUniforms['mieCoefficient'].value = 0.005;
+            skyUniforms['mieDirectionalG'].value = 0.8;
+
+            const parameters = {
+                elevation: 6, // Angle of the sun (degrees above horizon)
+                azimuth: 180 // Rotation of the sun (degrees around Y axis)
+            };
+
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            let renderTarget;
+
+            function updateSun() {
+                const phi = THREE.MathUtils.degToRad(90 - parameters.elevation);
+                const theta = THREE.MathUtils.degToRad(parameters.azimuth);
+
+                sun.setFromSphericalCoords(1, phi, theta);
+
+                sky.material.uniforms['sunPosition'].value.copy(sun);
+                // Also update the water's sun direction uniform (see below)
+                if (water) {
+                    water.material.uniforms['sunDirection'].value.copy(sun).normalize();
+                }
+
+
+                if (renderTarget) renderTarget.dispose();
+                renderTarget = pmremGenerator.fromScene(sky); // Use the Sky object directly
+                scene.environment = renderTarget.texture; // Update environment map for reflections
+
+                 // Update directional light position based on sun
+                directionalLight.position.copy(sun).multiplyScalar(100); // Place light far away in sun direction
+
+
+            }
+            updateSun();
+
+
+            // 6. Ground Plane
+            const groundGeometry = new THREE.PlaneGeometry(500, 500, 50, 50); // Width, height, segments
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x88aa66, // Greenish-brown color
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2; // Rotate plane to be horizontal
+            ground.receiveShadow = true; // Allow ground to receive shadows
+            scene.add(ground);
+
+            // 7. Water (The Lake)
+            const waterGeometry = new THREE.PlaneGeometry(200, 200); // Size of the lake
+
+            // Load the water normals texture (for wave effect)
+            const waterNormals = new THREE.TextureLoader().load(
+                'https://threejs.org/examples/textures/waternormals.jpg', // Use official Three.js example texture
+                function (texture) {
+                    // Ensure texture repeats correctly
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                }
+            );
+
+            water = new Water(
+                waterGeometry,
+                {
+                    textureWidth: 512,
+                    textureHeight: 512,
+                    waterNormals: waterNormals,
+                    sunDirection: new THREE.Vector3(), // Will be updated by updateSun()
+                    sunColor: 0xffffff,
+                    waterColor: 0x003e4f, // Dark blue-green water color
+                    distortionScale: 3.7, // How much objects below are distorted
+                    fog: scene.fog !== undefined, // Use scene fog if available
+                    alpha: 0.9 // Make it slightly transparent
+                }
+            );
+
+            water.rotation.x = - Math.PI / 2; // Rotate to be horizontal
+            water.position.y = 0.5; // Place slightly above the ground to avoid z-fighting
+             water.receiveShadow = true; // Water can receive shadows (e.g., from future objects)
+            scene.add(water);
+             updateSun(); // Call again to ensure water gets initial sun direction
+
+
+            // 8. Controls (OrbitControls)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooths out the movement
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent camera going below ground
+            controls.minDistance = 20;
+            controls.maxDistance = 500;
+            controls.target.set(0, 0, 0); // Set the point to orbit around
+            controls.update();
+
+            // 9. Handle Window Resize
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate); // Loop the animation
+
+            // Update water time for wave animation
+            if (water) {
+                water.material.uniforms['time'].value += 1.0 / 60.0; // Adjust speed if needed
+            }
+
+
+            // Update controls
+            controls.update();
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        // --- Start ---
+        init();
+        animate();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Water Effect</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 250px;
+            font-family: Arial, sans-serif;
+            z-index: 100;
+        }
+        .controls h3 {
+            margin-top: 0;
+        }
+        .controls label {
+            display: block;
+            margin: 8px 0;
+        }
+        .controls input {
+            width: 100%;
+        }
+        .controls button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: #0077be;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading">Loading 3D Water...</div>
+    
+    <div class="controls">
+        <h3>Water Controls</h3>
+        <label>
+            Wave Height
+            <input type="range" id="waveHeight" min="0.1" max="3" step="0.1" value="1">
+        </label>
+        <label>
+            Wave Speed
+            <input type="range" id="waveSpeed" min="0.1" max="2" step="0.1" value="0.5">
+        </label>
+        <label>
+            Water Color
+            <input type="color" id="waterColor" value="#0077be">
+        </label>
+        <label>
+            Water Opacity
+            <input type="range" id="waterOpacity" min="0.1" max="1" step="0.05" value="0.8">
+        </label>
+        <button id="resetButton">Reset</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Wait for Three.js to load
+        window.addEventListener('load', function() {
+            // Remove loading text when ready
+            setTimeout(() => {
+                document.querySelector('.loading').style.display = 'none';
+            }, 1000);
+            
+            // Get control elements
+            const waveHeightInput = document.getElementById('waveHeight');
+            const waveSpeedInput = document.getElementById('waveSpeed');
+            const waterColorInput = document.getElementById('waterColor');
+            const waterOpacityInput = document.getElementById('waterOpacity');
+            const resetButton = document.getElementById('resetButton');
+            
+            // Settings
+            const settings = {
+                waveHeight: 1,
+                waveSpeed: 0.5,
+                waterColor: '#0077be',
+                waterOpacity: 0.8
+            };
+            
+            // Create renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+            
+            // Create scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // Sky blue
+            
+            // Create camera
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 30, 100);
+            camera.lookAt(0, 0, 0);
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(50, 100, 50);
+            scene.add(directionalLight);
+            
+            // Create water surface
+            const waterGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(settings.waterColor),
+                transparent: true,
+                opacity: settings.waterOpacity,
+                roughness: 0.1,
+                metalness: 0.6,
+                side: THREE.DoubleSide
+            });
+            
+            const water = new THREE.Mesh(waterGeometry, waterMaterial);
+            water.rotation.x = -Math.PI / 2;
+            water.position.y = 0;
+            scene.add(water);
+            
+            // Create a lake bed
+            const lakeGeometry = new THREE.PlaneGeometry(200, 200);
+            const lakeMaterial = new THREE.MeshStandardMaterial({
+                color: 0x725F4C,
+                roughness: 0.8
+            });
+            const lakeFloor = new THREE.Mesh(lakeGeometry, lakeMaterial);
+            lakeFloor.rotation.x = -Math.PI / 2;
+            lakeFloor.position.y = -10;
+            scene.add(lakeFloor);
+            
+            // Create surroundings
+            const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x265c42,
+                roughness: 0.9
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.1;
+            scene.add(ground);
+            
+            // Create a basic skybox
+            const skyGeometry = new THREE.BoxGeometry(900, 900, 900);
+            const skyMaterials = [];
+            for (let i = 0; i < 6; i++) {
+                skyMaterials.push(new THREE.MeshBasicMaterial({
+                    color: 0x87ceeb,
+                    side: THREE.BackSide
+                }));
+            }
+            const skyBox = new THREE.Mesh(skyGeometry, skyMaterials);
+            scene.add(skyBox);
+            
+            // Create sun
+            const sunGeometry = new THREE.SphereGeometry(30, 32, 32);
+            const sunMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffff80,
+                transparent: true,
+                opacity: 0.8
+            });
+            const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+            sun.position.set(100, 300, -200);
+            scene.add(sun);
+            
+            // Add some underwater props
+            function addUnderwaterElements() {
+                // Rocks
+                for (let i = 0; i < 30; i++) {
+                    const rockSize = 1 + Math.random() * 3;
+                    const rockGeometry = new THREE.DodecahedronGeometry(rockSize, 1);
+                    const rockMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x777777,
+                        roughness: 0.9
+                    });
+                    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                    
+                    const x = Math.random() * 180 - 90;
+                    const z = Math.random() * 180 - 90;
+                    rock.position.set(x, -8 + Math.random() * 4, z);
+                    rock.rotation.set(
+                        Math.random() * Math.PI,
+                        Math.random() * Math.PI,
+                        Math.random() * Math.PI
+                    );
+                    scene.add(rock);
+                }
+                
+                // Plants
+                for (let i = 0; i < 20; i++) {
+                    const plantHeight = 3 + Math.random() * 8;
+                    const plantGeometry = new THREE.CylinderGeometry(0.2, 0.5, plantHeight, 8);
+                    const plantMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x107010,
+                        roughness: 0.8
+                    });
+                    const plant = new THREE.Mesh(plantGeometry, plantMaterial);
+                    
+                    const x = Math.random() * 160 - 80;
+                    const z = Math.random() * 160 - 80;
+                    plant.position.set(x, -10 + plantHeight/2, z);
+                    plant.rotation.set(
+                        (Math.random() * 0.3) - 0.15,
+                        0,
+                        (Math.random() * 0.3) - 0.15
+                    );
+                    scene.add(plant);
+                }
+            }
+            
+            addUnderwaterElements();
+            
+            // Store the original positions of water vertices
+            const waterPositions = water.geometry.attributes.position.array;
+            const originalWaterPositions = [...waterPositions];
+            
+            // Variables for animation
+            let time = 0;
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Control event listeners
+            waveHeightInput.addEventListener('input', function() {
+                settings.waveHeight = parseFloat(this.value);
+            });
+            
+            waveSpeedInput.addEventListener('input', function() {
+                settings.waveSpeed = parseFloat(this.value);
+            });
+            
+            waterColorInput.addEventListener('input', function() {
+                settings.waterColor = this.value;
+                waterMaterial.color.set(settings.waterColor);
+            });
+            
+            waterOpacityInput.addEventListener('input', function() {
+                settings.waterOpacity = parseFloat(this.value);
+                waterMaterial.opacity = settings.waterOpacity;
+            });
+            
+            resetButton.addEventListener('click', function() {
+                waveHeightInput.value = 1;
+                waveSpeedInput.value = 0.5;
+                waterColorInput.value = '#0077be';
+                waterOpacityInput.value = 0.8;
+                
+                settings.waveHeight = 1;
+                settings.waveSpeed = 0.5;
+                settings.waterColor = '#0077be';
+                settings.waterOpacity = 0.8;
+                
+                waterMaterial.color.set(settings.waterColor);
+                waterMaterial.opacity = settings.waterOpacity;
+            });
+            
+            // Mouse interaction for camera control
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            const cameraOrbit = { x: 0, y: 0 };
+            const cameraDistance = 100;
+            
+            document.addEventListener('mousedown', (event) => {
+                isDragging = true;
+                previousMousePosition = {
+                    x: event.clientX,
+                    y: event.clientY
+                };
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            document.addEventListener('mousemove', (event) => {
+                if (!isDragging) return;
+                
+                const deltaMove = {
+                    x: event.clientX - previousMousePosition.x,
+                    y: event.clientY - previousMousePosition.y
+                };
+                
+                // Update camera orbit
+                cameraOrbit.x += deltaMove.x * 0.005;
+                cameraOrbit.y += deltaMove.y * 0.005;
+                
+                // Limit vertical rotation
+                cameraOrbit.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraOrbit.y));
+                
+                previousMousePosition = {
+                    x: event.clientX,
+                    y: event.clientY
+                };
+            });
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Animate water surface
+                time += settings.waveSpeed * 0.05;
+                
+                for (let i = 0; i < waterPositions.length; i += 3) {
+                    const x = originalWaterPositions[i];
+                    const z = originalWaterPositions[i + 2];
+                    
+                    // Combine multiple waves for natural movement
+                    waterPositions[i + 1] = 
+                        Math.sin(x * 0.05 + time) * 
+                        Math.cos(z * 0.05 + time) * 
+                        settings.waveHeight;
+                    
+                    // Add ripple effects
+                    const distance = Math.sqrt(x * x + z * z);
+                    waterPositions[i + 1] += Math.sin(distance * 0.05 - time) * 
+                                            (settings.waveHeight * 0.2);
+                }
+                
+                water.geometry.attributes.position.needsUpdate = true;
+                water.geometry.computeVertexNormals();
+                
+                // Update camera position based on orbit
+                camera.position.x = Math.sin(cameraOrbit.x) * cameraDistance * Math.cos(cameraOrbit.y);
+                camera.position.z = Math.cos(cameraOrbit.x) * cameraDistance * Math.cos(cameraOrbit.y);
+                camera.position.y = Math.sin(cameraOrbit.y) * cameraDistance + 20;
+                camera.lookAt(0, 0, 0);
+                
+                renderer.render(scene, camera);
+            }
+            
+            animate();
+        });
+    </script>
+</body>
+</html>
