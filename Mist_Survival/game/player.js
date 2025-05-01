@@ -5,6 +5,7 @@ import * as THREE from '../libs/three.module.js'; // Assuming Three.js is modula
 import * as UIManager from './ui.js'; // To display messages, update UI
 import * as World from './world.js'; // To interact with environment objects
 // Import other modules as needed (Crafting, Building, etc.)
+import * as Vehicles from './vehicles.js'; // Added import for vehicle interactions
 
 // --- Player State ---
 let playerMesh = null; // Reference to the player's 3D mesh
@@ -32,6 +33,7 @@ let equippedItem = null;
 let isSprinting = false;
 let isMoving = false;
 let deathTimeout = null; // Timeout handle for respawn delay
+let playerActive = true; // New state variable for vehicle integration
 
 const playerHeight = 1.8;
 const playerRadius = 0.4;
@@ -85,7 +87,7 @@ export function init(scene, gameCamera, loadData = null) {
  * @param {object} inputState Current state of keyboard/mouse inputs.
  */
 export function update(dt, gameDt, inputState) {
-    if (!playerMesh) return; // Not initialized
+    if (!playerMesh || !playerActive) return; // Not initialized or inactive (in vehicle)
 
     // --- Update Stats ---
     updatePlayerStats(dt, gameDt);
@@ -380,6 +382,59 @@ export function getRotationY() {
 
 export function isPlayerSprinting() {
     return isSprinting;
+}
+
+// --- New functions to handle integration with other modules ---
+
+/**
+ * Modifies player stamina and ensures it stays within limits
+ * @param {number} amount Amount to modify stamina by (positive to add, negative to subtract)
+ */
+export function modifyStamina(amount) {
+    playerStats.stamina += amount;
+    playerStats.stamina = Math.max(0, Math.min(playerStats.stamina, playerStats.maxStamina));
+}
+
+/**
+ * Returns the height of the player (for physics/camera calculations)
+ */
+export function getPlayerHeight() {
+    return playerHeight;
+}
+
+/**
+ * Returns the current equipped item
+ */
+export function getEquippedItem() {
+    return equippedItem;
+}
+
+/**
+ * Checks if player is currently in a vehicle
+ */
+export function isInVehicle() {
+    // This should link to the VehicleManager's state
+    return Vehicles.getPlayerVehicle() !== null;
+}
+
+/**
+ * Returns a reference to the player for other modules to use
+ */
+export function getPlayerReference() {
+    return {
+        id: "player",
+        mesh: playerMesh,
+        // Add other references needed
+    };
+}
+
+/**
+ * Enable/disable player controls
+ * @param {boolean} active Whether player should be active
+ */
+export function setActive(active) {
+    // Disables player movement when in vehicle or otherwise incapacitated
+    playerActive = active;
 }
 
 // --- Persistence ---

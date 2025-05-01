@@ -1,9 +1,12 @@
 // game/world.js
 // Manages environment, time, weather, mist events, maybe terrain/world objects.
 
+import * as THREE from '../libs/three.module.js';
+
 // --- State ---
 let gameTime = 8 * 60 * 60; // Start at 8:00 AM (in seconds)
-const secondsPerTick = 60; // How many game seconds pass per real second (adjust for desired speed)
+// Export the time scale constant so main.js can access it
+export const secondsPerTick = 60; // How many game seconds pass per real second (adjust for desired speed)
 let isMistActive = false;
 let mistTimer = 0;
 let nextMistCheck = Math.random() * 100 + 50; // Time until next potential mist (real seconds)
@@ -70,8 +73,69 @@ export function update(dt, scene) {
         }
     }
 
+    // Update scene visuals if scene is provided
+    if (scene) {
+        updateSceneBackground(scene);
+    }
+
     // TODO: Update other weather effects (rain, wind visuals/audio)
     // TODO: Update dynamic environment (e.g., resource respawning)
+}
+
+/**
+ * Returns comprehensive world state for main loop
+ * @returns {object} World state object with all relevant properties
+ */
+export function getWorldState() {
+    return {
+        gameTime: gameTime,
+        isMistActive: isMistActive,
+        mistTimer: mistTimer,
+        dayRatio: dayRatio,
+        nightRatio: nightRatio,
+        // Fog and lighting settings for renderer
+        fogNear: isMistActive ? 10 : 50, // Shorter visibility in mist
+        fogFar: isMistActive ? 40 : 150,
+        fogColor: new THREE.Color(
+            isMistActive ? 0x557788 : (nightRatio > 0.7 ? 0x111122 : 0x88aaff)
+        ),
+        ambientIntensity: dayRatio * 0.3 + 0.1, // 0.1 at night, 0.4 at day
+        directionalIntensity: dayRatio * 0.8 + 0.1, // 0.1 at night, 0.9 at day
+        // Could add sun position calculation here
+    };
+}
+
+/**
+ * Updates scene background based on time of day and mist
+ * @param {THREE.Scene} scene The scene to update
+ * @returns {THREE.Color} The new background color
+ */
+export function updateSceneBackground(scene) {
+    if (!scene) return;
+    
+    // Update scene background based on time of day and mist
+    let bgColor;
+    if (isMistActive) {
+        bgColor = new THREE.Color(0x557788); // Misty blue-gray
+    } else if (nightRatio > 0.7) {
+        bgColor = new THREE.Color(0x111122); // Dark night blue
+    } else if (dayRatio > 0.7) {
+        bgColor = new THREE.Color(0x88aaff); // Daytime sky blue
+    } else {
+        // Dawn/dusk gradient
+        const dawnDuskColor = new THREE.Color(0xaa8866);
+        const dayColor = new THREE.Color(0x88aaff);
+        const nightColor = new THREE.Color(0x111122);
+        
+        if (currentHour < 12) { // Dawn
+            bgColor = dawnDuskColor.clone().lerp(dayColor, dayRatio * 1.3);
+        } else { // Dusk
+            bgColor = dawnDuskColor.clone().lerp(nightColor, nightRatio * 1.3);
+        }
+    }
+    
+    scene.background.copy(bgColor);
+    return bgColor; // Return for fog color matching
 }
 
 // --- Getters ---

@@ -13,7 +13,7 @@ import * as UIManager from './game/ui.js';
 import * as Assets from './game/assets.js'; // Assuming assets.js uses module exports
 import * as Persistence from './game/persistence.js';
 import * as Vehicles from './game/vehicles.js';
-// import * as Renderer from './game/renderer.js'; // Optional: Move rendering logic here
+import * as PhysicsPlaceholder from './game/physics_placeholder.js'; // Added physics placeholder
 
 // --- Global Scope Variables ---
 let scene, camera, renderer, clock;
@@ -72,9 +72,9 @@ function initEngine() {
      ground.name = "GroundMesh"; // Name for raycasting in Building module
      scene.add(ground);
 
-    // TODO: Initialize Physics Engine (Ammo.js, Rapier.js, etc.)
-    // physicsWorld = new Physics.World();
-    // physicsWorld.setGravity(new Physics.Vec3(0, -9.81, 0));
+    // Initialize simple physics world
+    physicsWorld = new PhysicsPlaceholder.World();
+    physicsWorld.setGravity(new THREE.Vector3(0, -9.81, 0));
 
     // Initialize UI Manager First (for logging etc.)
     UIManager.init();
@@ -148,18 +148,23 @@ function animate() {
     if (!gamePaused) {
         const gameDt = cappedDt * World.secondsPerTick; // Get scaled game time delta from World
 
-        World.update(cappedDt, scene); // Update time, mist, weather, world environment lights/fog
+        // Update world first to set environment state
+        World.update(cappedDt, scene); 
+        
+        // Get world state once and use it throughout the frame
+        const worldState = World.getWorldState();
+        
         // Apply world changes to renderer (fog, lighting)
-        const worldState = World.getState(); // Get current world state for checks
-        scene.fog.color.copy(scene.background); // Match fog and background from world update
+        const bgColor = World.updateSceneBackground(scene);
+        scene.fog.color.copy(bgColor); // Match fog and background
         scene.fog.near = worldState.fogNear ?? scene.fog.near;
         scene.fog.far = worldState.fogFar ?? scene.fog.far;
         scene.userData.ambientLight.intensity = worldState.ambientIntensity ?? scene.userData.ambientLight.intensity;
         scene.userData.directionalLight.intensity = worldState.directionalIntensity ?? scene.userData.directionalLight.intensity;
-        // Update sun position if changed in World.update
-        // scene.userData.directionalLight.position.copy(worldState.sunPosition);
 
-
+        // First check if player is in a vehicle - this affects other updates
+        const playerInVehicle = Vehicles.getPlayerVehicle() !== null;
+        
         // Update modules that depend on player position *after* movement is applied
         InfectedManager.update(cappedDt, playerMesh); // AI needs current player position
         Vehicles.update(cappedDt, inputState); // Update vehicle physics/state
@@ -172,7 +177,7 @@ function animate() {
 
         // --- Physics Update ---
         if (physicsWorld) {
-            // physicsWorld.step(cappedDt); // Step the physics simulation
+            physicsWorld.step(cappedDt); // Step the physics simulation
             // Sync physics bodies <-> THREE meshes AFTER physics step
             // Update mesh positions for player, infected, vehicles based on physics results
         }
@@ -180,14 +185,21 @@ function animate() {
 
     // --- UI Updates (Last) ---
     UIManager.updateStatsUI(Player.getPlayerStats());
-    // Pass minimal state needed for world UI update
+    // Pass state needed for world UI update
     UIManager.updateWorldUI({
         gameTime: World.getCurrentTime(),
         isMistActive: World.getIsMistActive(),
     });
-     UIManager.updateBuildModeUI(Building.isBuildModeActive(), Building.getCurrentBuildableName());
-     UIManager.updateEquippedUI(Player.getEquippedItem());
-     // Update vehicle UI only if needed? UIManager can check internally.
+    UIManager.updateBuildModeUI(Building.isBuildModeActive(), Building.getCurrentBuildableName());
+    UIManager.updateEquippedUI(Player.getEquippedItem());
+     
+    // Update vehicle UI only if player is in a vehicle
+    const playerVehicle = Vehicles.getPlayerVehicle();
+    if (playerVehicle) {
+        // Calculate vehicle speed (placeholder - should be from physics)
+        const speed = 0; // Replace with actual speed calculation
+        UIManager.updateVehicleUI(playerVehicle.stats, speed);
+    }
 
     // --- Rendering ---
     renderer.render(scene, camera);
@@ -198,8 +210,11 @@ function animate() {
 
 // --- Input Processing ---
 function handlePlayerMovement(dt) {
-    if (!inputState.isPointerLocked || !playerMesh || gamePaused || Player.isInVehicle()) return; // Don't move if pointer not locked, paused, or in vehicle
-
+    if (!inputState.isPointerLocked || !playerMesh || gamePaused) return;
+    
+    // Check if player is in a vehicle - if so, don't handle player movement
+    if (Vehicles.getPlayerVehicle() !== null) return;
+    
     const moveSpeed = 3.0;
     const sprintMultiplier = 1.8;
     let currentSpeed = moveSpeed;
@@ -259,9 +274,6 @@ function handlePlayerMovement(dt) {
     if (!physicsWorld) {
         playerMesh.position.y = Player.getPlayerHeight() / 2;
     }
-
-    // Update camera position needs to happen AFTER potential position changes
-    // Player.update() handles camera follow now
 }
 
 function handlePlayerLook() {
@@ -346,65 +358,74 @@ function setupEventListeners() {
 }
 
 function handleKeyPress(code) {
-     // Actions that happen instantly on key press
+    // Actions that happen instantly on key press
 
-     // Toggle Pause (Escape) - Allow even if pointer lock lost
-     if (code === 'Escape') {
-         togglePause(); // Toggle pause state
-         if(Building.isBuildModeActive()) {
-             Building.exitBuildMode(); // Also exit build mode on escape
-         }
-         return; // Don't process other keys if pausing/unpausing
-     }
+    // Toggle Pause (Escape) - Allow even if pointer lock lost
+    if (code === 'Escape') {
+        togglePause(); // Toggle pause state
+        if(Building.isBuildModeActive()) {
+            Building.exitBuildMode(); // Also exit build mode on escape
+        }
+        return; // Don't process other keys if pausing/unpausing
+    }
 
     // Ignore game actions if paused or pointer not locked
-     if (gamePaused || !inputState.isPointerLocked) return;
+    if (gamePaused || !inputState.isPointerLocked) return;
 
-     // Game Actions (require pointer lock)
-     switch (code) {
+    // Check if player is in a vehicle first
+    const playerInVehicle = Vehicles.getPlayerVehicle() !== null;
+
+    // Game Actions (require pointer lock)
+    switch (code) {
         case 'KeyE': // Interact
-             if (Player.isInVehicle()) {
-                 Vehicles.tryExitVehicle(); // 'E' to exit vehicle maybe? Or 'F'?
-             } else {
-                 Player.interact();
-             }
+            if (playerInVehicle) {
+                // Nothing for E in vehicle
+            } else {
+                Player.interact();
+            }
             break;
-        case 'KeyF': // Use 'F' for vehicle exit?
-             if (Player.isInVehicle()) {
-                  Vehicles.tryExitVehicle();
-             }
-             // Could 'F' also be flashlight toggle?
-             break;
-         case 'KeyX': // Toggle Vehicle Engine
-              if (Player.isInVehicle()) {
-                  Vehicles.toggleEngine();
-              }
-             break;
+        case 'KeyF': // Use 'F' for vehicle exit
+            if (playerInVehicle) {
+                Vehicles.tryExitVehicle();
+            }
+            // Could 'F' also be flashlight toggle when not in vehicle?
+            break;
+        case 'KeyX': // Toggle Vehicle Engine
+            if (playerInVehicle) {
+                Vehicles.toggleEngine();
+            }
+            break;
         case 'KeyI': // Inventory
             UIManager.toggleInventoryUI(Player.getInventory());
             break;
         case 'KeyC': // Crafting
-            // Need to determine available recipes based on context (inventory vs station)
-            const station = Building.getStationPlayerIsNear(); // Need this function in Building
-            const recipes = Crafting.getAvailableRecipes(station?.typeId || null);
-            UIManager.toggleCraftingUI(recipes, Crafting.canCraft); // Pass check function
-            break;
-        case 'KeyB': // Build Menu / Mode
-            if (Building.isBuildModeActive()) {
-                 Building.exitBuildMode();
-            } else {
-                 Building.enterBuildMode();
+            if (!playerInVehicle) {
+                // Need to determine available recipes based on context (inventory vs station)
+                const station = Building.getStationPlayerIsNear();
+                const recipes = Crafting.getAvailableRecipes(station?.typeId || null);
+                UIManager.toggleCraftingUI(recipes, Crafting.canCraft); // Pass check function
             }
             break;
-         case 'KeyR': // Reload Weapon (Example)
-             // if (Player.getEquippedItem()?.type === 'weapon') { Player.reloadWeapon(); }
-             break;
-         case 'Digit1': // Equip slot 1 (Example)
-             // Player.equipItemFromSlot(0);
-             break;
-         case 'Digit2': // Equip slot 2
-             // Player.equipItemFromSlot(1);
-             break;
+        case 'KeyB': // Build Menu / Mode
+            if (!playerInVehicle) {
+                if (Building.isBuildModeActive()) {
+                    Building.exitBuildMode();
+                } else {
+                    Building.enterBuildMode();
+                }
+            }
+            break;
+        case 'KeyR': // Reload Weapon (Example)
+            if (!playerInVehicle && Player.getEquippedItem()?.type === 'weapon') {
+                // Player.reloadWeapon(); // Uncomment when implemented
+            }
+            break;
+        case 'Digit1': // Equip slot 1 (Example)
+            // Player.equipItemFromSlot(0);
+            break;
+        case 'Digit2': // Equip slot 2
+            // Player.equipItemFromSlot(1);
+            break;
           // Add more keybinds...
     }
 }
@@ -436,7 +457,6 @@ function onWindowResize() {
         renderer.setSize(window.innerWidth, window.innerHeight);
     }
 }
-
 
 // --- Start ---
 initEngine();

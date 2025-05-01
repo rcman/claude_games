@@ -5,6 +5,7 @@ import * as THREE from '../libs/three.module.js';
 import * as Player from './player.js';
 import * as UIManager from './ui.js';
 import * as World from './world.js'; // To add placed structures to the world state
+import * as Vehicles from './vehicles.js'; // Added for vehicle integration
 
 // --- State ---
 let buildModeActive = false;
@@ -77,7 +78,9 @@ export function update(dt, isPointerLocked) {
 
 // --- Build Mode Control ---
 export function enterBuildMode() {
-    if (buildModeActive) return;
+    // Check if player is in a vehicle - don't allow building from vehicles
+    if (buildModeActive || Player.isInVehicle()) return;
+    
     buildModeActive = true;
     // TODO: Show Building UI (categories, items) via UIManager
     UIManager.showBuildUI(getBuildableCategories());
@@ -379,6 +382,40 @@ export function getBuildableCategories() {
 
 export function getPlacedStructures() {
     return [...placedStructures];
+}
+
+/**
+ * Returns the name of the currently selected buildable item
+ * @returns {string} The name of the current buildable or empty string if none selected
+ */
+export function getCurrentBuildableName() {
+    return currentBuildableData ? currentBuildableData.name : '';
+}
+
+/**
+ * Checks if player is near a crafting station and returns it
+ * @returns {object|null} The station data or null if none nearby
+ */
+export function getStationPlayerIsNear() {
+    if (!playerMeshRef) return null;
+    
+    // Filter placed structures to just stations
+    const stations = placedStructures.filter(s => s.isStation);
+    
+    // Find closest station within interaction range
+    const interactionRange = 3.0; // Maximum distance to interact
+    let closestStation = null;
+    let closestDistance = interactionRange;
+    
+    for (const station of stations) {
+        const distance = playerMeshRef.position.distanceTo(station.mesh.position);
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestStation = station;
+        }
+    }
+    
+    return closestStation;
 }
 
 // --- Persistence ---

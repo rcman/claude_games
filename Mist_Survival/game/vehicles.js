@@ -90,6 +90,7 @@ export function init(scene, physicsWorld, loadData = null) {
  */
 export function update(dt, inputState) {
     if (!sceneRef) return;
+    
     // Update physics for all vehicles
     vehicles.forEach(vehicle => {
         // Sync THREE.js mesh position/rotation with physics body IF using physics engine
@@ -102,19 +103,24 @@ export function update(dt, inputState) {
             applyVehicleControls(vehicle, inputState, dt);
 
             // Update vehicle UI (only for the driven vehicle)
-            UIManager.updateVehicleUI(vehicle.stats, 0 /* calculate speed here */);
-        } else {
-            // If player is NOT driving, maybe run simplified AI or just idle physics?
+            // Calculate approximate speed
+            let speed = 0;
+            if (vehicle.lastPosition) {
+                const distance = vehicle.mesh.position.distanceTo(vehicle.lastPosition);
+                speed = (distance / dt) * 3.6; // Convert to km/h
+            }
+            vehicle.lastPosition = vehicle.mesh.position.clone();
+            
+            UIManager.updateVehicleUI(vehicle.stats, speed);
         }
 
-         // Update vehicle stats (fuel consumption if engine is on?)
+        // Update vehicle stats (fuel consumption if engine is on)
         if (vehicle.engineOn && vehicle.stats.fuel > 0) {
-            vehicle.stats.fuel -= dt * vehicle.fuelConsumptionRate; // Example rate
+            vehicle.stats.fuel -= dt * vehicle.fuelConsumptionRate;
             if (vehicle.stats.fuel <= 0) {
                 vehicle.stats.fuel = 0;
                 toggleEngine(vehicle); // Turn off engine
-                // Play engine sputtering sound?
-                 UIManager.addLogMessage(`${vehicle.name} ran out of fuel!`);
+                UIManager.addLogMessage(`${vehicle.name} ran out of fuel!`);
             }
         }
     });
@@ -175,6 +181,7 @@ export function spawnVehicle(typeId, position, rotationData = null, stats = null
         engineOn: false,
         passengers: new Array(vehicleDef.seats.length).fill(null), // Array matching seats, null if empty
         driverSeatIndex: vehicleDef.driverSeatIndex || 0,
+        lastPosition: position.clone(), // For speed calculation
     };
     mesh.userData.vehicleId = vehicleData.id; // Link mesh back to data
     mesh.userData.interact = tryEnterVehicle; // Assign interaction function
@@ -308,8 +315,14 @@ function tryEnterVehicle(playerMeshWhoInteracted) {
         UIManager.addLogMessage("Already in a vehicle.");
         return;
     }
+    
     // 'this' should be the vehicle mesh that was interacted with
     const vehicleId = this.userData?.vehicleId;
+    if (vehicleId === undefined) {
+        console.error("Vehicle interaction without proper vehicleId in userData");
+        return;
+    }
+    
     const vehicle = vehicles.find(v => v.id === vehicleId);
 
     if (vehicle) {
@@ -322,7 +335,8 @@ function tryEnterVehicle(playerMeshWhoInteracted) {
             if (!vehicle.passengers[i]) { // Check if seat is empty
                 const seatOffset = vehicle.definition.seats[i].pos;
                 // Convert local seat offset to world position
-                const seatWorldPos = vehicle.mesh.localToWorld(new THREE.Vector3(seatOffset.x, seatOffset.y, seatOffset.z));
+                const seatWorldPos = new THREE.Vector3(seatOffset.x, seatOffset.y, seatOffset.z);
+                vehicle.mesh.localToWorld(seatWorldPos);
                 const distSq = playerPos.distanceToSquared(seatWorldPos);
 
                 if (distSq < minDistSq && distSq < 4*4) { // Must be reasonably close (e.g., 4 units)
@@ -333,10 +347,12 @@ function tryEnterVehicle(playerMeshWhoInteracted) {
         }
 
         if (bestSeat !== -1) {
-             enterVehicle(vehicle, playerMeshWhoInteracted, bestSeat);
+            enterVehicle(vehicle, playerMeshWhoInteracted, bestSeat);
         } else {
             UIManager.addLogMessage("No available seats or too far.");
         }
+    } else {
+        console.error(`Vehicle with ID ${vehicleId} not found.`);
     }
 }
 

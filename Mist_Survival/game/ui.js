@@ -290,3 +290,98 @@ export function showDamageIndicator() {
          damageIndicatorUI.classList.remove('active');
      }, 300); // Duration of the effect
 }
+
+/**
+ * Shows the loading screen with custom message
+ * @param {string} message Message to display
+ * @param {boolean} isError Whether this is an error state
+ */
+export function showLoadingScreen(message, isError = false) {
+    const loadingScreen = document.getElementById('loading-screen');
+    const loadingStatus = document.getElementById('loading-status');
+    
+    if (!loadingScreen || !loadingStatus) return;
+    
+    loadingScreen.style.display = 'flex';
+    loadingStatus.textContent = message;
+    
+    if (isError) {
+        loadingStatus.style.color = '#ff5555';
+    } else {
+        loadingStatus.style.color = 'white';
+    }
+}
+
+/**
+ * Hides the loading screen
+ */
+export function hideLoadingScreen() {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) loadingScreen.style.display = 'none';
+}
+
+/**
+ * Shows the pause menu
+ */
+export function showPauseMenu() {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) pauseMenu.style.display = 'block';
+}
+
+/**
+ * Hides the pause menu
+ */
+export function hidePauseMenu() {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) pauseMenu.style.display = 'none';
+}
+
+/**
+ * Updates vehicle UI with current stats
+ * @param {object} stats Vehicle stats
+ * @param {number} speed Current speed
+ */
+export function updateVehicleUI(stats, speed) {
+    const vehicleUI = document.getElementById('vehicle-ui');
+    const speedElement = document.getElementById('vehicle-speed');
+    const fuelElement = document.getElementById('vehicle-fuel');
+    const maxFuelElement = document.getElementById('vehicle-max-fuel');
+    
+    if (!vehicleUI || !speedElement || !fuelElement || !maxFuelElement) return;
+    
+    vehicleUI.style.display = 'block';
+    speedElement.textContent = Math.round(speed);
+    fuelElement.textContent = Math.round(stats.fuel);
+    maxFuelElement.textContent = Math.round(stats.maxFuel);
+}
+
+/**
+ * Shows the vehicle UI
+ */
+export function showVehicleUI() {
+    const vehicleUI = document.getElementById('vehicle-ui');
+    if (vehicleUI) vehicleUI.style.display = 'block';
+}
+
+/**
+ * Hides the vehicle UI
+ */
+export function hideVehicleUI() {
+    const vehicleUI = document.getElementById('vehicle-ui');
+    if (vehicleUI) vehicleUI.style.display = 'none';
+}
+
+/**
+ * Updates the inventory UI with current items
+ * @param {Array} inventory Array of inventory items
+ */
+export function updateInventoryUI(inventory) {
+    // If inventory panel is visible, refresh its contents
+    const panel = document.getElementById('inventory-panel');
+    if (panel && panel.style.display === 'block') {
+        populateInventoryPanel(inventory);
+    }
+}
+
+// Add missing imports
+import * as Player from './player.js'; // For populateInventoryPanel
