@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stunt Car Racer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div id="damageBar"><div id="damageLevel"></div></div>
+        <div id="lap">LAP: 1/3</div>
+        <div id="speedometer">0 MPH</div>
+    </div>
+    
+    <div id="trackInfo">TRACK: LITTLE RAMP</div>
+    
+    <div id="countdown" class="hidden">3</div>
+    
+    <div id="startScreen">
+        <h1>STUNT CAR RACER</h1>
+        <p>HTML5 CLONE</p>
+        <button id="startButton">START GAME</button>
+    </div>
+    
+    <div id="menu" class="hidden">
+        <h2>DIVISION 4</h2>
+        <div class="menuItem selected" data-track="little-ramp">LITTLE RAMP</div>
+        <div class="menuItem" data-track="stepping-stones">STEPPING STONES</div>
+        <div class="menuItem" data-track="hump-back">HUMP BACK</div>
+        <table id="leagueTable">
+            <tr>
+                <th>POS</th>
+                <th>DRIVER</th>
+                <th>PTS</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>PLAYER</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>CPU 1</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>CPU 2</td>
+                <td>0</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>CPU 3</td>
+                <td>0</td>
+            </tr>
+        </table>
+        <button id="raceButton">RACE</button>
+    </div>
+    
+    <div id="gameOverScreen" class="hidden">
+        <h2 id="raceResult">RACE COMPLETE</h2>
+        <p id="raceStats">TIME: 0:00:00<br>DAMAGE: 0%</p>
+        <button id="continueButton">CONTINUE</button>
+    </div>
+
+    <!-- Load scripts -->
+    <script src="track.js"></script>
+    <script src="physics.js"></script>
+    <script src="renderer.js"></script>
+    <script src="ui.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
