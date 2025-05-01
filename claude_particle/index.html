@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML5 Particle Effects</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        label, select {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="controls">
+        <div>
+            <button id="explosion">Create Explosion</button>
+            <button id="radialBlast">Create Radial Blast</button>
+            <button id="fountain">Create Fountain</button>
+            <button id="trail">Toggle Mouse Trail</button>
+        </div>
+        <div>
+            <button id="smoke">Create Smoke</button>
+            <button id="fire">Create Fire</button>
+            <button id="ripple">Create Ripple</button>
+            <button id="vortex">Create Vortex</button>
+        </div>
+        <div>
+            <label for="particleCount">Particle Count:</label>
+            <select id="particleCount">
+                <option value="50">Low (50)</option>
+                <option value="150" selected>Medium (150)</option>
+                <option value="300">High (300)</option>
+                <option value="500">Very High (500)</option>
+            </select>
+        </div>
+        <div>
+            <label for="particleColor">Color Scheme:</label>
+            <select id="particleColor">
+                <option value="fire">Fire (Red/Orange/Yellow)</option>
+                <option value="cool">Cool (Blue/Purple)</option>
+                <option value="rainbow" selected>Rainbow</option>
+                <option value="mono">Monochrome (White)</option>
+                <option value="green">Matrix (Green)</option>
+                <option value="water">Water (Blues)</option>
+            </select>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Controls
+        const explosionBtn = document.getElementById('explosion');
+        const radialBlastBtn = document.getElementById('radialBlast');
+        const fountainBtn = document.getElementById('fountain');
+        const trailBtn = document.getElementById('trail');
+        const particleCountSelect = document.getElementById('particleCount');
+        const particleColorSelect = document.getElementById('particleColor');
+
+        // Global variables
+        let particles = [];
+        let isMouseTrailActive = false;
+        let mouseX = 0;
+        let mouseY = 0;
+
+        // Particle class
+        class Particle {
+            constructor(x, y, type, colorScheme) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * 5 + 1;
+                this.speedX = 0;
+                this.speedY = 0;
+                this.type = type;
+                this.colorScheme = colorScheme;
+                this.life = 100;
+                this.gravity = 0.05;
+                this.friction = 0.99;
+                this.age = 0;
+                this.color = this.getColor();
+                
+                // Set initial velocities based on type
+                switch (type) {
+                    case 'explosion':
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = Math.random() * 6 + 2;
+                        this.speedX = Math.cos(angle) * speed;
+                        this.speedY = Math.sin(angle) * speed;
+                        this.life = Math.random() * 50 + 70;
+                        break;
+                    case 'radialBlast':
+                        const blastAngle = Math.random() * Math.PI * 2;
+                        // Radial blasts have more consistent speed
+                        const blastSpeed = Math.random() * 2 + 5;
+                        this.speedX = Math.cos(blastAngle) * blastSpeed;
+                        this.speedY = Math.sin(blastAngle) * blastSpeed;
+                        this.life = Math.random() * 30 + 50;
+                        this.gravity = 0;
+                        break;
+                    case 'fountain':
+                        this.speedX = (Math.random() - 0.5) * 3;
+                        this.speedY = Math.random() * -10 - 5; // Upward force
+                        this.life = Math.random() * 100 + 100;
+                        this.gravity = 0.2;
+                        break;
+                    case 'trail':
+                        const trailAngle = Math.random() * Math.PI * 2;
+                        const trailSpeed = Math.random() * 2 + 0.5;
+                        this.speedX = Math.cos(trailAngle) * trailSpeed;
+                        this.speedY = Math.sin(trailAngle) * trailSpeed;
+                        this.life = Math.random() * 30 + 20;
+                        this.size = Math.random() * 3 + 1;
+                        this.gravity = 0.01;
+                        break;
+                    case 'smoke':
+                        this.speedX = (Math.random() - 0.5) * 1;
+                        this.speedY = -Math.random() * 1 - 0.5; // Slow upward drift
+                        this.life = Math.random() * 150 + 100;
+                        this.gravity = -0.01; // Slight anti-gravity for upward movement
+                        this.size = Math.random() * 10 + 5;
+                        this.growFactor = 1.01; // Smoke expands as it rises
+                        this.opacity = Math.random() * 0.5 + 0.1; // Start semi-transparent
+                        break;
+                    case 'fire':
+                        this.speedX = (Math.random() - 0.5) * 2;
+                        this.speedY = -Math.random() * 3 - 2; // Upward movement
+                        this.life = Math.random() * 80 + 40;
+                        this.gravity = -0.02; // Flames rise
+                        this.size = Math.random() * 8 + 2;
+                        // Fire particles shrink as they rise
+                        this.shrinkFactor = 0.97;
+                        break;
+                    case 'ripple':
+                        const rippleAngle = Math.random() * Math.PI * 2;
+                        const rippleDistance = Math.random() * 2 + 3;
+                        this.speedX = Math.cos(rippleAngle) * rippleDistance;
+                        this.speedY = Math.sin(rippleAngle) * rippleDistance;
+                        this.speedDecay = 0.94; // Ripples slow down quickly
+                        this.life = Math.random() * 50 + 30;
+                        this.gravity = 0; // No gravity for water surface
+                        this.size = Math.random() * 4 + 1;
+                        this.opacity = Math.random() * 0.7 + 0.3;
+                        break;
+                    case 'vortex':
+                        // Start at random distance from center
+                        const distance = Math.random() * 100 + 50;
+                        const vortexAngle = Math.random() * Math.PI * 2;
+                        // Position particles in a circle
+                        this.x = x + Math.cos(vortexAngle) * distance;
+                        this.y = y + Math.sin(vortexAngle) * distance;
+                        // Initial speeds
+                        this.speedX = -Math.cos(vortexAngle) * (distance / 40);
+                        this.speedY = -Math.sin(vortexAngle) * (distance / 40);
+                        // Angular velocity - how fast it spins
+                        this.angularVel = (Math.random() * 0.2 + 0.1) * (Math.random() < 0.5 ? 1 : -1);
+                        this.centerX = x;
+                        this.centerY = y;
+                        this.angle = vortexAngle;
+                        this.life = Math.random() * 100 + 100;
+                        this.gravity = 0;
+                        this.size = Math.random() * 4 + 1;
+                        break;
+                }
+            }
+
+            getColor() {
+                switch(this.colorScheme) {
+                    case 'fire':
+                        const fireColors = ['#FF4500', '#FF6347', '#FF7F50', '#FFA500', '#FFD700'];
+                        return fireColors[Math.floor(Math.random() * fireColors.length)];
+                    case 'cool':
+                        const coolColors = ['#4169E1', '#6A5ACD', '#9370DB', '#8A2BE2', '#9932CC'];
+                        return coolColors[Math.floor(Math.random() * coolColors.length)];
+                    case 'rainbow':
+                        return `hsl(${Math.random() * 360}, 100%, 50%)`;
+                    case 'mono':
+                        return `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.5})`;
+                    case 'green':
+                        return `rgba(0, ${Math.floor(Math.random() * 150 + 100)}, 0, ${Math.random() * 0.5 + 0.5})`;
+                    case 'water':
+                        const waterColors = ['#0077be', '#4682b4', '#00bfff', '#87ceeb', '#b0e0e6'];
+                        return waterColors[Math.floor(Math.random() * waterColors.length)];
+                    default:
+                        return `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.5})`;
+                }
+            }
+
+            update() {
+                // Apply physics based on particle type
+                if (this.type === 'vortex') {
+                    // Update angle
+                    this.angle += this.angularVel;
+                    
+                    // Calculate distance from center
+                    const dx = this.x - this.centerX;
+                    const dy = this.y - this.centerY;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Gradually move toward center
+                    distance *= 0.98;
+                    
+                    // Update position based on angle and distance
+                    this.x = this.centerX + Math.cos(this.angle) * distance;
+                    this.y = this.centerY + Math.sin(this.angle) * distance;
+                    
+                    // Particles disappear as they reach center
+                    if (distance < 5) {
+                        this.age = this.life;
+                    }
+                } else {
+                    // Standard physics for other particle types
+                    if (this.type === 'ripple') {
+                        this.speedX *= this.speedDecay;
+                        this.speedY *= this.speedDecay;
+                    } else {
+                        this.speedX *= this.friction;
+                        this.speedY *= this.friction;
+                    }
+                    
+                    this.speedY += this.gravity;
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                }
+                
+                this.age++;
+                
+                // Fade out based on age
+                const lifeFactor = 1 - (this.age / this.life);
+                
+                if (lifeFactor <= 0) {
+                    return false; // Particle is dead
+                }
+                
+                // Special behaviors for different particle types
+                switch(this.type) {
+                    case 'smoke':
+                        // Smoke grows as it rises
+                        if (this.growFactor) {
+                            this.size *= this.growFactor;
+                        }
+                        break;
+                    case 'fire':
+                        // Fire shrinks as it rises
+                        if (this.shrinkFactor) {
+                            this.size *= this.shrinkFactor;
+                        }
+                        break;
+                    case 'trail':
+                    case 'fountain':
+                        // These particles shrink over time
+                        this.size = Math.max(0.5, this.size * lifeFactor);
+                        break;
+                }
+                
+                return true; // Particle is still alive
+            }
+
+            draw() {
+                // Calculate opacity based on life
+                let opacity = 1 - (this.age / this.life);
+                
+                // If particle has custom opacity, use that as a base
+                if (this.opacity !== undefined) {
+                    opacity *= this.opacity;
+                }
+                
+                // Different drawing based on particle type
+                switch(this.type) {
+                    case 'radialBlast':
+                        // Radial blast particles are lines
+                        ctx.beginPath();
+                        ctx.moveTo(this.x, this.y);
+                        ctx.lineTo(this.x - this.speedX * 2, this.y - this.speedY * 2);
+                        
+                        if (this.colorScheme === 'rainbow') {
+                            ctx.strokeStyle = `hsla(${(this.age * 3) % 360}, 100%, 50%, ${opacity})`;
+                        } else {
+                            ctx.strokeStyle = this.color.replace(')', `, ${opacity})`).replace('rgb', 'rgba');
+                        }
+                        
+                        ctx.lineWidth = this.size / 2;
+                        ctx.stroke();
+                        break;
+                        
+                    case 'smoke':
+                        // Smoke particles have blurred edges for a softer look
+                        const gradient = ctx.createRadialGradient(
+                            this.x, this.y, 0,
+                            this.x, this.y, this.size
+                        );
+                        
+                        // Calculate color based on scheme
+                        let smokeColor;
+                        if (this.colorScheme === 'mono') {
+                            smokeColor = `rgba(200, 200, 200, ${opacity})`;
+                        } else if (this.colorScheme === 'fire') {
+                            // Dark smoke for fire
+                            smokeColor = `rgba(50, 50, 50, ${opacity})`;
+                        } else {
+                            smokeColor = this.color.replace(')', `, ${opacity})`).replace('rgb', 'rgba');
+                        }
+                        
+                        gradient.addColorStop(0, smokeColor);
+                        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                        
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                        ctx.fillStyle = gradient;
+                        ctx.fill();
+                        break;
+                        
+                    case 'ripple':
+                        // Ripples are rings
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI * 2);
+                        ctx.strokeStyle = this.color.replace(')', `, ${opacity * 0.7})`).replace('rgb', 'rgba');
+                        ctx.lineWidth = this.size / 2;
+                        ctx.stroke();
+                        break;
+                        
+                    case 'fire':
+                        // Fire particles have gradient for a more realistic flame look
+                        const fireGradient = ctx.createRadialGradient(
+                            this.x, this.y, 0,
+                            this.x, this.y, this.size
+                        );
+                        
+                        // Inner core is brighter
+                        fireGradient.addColorStop(0, 'rgba(255, 255, 200, ' + opacity + ')');
+                        // Outer edge is the particle's color
+                        fireGradient.addColorStop(1, this.color.replace(')', `, ${opacity * 0.5})`).replace('rgb', 'rgba'));
+                        
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                        ctx.fillStyle = fireGradient;
+                        ctx.fill();
+                        break;
+                    
+                    default:
+                        // Default circular particles for other types
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                        
+                        if (this.colorScheme === 'rainbow' && this.type === 'explosion') {
+                            // For explosions with rainbow, make it change color over time
+                            ctx.fillStyle = `hsla(${(this.age * 3) % 360}, 100%, 50%, ${opacity})`;
+                        } else {
+                            // Use the color with adjusted opacity
+                            if (this.color.includes('rgba')) {
+                                const parts = this.color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([^)]+)\)/);
+                                if (parts) {
+                                    ctx.fillStyle = `rgba(${parts[1]}, ${parts[2]}, ${parts[3]}, ${opacity})`;
+                                } else {
+                                    ctx.fillStyle = this.color;
+                                }
+                            } else if (this.color.includes('rgb')) {
+                                ctx.fillStyle = this.color.replace(')', `, ${opacity})`).replace('rgb', 'rgba');
+                            } else {
+                                ctx.fillStyle = this.color;
+                            }
+                        }
+                        
+                        ctx.fill();
+                }
+            }
+        }
+
+        // Create particles function
+        function createParticles(x, y, type) {
+            const count = parseInt(particleCountSelect.value);
+            const colorScheme = particleColorSelect.value;
+            
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, type, colorScheme));
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            // Clear canvas with a semi-transparent black to create trail effect
+            // Use darker clearing for effects that need to fade quickly
+            const activeFireOrSmoke = particles.some(p => p.type === 'fire' || p.type === 'smoke');
+            ctx.fillStyle = activeFireOrSmoke ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Create trail particles if active
+            if (isMouseTrailActive) {
+                createParticles(mouseX, mouseY, 'trail');
+            }
+            
+            // Update and draw particles
+            particles = particles.filter(particle => {
+                particle.update();
+                particle.draw();
+                return particle.age < particle.life;
+            });
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Mouse movement for trail
+        canvas.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        // Click on canvas for explosion
+        canvas.addEventListener('click', (e) => {
+            createParticles(e.clientX, e.clientY, 'explosion');
+        });
+
+        // Button event listeners
+        explosionBtn.addEventListener('click', () => {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            createParticles(x, y, 'explosion');
+        });
+
+        radialBlastBtn.addEventListener('click', () => {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            createParticles(x, y, 'radialBlast');
+        });
+
+        fountainBtn.addEventListener('click', () => {
+            const x = Math.random() * canvas.width;
+            const y = canvas.height;
+            createParticles(x, y, 'fountain');
+        });
+
+        trailBtn.addEventListener('click', () => {
+            isMouseTrailActive = !isMouseTrailActive;
+            trailBtn.textContent = isMouseTrailActive ? 'Disable Mouse Trail' : 'Enable Mouse Trail';
+        });
+        
+        // New effect buttons
+        document.getElementById('smoke').addEventListener('click', () => {
+            const x = Math.random() * canvas.width;
+            const y = canvas.height - Math.random() * 100;
+            createParticles(x, y, 'smoke');
+        });
+        
+        document.getElementById('fire').addEventListener('click', () => {
+            const x = Math.random() * canvas.width;
+            const y = canvas.height - Math.random() * 50;
+            createParticles(x, y, 'fire');
+        });
+        
+        document.getElementById('ripple').addEventListener('click', () => {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            createParticles(x, y, 'ripple');
+        });
+        
+        document.getElementById('vortex').addEventListener('click', () => {
+            const x = canvas.width / 2 + (Math.random() - 0.5) * canvas.width * 0.8;
+            const y = canvas.height / 2 + (Math.random() - 0.5) * canvas.height * 0.8;
+            createParticles(x, y, 'vortex');
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
