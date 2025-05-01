@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Fiery Explosions</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        .instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions">Click anywhere to create explosions</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene setup with background
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        
+        // Create a smoky background
+        const smokeTexture = new THREE.TextureLoader().load('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/textures/planets/earth_clouds.jpg');
+        const smokeMaterial = new THREE.MeshLambertMaterial({
+            color: 0x222222,
+            map: smokeTexture,
+            transparent: true,
+            opacity: 0.4
+        });
+        
+        // Create background sphere
+        const smokeGeometry = new THREE.SphereGeometry(500, 32, 32);
+        const smoke = new THREE.Mesh(smokeGeometry, smokeMaterial);
+        smoke.scale.set(-1, 1, 1); // Invert the sphere so we see the texture from inside
+        scene.add(smoke);
+        
+        // Camera with wider FOV for dramatic effect
+        const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // Enhanced renderer with post-processing capabilities
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Camera positioning
+        camera.position.z = 15;
+
+        // Enhanced lighting for fire effects
+        
+        // Dim ambient light for base illumination
+        const ambientLight = new THREE.AmbientLight(0x111111);
+        scene.add(ambientLight);
+        
+        // Point light to simulate the glow of fire
+        const fireLight = new THREE.PointLight(0xFF5500, 2, 50, 2);
+        fireLight.position.set(0, 0, 5);
+        scene.add(fireLight);
+        
+        // Additional point lights for dynamic lighting
+        const redLight = new THREE.PointLight(0xFF0000, 1, 30, 2);
+        redLight.position.set(5, 0, 0);
+        scene.add(redLight);
+        
+        const yellowLight = new THREE.PointLight(0xFFAA00, 1, 30, 2);
+        yellowLight.position.set(-5, 0, 0);
+        scene.add(yellowLight);
+        
+        // Add fog for atmosphere
+        scene.fog = new THREE.FogExp2(0x000000, 0.01);
+
+        // Create raycaster for mouse interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Array to store active explosions
+        const explosions = [];
+
+        // Explosion class
+        class Explosion {
+            constructor(position) {
+                this.position = position;
+                this.particles = [];
+                this.age = 0;
+                this.maxAge = 2; // seconds
+                this.createParticles();
+            }
+
+            createParticles() {
+                // Create more particles for a denser fire effect
+                const particleCount = 200;
+                
+                // Create different particle types for more realistic fire
+                const particleTypes = [
+                    { size: [0.1, 0.3], count: 70, colors: [0xFFFF00, 0xFFAA00], emissive: 0.9, speed: 1.0 },    // Core/flame particles
+                    { size: [0.05, 0.15], count: 80, colors: [0xFF4500, 0xFF0000], emissive: 0.7, speed: 1.2 },  // Ember particles
+                    { size: [0.2, 0.5], count: 30, colors: [0x333333, 0x666666], emissive: 0.1, speed: 0.7 },    // Smoke particles
+                    { size: [0.02, 0.08], count: 20, colors: [0xFFFFFF, 0xFFFF99], emissive: 1.0, speed: 1.5 }   // Spark particles
+                ];
+                
+                // Distribution function to create interesting patterns
+                const distributionFunctions = [
+                    () => new THREE.Vector3(
+                        (Math.random() - 0.5) * 2, 
+                        Math.random() * 2 + 1, 
+                        (Math.random() - 0.5) * 2
+                    ),  // Upward column
+                    () => {
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = Math.random() * 2;
+                        return new THREE.Vector3(
+                            Math.cos(angle) * radius,
+                            Math.random() * 3,
+                            Math.sin(angle) * radius
+                        );
+                    }  // Circular pattern
+                ];
+                
+                // Create particles based on the types
+                let particlesCreated = 0;
+                for (const type of particleTypes) {
+                    for (let i = 0; i < type.count; i++) {
+                        // Create particle geometry - mix of shapes for variety
+                        let geometry;
+                        const shapeType = Math.random();
+                        
+                        if (shapeType < 0.6) {
+                            // Billboarded quad for flame particles
+                            geometry = new THREE.PlaneGeometry(
+                                Math.random() * (type.size[1] - type.size[0]) + type.size[0],
+                                Math.random() * (type.size[1] - type.size[0]) + type.size[0]
+                            );
+                        } else if (shapeType < 0.9) {
+                            // Sphere for embers
+                            geometry = new THREE.SphereGeometry(
+                                Math.random() * (type.size[1] - type.size[0]) + type.size[0],
+                                8, 8
+                            );
+                        } else {
+                            // Tetrahedron for sparks
+                            geometry = new THREE.TetrahedronGeometry(
+                                Math.random() * (type.size[1] - type.size[0]) + type.size[0]
+                            );
+                        }
+                        
+                        // Select color
+                        const color = type.colors[Math.floor(Math.random() * type.colors.length)];
+                        
+                        // Create material with glow effect
+                        const material = new THREE.MeshPhongMaterial({ 
+                            color: color,
+                            emissive: color,
+                            emissiveIntensity: type.emissive,
+                            transparent: true,
+                            opacity: 1,
+                            side: THREE.DoubleSide // Make both sides visible for billboarded quads
+                        });
+                        
+                        // Create particle mesh
+                        const particle = new THREE.Mesh(geometry, material);
+                        
+                        // Set initial position with small random offset
+                        particle.position.copy(this.position).add(
+                            new THREE.Vector3(
+                                (Math.random() - 0.5) * 0.5,
+                                (Math.random() - 0.5) * 0.5,
+                                (Math.random() - 0.5) * 0.5
+                            )
+                        );
+                        
+                        // Calculate velocity based on distribution function
+                        const baseVelocity = distributionFunctions[Math.floor(Math.random() * distributionFunctions.length)]();
+                        baseVelocity.multiplyScalar(5 * type.speed); // Scale velocity
+                        
+                        // Add turbulence to velocity
+                        const velocity = new THREE.Vector3(
+                            baseVelocity.x + (Math.random() - 0.5) * 5,
+                            baseVelocity.y + (Math.random() - 0.5) * 5,
+                            baseVelocity.z + (Math.random() - 0.5) * 5
+                        );
+                        
+                        // Random rotation for particles
+                        particle.rotation.set(
+                            Math.random() * Math.PI * 2,
+                            Math.random() * Math.PI * 2,
+                            Math.random() * Math.PI * 2
+                        );
+                        
+                        // Add to scene and store
+                        scene.add(particle);
+                        
+                        // Add additional properties specific to particle type
+                        this.particles.push({
+                            mesh: particle,
+                            velocity: velocity,
+                            drag: 0.95 + Math.random() * 0.04,
+                            rotationSpeed: new THREE.Vector3(
+                                (Math.random() - 0.5) * 2,
+                                (Math.random() - 0.5) * 2,
+                                (Math.random() - 0.5) * 2
+                            ),
+                            type: particleTypes.indexOf(type) // Store type index for update logic
+                        });
+                        
+                        particlesCreated++;
+                    }
+                }
+            }
+
+            update(deltaTime) {
+                this.age += deltaTime;
+                const normalizedAge = this.age / this.maxAge;
+                
+                // Update each particle with type-specific behavior
+                for (const particle of this.particles) {
+                    // Apply different physics based on particle type
+                    switch(particle.type) {
+                        case 0: // Core/flame particles
+                            // Flames rise faster with some turbulence
+                            particle.velocity.y += 1.0 * deltaTime; 
+                            particle.velocity.x += (Math.random() - 0.5) * deltaTime * 2;
+                            particle.velocity.z += (Math.random() - 0.5) * deltaTime * 2;
+                            
+                            // Flames flicker - oscillate scale
+                            const flickerAmount = Math.sin(this.age * 10 + particle.mesh.id) * 0.1 + 0.95;
+                            particle.mesh.scale.set(
+                                particle.mesh.scale.x * flickerAmount,
+                                particle.mesh.scale.y * flickerAmount, 
+                                particle.mesh.scale.z * flickerAmount
+                            );
+                            break;
+                            
+                        case 1: // Ember particles
+                            // Embers are affected by gravity
+                            particle.velocity.y -= 1.0 * deltaTime;
+                            
+                            // Embers pulse in brightness
+                            const pulseAmount = Math.sin(this.age * 15 + particle.mesh.id) * 0.2 + 0.8;
+                            particle.mesh.material.emissiveIntensity = 0.7 * pulseAmount;
+                            break;
+                            
+                        case 2: // Smoke particles
+                            // Smoke rises more slowly and spreads out
+                            particle.velocity.y += 0.5 * deltaTime;
+                            particle.velocity.x += (Math.random() - 0.5) * deltaTime;
+                            particle.velocity.z += (Math.random() - 0.5) * deltaTime;
+                            
+                            // Smoke grows over time
+                            particle.mesh.scale.multiplyScalar(1.01);
+                            break;
+                            
+                        case 3: // Spark particles
+                            // Sparks are heavily affected by gravity
+                            particle.velocity.y -= 3.0 * deltaTime;
+                            
+                            // Sparks fade more quickly
+                            if (normalizedAge > 0.3) {
+                                particle.mesh.material.opacity = 1 - (normalizedAge - 0.3) * (1 / 0.7);
+                            }
+                            break;
+                    }
+                    
+                    // Common updates for all particles
+                    
+                    // Update position based on velocity
+                    particle.mesh.position.x += particle.velocity.x * deltaTime;
+                    particle.mesh.position.y += particle.velocity.y * deltaTime;
+                    particle.mesh.position.z += particle.velocity.z * deltaTime;
+                    
+                    // Apply drag (different for each particle)
+                    particle.velocity.multiplyScalar(particle.drag);
+                    
+                    // Update rotation for more dynamic movement
+                    particle.mesh.rotation.x += particle.rotationSpeed.x * deltaTime;
+                    particle.mesh.rotation.y += particle.rotationSpeed.y * deltaTime;
+                    particle.mesh.rotation.z += particle.rotationSpeed.z * deltaTime;
+                    
+                    // Make billboarded particles face the camera (for flame quads)
+                    if (particle.type === 0 && particle.mesh.geometry.type === 'PlaneGeometry') {
+                        particle.mesh.lookAt(camera.position);
+                    }
+                    
+                    // General fade out based on age (except for smoke which fades differently)
+                    if (particle.type !== 2) {
+                        if (normalizedAge > 0.6) {
+                            particle.mesh.material.opacity = 1 - (normalizedAge - 0.6) * (1 / 0.4);
+                        }
+                    } else {
+                        // Smoke fades throughout lifetime
+                        particle.mesh.material.opacity = 1 - normalizedAge * 0.8;
+                    }
+                    
+                    // Color shift as particles age (for fire particles)
+                    if (particle.type === 0) {
+                        // Shift from yellow to red as they age
+                        const colorProgress = Math.min(normalizedAge * 2, 1);
+                        const color = new THREE.Color().lerpColors(
+                            new THREE.Color(0xFFFF00), // Start color (yellow)
+                            new THREE.Color(0xFF0000), // End color (red)
+                            colorProgress
+                        );
+                        particle.mesh.material.color.set(color);
+                        particle.mesh.material.emissive.set(color);
+                    }
+                }
+            }
+
+            isDead() {
+                return this.age >= this.maxAge;
+            }
+
+            dispose() {
+                // Remove all particles from scene and dispose resources
+                for (const particle of this.particles) {
+                    scene.remove(particle.mesh);
+                    particle.mesh.geometry.dispose();
+                    particle.mesh.material.dispose();
+                }
+                this.particles = [];
+            }
+        }
+
+        // Handle mouse click
+        function onMouseClick(event) {
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Use raycaster to find click position in 3D space
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Get point 10 units away from camera in click direction
+            const position = new THREE.Vector3();
+            raycaster.ray.at(10, position);
+            
+            // Create explosion at that position
+            const explosion = new Explosion(position);
+            explosions.push(explosion);
+        }
+
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Add event listeners
+        window.addEventListener('click', onMouseClick, false);
+        window.addEventListener('resize', onWindowResize, false);
+
+        // Add animated background elements for depth
+        const backgroundElements = [];
+        
+        // Create distant embers/particles floating in the background
+        function createBackgroundEmbers() {
+            for (let i = 0; i < 50; i++) {
+                const size = Math.random() * 0.2 + 0.05;
+                const geometry = new THREE.SphereGeometry(size, 8, 8);
+                
+                // Create ember with fire colors
+                const emberColor = new THREE.Color().setHSL(
+                    0.05 + Math.random() * 0.05, // Red-orange hue
+                    0.7 + Math.random() * 0.3,   // High saturation
+                    0.3 + Math.random() * 0.4    // Varying brightness
+                );
+                
+                const material = new THREE.MeshBasicMaterial({
+                    color: emberColor,
+                    transparent: true,
+                    opacity: 0.2 + Math.random() * 0.5
+                });
+                
+                const ember = new THREE.Mesh(geometry, material);
+                
+                // Position randomly in 3D space, but further away
+                ember.position.set(
+                    (Math.random() - 0.5) * 100,
+                    (Math.random() - 0.5) * 100,
+                    (Math.random() - 0.5) * 100 - 50 // Push back
+                );
+                
+                // Add movement properties
+                const speed = Math.random() * 0.2 + 0.1;
+                const direction = new THREE.Vector3(
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2, 
+                    (Math.random() - 0.5) * 2
+                ).normalize();
+                
+                scene.add(ember);
+                backgroundElements.push({
+                    mesh: ember,
+                    speed: speed,
+                    direction: direction,
+                    pulseSpeed: 1 + Math.random() * 2
+                });
+            }
+        }
+        
+        createBackgroundEmbers();
+        
+        // Update dynamic lights position
+        function updateLights(time) {
+            // Move fire lights to random active explosion if any exist
+            if (explosions.length > 0) {
+                const targetExplosion = explosions[Math.floor(Math.random() * explosions.length)];
+                fireLight.position.copy(targetExplosion.position);
+                
+                // Red and yellow lights orbit around the explosion
+                const angle = time * 2;
+                redLight.position.x = targetExplosion.position.x + Math.sin(angle) * 3;
+                redLight.position.y = targetExplosion.position.y + Math.cos(angle) * 3;
+                redLight.position.z = targetExplosion.position.z;
+                
+                yellowLight.position.x = targetExplosion.position.x + Math.sin(angle + Math.PI) * 3;
+                yellowLight.position.y = targetExplosion.position.y + Math.cos(angle + Math.PI) * 3;
+                yellowLight.position.z = targetExplosion.position.z;
+                
+                // Pulse the light intensity for fire effect
+                const pulseValue = Math.sin(time * 10) * 0.5 + 1.5;
+                fireLight.intensity = pulseValue * 2;
+                redLight.intensity = pulseValue;
+                yellowLight.intensity = pulseValue * 1.2;
+            } else {
+                // Default positions when no explosions
+                fireLight.position.set(0, 0, 5);
+                redLight.position.set(5, 0, 0);
+                yellowLight.position.set(-5, 0, 0);
+            }
+        }
+        
+        // Animation loop with enhanced effects
+        let lastTime = 0;
+        function animate(time) {
+            const currentTime = time / 1000; // Convert to seconds
+            const deltaTime = Math.min(currentTime - lastTime, 0.1); // Cap delta time
+            lastTime = currentTime;
+            
+            // Update background elements
+            for (const element of backgroundElements) {
+                // Move in set direction
+                element.mesh.position.addScaledVector(element.direction, element.speed * deltaTime);
+                
+                // Pulse opacity for ember effect
+                element.mesh.material.opacity = (Math.sin(currentTime * element.pulseSpeed) * 0.3 + 0.5) * 
+                                              (0.2 + Math.random() * 0.1);
+                
+                // Wrap around if too far
+                if (element.mesh.position.length() > 100) {
+                    const reversedDir = element.direction.clone().multiplyScalar(-1);
+                    element.mesh.position.addScaledVector(reversedDir, 180);
+                }
+            }
+            
+            // Rotate environment for subtle movement
+            smoke.rotation.x = currentTime * 0.01;
+            smoke.rotation.y = currentTime * 0.02;
+            
+            // Update dynamic lighting
+            updateLights(currentTime);
+            
+            // Update explosions
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].update(deltaTime);
+                
+                // Remove dead explosions
+                if (explosions[i].isDead()) {
+                    explosions[i].dispose();
+                    explosions.splice(i, 1);
+                }
+            }
+            
+            // Rotate camera in a more interesting pattern
+            camera.position.x = Math.sin(currentTime * 0.2) * 15;
+            camera.position.y = Math.sin(currentTime * 0.1) * 5;
+            camera.position.z = Math.cos(currentTime * 0.2) * 15 + 10;
+            camera.lookAt(0, 0, 0);
+            
+            // Render scene
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        // Start animation
+        animate(0);
+    </script>
+</body>
+</html>
