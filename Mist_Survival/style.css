@@ -1,0 +1,137 @@
+/* Basic Reset */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    background-color: #222; /* Fallback background */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+canvas {
+    display: block; /* Remove extra space below canvas */
+}
+
+/* --- UI --- */
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to go through to the canvas */
+    color: white;
+    text-shadow: 1px 1px 2px black;
+}
+
+#stats {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 0.9em;
+    pointer-events: auto; /* Stats block can be interacted with if needed */
+}
+
+#stats div {
+    margin-bottom: 5px;
+}
+#stats span {
+    font-weight: bold;
+    min-width: 30px;
+    display: inline-block;
+    text-align: right;
+    margin-left: 5px;
+}
+
+#message-log {
+    position: absolute;
+    bottom: 150px; /* Adjusted position */
+    left: 10px;
+    width: 300px;
+    max-height: 150px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 0.8em;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    pointer-events: auto;
+}
+
+#message-log div {
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 4px;
+}
+#message-log div:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+/* Basic Crosshair Example */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Add styles for Menus (Inventory, Crafting) --- */
+/* Example: Simple popup */
+.menu-popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(10, 10, 20, 0.9);
+    border: 1px solid rgba(100, 100, 200, 0.8);
+    padding: 20px;
+    border-radius: 10px;
+    display: none; /* Hidden by default */
+    pointer-events: auto; /* Make menus interactive */
+    min-width: 300px;
+    max-height: 80vh;
+    overflow-y: auto;
+    color: #eee;
+}
+
+.menu-popup h2 {
+    margin-top: 0;
+    color: #aabbee;
+    border-bottom: 1px solid #aabbee;
+    padding-bottom: 10px;
+}
+
+/* Basic button style */
+button {
+    background-color: #4455aa;
+    color: white;
+    border: 1px solid #7788cc;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 5px;
+    pointer-events: auto; /* Ensure buttons are clickable */
+    transition: background-color 0.2s ease;
+}
+
+button:hover {
+    background-color: #5566bb;
+}
+
+button:active {
+    background-color: #334499;
+}
+
+/* You would need much more detailed CSS for inventory grids, crafting recipes, etc. */

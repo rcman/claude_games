@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Added viewport meta tag -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mist Survival Concept (HTML5) - Modular</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* --- Basic Reset & Body --- */
+        * { box-sizing: border-box; }
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; color: white; }
+        canvas { display: block; /* Ensure canvas takes up space */ }
+
+        /* --- UI Containers & Overlays --- */
+        #ui-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; /* Clicks pass through by default */ text-shadow: 1px 1px 2px black; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background-color: rgba(255, 255, 255, 0.5); border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; }
+
+        /* --- HUD Elements --- */
+        .hud-element { background: rgba(0, 0, 0, 0.65); padding: 8px 12px; border-radius: 5px; font-size: 0.9em; pointer-events: auto; /* Allow interaction if needed */ }
+        #stats { position: absolute; bottom: 10px; left: 10px; }
+        #stats div { margin-bottom: 4px; }
+        #stats span { font-weight: bold; min-width: 30px; display: inline-block; text-align: right; margin-left: 5px; }
+        #message-log { position: absolute; bottom: 100px; /* Adjusted to make space */ left: 10px; width: 350px; max-height: 120px; overflow-y: auto; /* Enable scrolling */ border: 1px solid rgba(255, 255, 255, 0.1); line-height: 1.4; }
+        #message-log div { margin-bottom: 3px; padding-bottom: 3px; border-bottom: 1px dotted rgba(255, 255, 255, 0.2); font-size: 0.85em;}
+        #message-log div:last-child { border-bottom: none; }
+        #equipped-item { position: absolute; bottom: 10px; right: 10px; text-align: right; }
+        #crafting-progress { position: absolute; bottom: 130px; /* Position above message log */ left: 50%; transform: translateX(-50%); width: 250px; height: 22px; border: 1px solid #aaa; border-radius: 4px; display: none; /* Hidden initially */ z-index: 20; }
+        #crafting-progress-fill { width: 0%; height: 100%; background-color: #68a2ff; text-align: center; line-height: 22px; font-size: 0.8em; color: black; transition: width 0.1s linear; border-radius: 3px; }
+        #vehicle-ui { position: absolute; bottom: 10px; right: 150px; /* Position next to equipped */ display: none; /* Hidden initially */ }
+
+        /* --- Menu Panel Styling --- */
+        .menu-popup { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20, 25, 40, 0.97); border: 2px solid rgba(120, 140, 200, 0.8); padding: 25px; border-radius: 10px; display: none; /* Hidden by default */ pointer-events: auto; /* Make menus interactive */ min-width: 400px; max-width: 60vw; max-height: 75vh; overflow-y: auto; color: #eee; z-index: 100; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .menu-popup h2 { margin-top: 0; color: #b0c4ff; border-bottom: 1px solid #b0c4ff; padding-bottom: 10px; }
+        .menu-popup ul { list-style: none; padding: 0; margin: 15px 0; }
+        .menu-popup li { margin-bottom: 12px; padding: 8px; border-bottom: 1px solid #333a50; display: flex; justify-content: space-between; align-items: center; }
+        .menu-popup button { background-color: #4a5a9a; color: white; border: 1px solid #7a8acc; padding: 6px 12px; border-radius: 5px; cursor: pointer; margin-left: 8px; transition: background-color 0.2s ease; font-size: 0.9em;}
+        .menu-popup button:hover { background-color: #5a6abc; }
+        .menu-popup button:disabled { background-color: #555; color: #aaa; cursor: not-allowed; border-color: #777; }
+        .menu-popup .close-button { position: absolute; top: 15px; right: 15px; background: #b55; border-color: #d88; font-weight: bold; padding: 4px 8px; }
+        .menu-popup .close-button:hover { background: #c66; }
+
+        /* --- Full Screen Effects --- */
+        #damage-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, rgba(255,0,0,0) 0%, rgba(200,0,0,0.5) 100%); opacity: 0; transition: opacity 0.3s ease-out; pointer-events: none; z-index: 90; display: none; /* JS controls display */ }
+        #damage-indicator.active { display: block; opacity: 1; }
+        #loading-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #181818; color: white; z-index: 200; display: flex; /* Shows initially */ justify-content: center; align-items: center; flex-direction: column; }
+        #loading-status { margin-bottom: 15px; font-size: 1.1em; }
+        #loading-progress { width: 70%; max-width: 500px; height: 25px; background-color: #333; border: 1px solid #777; border-radius: 3px; overflow: hidden; /* Hide overflow */ }
+        #loading-progress-fill { width: 0%; height: 100%; background-color: #ddd; transition: width 0.2s linear; }
+
+    </style>
+</head>
+<body>
+    <!-- Game Rendering Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Main UI Overlay Container -->
+    <div id="ui-container">
+
+        <!-- Crosshair -->
+        <div id="crosshair"></div>
+
+        <!-- Player Stats HUD (Bottom Left) -->
+        <div id="stats" class="hud-element">
+            <!-- Time/Mist Status -->
+            <div>Time: <span id="time-value">00:00</span> | Mist: <span id="mist-status" style="color:lime;">Clear</span></div>
+            <hr style="border-color: rgba(255,255,255,0.2); margin: 4px 0;">
+            <!-- Core Stats -->
+            <div>Health: <span id="health-value">100</span></div>
+            <div>Stamina: <span id="stamina-value">100</span></div>
+            <div>Hunger: <span id="hunger-value">0</span></div>
+            <div>Thirst: <span id="thirst-value">0</span></div>
+            <div>Fatigue: <span id="fatigue-value">0</span></div>
+            <hr style="border-color: rgba(255,255,255,0.2); margin: 4px 0;">
+            <!-- Build Mode Status -->
+             <div>Build Mode: <span id="build-mode-status" style="color:gray;">Off</span></div>
+        </div>
+
+        <!-- Message Log -->
+        <div id="message-log" class="hud-element">
+            <!-- Messages added by ui.js -->
+        </div>
+
+        <!-- Equipped Item Display (Bottom Right) -->
+        <div id="equipped-item" class="hud-element">Hands</div>
+
+         <!-- Crafting Progress Indicator -->
+         <div id="crafting-progress">
+             <div id="crafting-progress-fill">0%</div>
+         </div>
+
+         <!-- Vehicle UI (Hidden Initially) -->
+         <div id="vehicle-ui" class="hud-element">
+            <div>Speed: <span id="vehicle-speed">0</span> km/h</div>
+            <div>Fuel: <span id="vehicle-fuel">0</span> / <span id="vehicle-max-fuel">0</span></div>
+             <!-- Add Vehicle Health? -->
+             <!-- <div>Health: <span id="vehicle-health">100</span>%</div> -->
+         </div>
+
+    </div> <!-- End #ui-container -->
+
+    <!-- Popup Menus / Panels (Initially Hidden) -->
+    <div id="inventory-panel" class="menu-popup">
+        <h2>Inventory</h2>
+        <!-- Content populated by ui.js -->
+        <button class="close-button" onclick="document.getElementById('inventory-panel').style.display='none';">X</button> <!-- Basic close inline -->
+    </div>
+
+    <div id="crafting-panel" class="menu-popup">
+        <h2>Crafting</h2>
+        <!-- Content populated by ui.js -->
+         <button class="close-button" onclick="document.getElementById('crafting-panel').style.display='none';">X</button>
+    </div>
+
+     <div id="build-panel" class="menu-popup">
+        <h2>Build Menu</h2>
+        <!-- Content populated by ui.js -->
+         <button class="close-button" onclick="document.getElementById('build-panel').style.display='none';">X</button>
+    </div>
+
+    <!-- Pause Menu (Example) -->
+     <div id="pause-menu" class="menu-popup">
+        <h2>Paused</h2>
+        <ul>
+             <li><button id="resume-button">Resume</button></li>
+             <li><button id="save-button">Save Game</button></li>
+             <li><button id="load-button">Load Game</button></li>
+             <li><button id="quit-button">Quit (placeholder)</button></li>
+        </ul>
+         <!-- No explicit close button needed if resume handles it -->
+    </div>
+
+    <!-- Full Screen Effects -->
+    <div id="damage-indicator"></div>
+    <div id="loading-screen">
+        <h2>Loading Assets...</h2>
+        <div id="loading-status">Initializing...</div>
+        <div id="loading-progress">
+            <div id="loading-progress-fill"></div>
+        </div>
+    </div>
+
+    <!-- Load Libraries -->
+    <!-- Make sure path is correct relative to index.html -->
+    <!-- Using local copy as in previous example -->
+    <script src="three.min.js"></script>
+
+    <!-- Load Main Game Script as a Module -->
+    <!-- This script handles importing all game logic files -->
+    <script type="module" src="main.js"></script>
+
+</body>
+</html>
