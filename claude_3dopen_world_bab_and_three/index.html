@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>3D Open-World Survival Game</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            touch-action: none;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #loadingScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #ui {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #notification {
+            position: absolute;
+            left: 50%;
+            top: 20%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+            transition: opacity 0.5s;
+        }
+        #inventory {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            width: 200px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .resource {
+            margin: 5px 0;
+        }
+        #craftingMenu {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .craftButton {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        /* Progress bars for health, hunger, thirst */
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            margin-top: 3px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s;
+        }
+        
+        .health-bar-fill {
+            background-color: #e74c3c;
+        }
+        
+        .hunger-bar-fill {
+            background-color: #f39c12;
+        }
+        
+        .thirst-bar-fill {
+            background-color: #3498db;
+        }
+    </style>
+    <!-- Import BabylonJS -->
+    <script src="babylon.js"></script>
+    <script src="babylonjs.loaders.min.js"></script>
+    <script src="babylonjs-gui.min.js"></script>
+    <script src="babylonjs-materials.min.js"></script>
+    <!-- Import Three.js for Water - we'll use it alongside BabylonJS -->
+    <script src="three.min.js"></script>
+</head>
+
+<body>
+    <div id="loadingScreen">Loading World...</div>
+    <canvas id="renderCanvas"></canvas>
+    <div id="controls">
+        WASD - Move | Mouse - Look | E - Interact/Harvest<br>
+        I - Inventory | C - Crafting | F - Toggle Fog<br>
+        Left Click - Attack/Use Tool
+    </div>
+    <div id="ui">
+        Health: <span id="health">100</span>
+        <div class="progress-bar">
+            <div id="healthBar" class="progress-bar-fill health-bar-fill" style="width: 100%"></div>
+        </div>
+        
+        Hunger: <span id="hunger">100</span>
+        <div class="progress-bar">
+            <div id="hungerBar" class="progress-bar-fill hunger-bar-fill" style="width: 100%"></div>
+        </div>
+        
+        Thirst: <span id="thirst">100</span>
+        <div class="progress-bar">
+            <div id="thirstBar" class="progress-bar-fill thirst-bar-fill" style="width: 100%"></div>
+        </div>
+        
+        Time: <span id="gameTime">Day</span>
+    </div>
+    <div id="inventory"></div>
+    <div id="craftingMenu">
+        <h3>Crafting</h3>
+        <div id="craftingItems"></div>
+        <button onclick="toggleCrafting()">Close</button>
+    </div>
+    <div id="notification"></div>
+    
+    <script>
+        // Game Configuration
+        const CONFIG = {
+            worldSize: 1000,
+            treeDensity: 0.0008,
+            rockDensity: 0.0006,
+            grassDensity: 0.002,
+            ironOreDensity: 0.0003,
+            zincOreDensity: 0.0003,
+            copperOreDensity: 0.0003,
+            scrapMetalDensity: 0.0004,
+            chickenDensity: 0.0002,
+            rabbitDensity: 0.0003,
+            deerDensity: 0.0001,
+            barrelDensity: 0.0002,
+            waterLevel: -5,
+            fogEnabled: true,
+            fogDensity: 0.005,
+            dayLength: 600, // in seconds
+        };
+        
+        // Game state
+        const gameState = {
+            isLoaded: false,
+            inventory: {
+                wood: 0,
+                stone: 0,
+                grass: 0,
+                ironOre: 0,
+                zincOre: 0,
+                copperOre: 0,
+                scrapMetal: 0,
+                meat: 0,
+                fat: 0,
+                leather: 0,
+                feathers: 0,
+            },
+            tools: {
+                axe: true,
+                pickaxe: true,
+                knife: true,
+                canteen: true
+            },
+            health: 100,
+            hunger: 100,
+            thirst: 100,
+            gameTime: 0,
+            isDaytime: true,
+            isInventoryOpen: false,
+            isCraftingOpen: false
+        };
+        
+        // Crafting recipes
+        const craftingRecipes = [
+            {
+                name: "Campfire",
+                requirements: { wood: 10, stone: 5 },
+                result: "campfire",
+                placeable: true,
+                description: "Place on the ground to cook food and stay warm"
+            },
+            {
+                name: "Wooden Wall",
+                requirements: { wood: 15 },
+                result: "woodenWall",
+                placeable: true,
+                description: "Basic building material for creating structures"
+            },
+            {
+                name: "Storage Box",
+                requirements: { wood: 8, stone: 2 },
+                result: "storageBox",
+                placeable: true,
+                description: "Store excess resources and items"
+            },
+            {
+                name: "Rope",
+                requirements: { grass: 5 },
+                result: "rope",
+                placeable: false,
+                description: "Crafting material for more advanced items"
+            },
+            {
+                name: "Metal Ingot",
+                requirements: { ironOre: 2, scrapMetal: 1 },
+                result: "metalIngot",
+                placeable: false,
+                description: "Refined metal for crafting tools and structures"
+            }
+        ];
+
+        // Entity tracking
+        let entities = {
+            trees: [],
+            rocks: [],
+            ores: [],
+            animals: [],
+            barrels: [],
+            grass: [],
+            placedItems: []
+        };
+        
+        // Cached meshes for performance
+        let cachedMeshes = {};
+        
+        // Initialize BabylonJS
+        const canvas = document.getElementById("renderCanvas");
+        const engine = new BABYLON.Engine(canvas, true);
+        const scene = new BABYLON.Scene(engine);
+        
+        // Main game creation function
+        const createGame = function() {
+            // Setup camera and controls
+            const camera = new BABYLON.UniversalCamera("playerCamera", new BABYLON.Vector3(0, 2, -10), scene);
+            camera.setTarget(new BABYLON.Vector3(0, 2, 0));
+            camera.attachControl(canvas, true);
+            camera.inertia = 0.3;
+            camera.speed = 0.5;
+            camera.angularSensibility = 1000;
+            camera.applyGravity = true;
+            camera.checkCollisions = true;
+            camera.ellipsoid = new BABYLON.Vector3(1, 1, 1);
+            
+            // First-person controls setup
+            camera.keysUp = [87]; // W
+            camera.keysDown = [83]; // S
+            camera.keysLeft = [65]; // A
+            camera.keysRight = [68]; // D
+            camera.keysUpward = [32]; // Space
+            camera.keysDownward = [16]; // Shift
+            
+            // Player movement and collision
+            const playerCollider = BABYLON.MeshBuilder.CreateBox("playerCollider", {
+                width: 1, height: 2, depth: 1
+            }, scene);
+            playerCollider.isVisible = false;
+            playerCollider.position = new BABYLON.Vector3(0, 1, 0);
+            playerCollider.checkCollisions = true;
+            
+            // Link camera to player collider
+            camera.parent = playerCollider;
+            camera.position = new BABYLON.Vector3(0, 1, 0);
+            
+            // Lighting
+            const hemisphericLight = new BABYLON.HemisphericLight("hemisphericLight", new BABYLON.Vector3(0, 1, 0), scene);
+            hemisphericLight.intensity = 0.7;
+            
+            const directionalLight = new BABYLON.DirectionalLight("directionalLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
+            directionalLight.intensity = 0.7;
+
+            // Create ground
+            const ground = createTerrain(scene);
+            ground.checkCollisions = true;
+            
+            // Skybox
+            const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size: 1000.0}, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial("skyBoxMaterial", scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://playground.babylonjs.com/textures/skybox", scene);
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
+            
+            // Add fog
+            scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+            scene.fogColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+            scene.fogDensity = CONFIG.fogDensity;
+            
+            // Create water
+            createWater(scene, CONFIG.waterLevel);
+            
+            // Populate world
+            populateWorld(scene);
+            
+            // Interaction system
+            setupInteractionSystem(scene, camera);
+            
+            // Day/Night cycle
+            setupDayNightCycle(scene, hemisphericLight, directionalLight);
+            
+            // UI Updates
+            updateUI();
+            
+            // Hide loading screen
+            document.getElementById("loadingScreen").style.display = "none";
+            gameState.isLoaded = true;
+        };
+        
+        // Create procedural terrain
+        function createTerrain(scene) {
+            // Create simple ground for now
+            // In a full implementation, this would use height maps or procedural generation
+            const groundOptions = {
+                width: CONFIG.worldSize,
+                height: CONFIG.worldSize,
+                subdivisions: a = 100,
+                minHeight: 0,
+                maxHeight: 30,
+                updatable: true
+            };
+            
+            // Create ground mesh
+            const ground = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
+                "ground", 
+                "data:image/png;base64,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", 
+                groundOptions, 
+                scene
+            );
+            
+            // Ground material
+            const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
+            groundMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.7, 0.3);
+            ground.material = groundMaterial;
+            
+            return ground;
+        }
+        
+        // Create water using Three.js Water
+        function createWater(scene, waterLevel) {
+            // Create a simple water plane for now
+            // In a full implementation, this would use Three.js Water
+            const waterMesh = BABYLON.MeshBuilder.CreateGround(
+                "water", 
+                {width: CONFIG.worldSize * 1.5, height: CONFIG.worldSize * 1.5, subdivisions: 1}, 
+                scene
+            );
+            waterMesh.position.y = waterLevel;
+            
+            // Water material
+            const waterMaterial = new BABYLON.StandardMaterial("waterMaterial", scene);
+            waterMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.3, 0.7);
+            waterMaterial.alpha = 0.8;
+            waterMesh.material = waterMaterial;
+            
+            return waterMesh;
+        }
+        
+        // Populate world with trees, rocks, resources, etc.
+        function populateWorld(scene) {
+            // Create and cache basic shapes for resources
+            cachedMeshes.tree = createTreeMesh(scene);
+            cachedMeshes.rock = createRockMesh(scene);
+            cachedMeshes.grass = createGrassMesh(scene);
+            cachedMeshes.ironOre = createOreMesh(scene, new BABYLON.Color3(0.6, 0.6, 0.6)); // gray
+            cachedMeshes.zincOre = createOreMesh(scene, new BABYLON.Color3(0.8, 0.8, 0.9)); // light gray-blue
+            cachedMeshes.copperOre = createOreMesh(scene, new BABYLON.Color3(0.8, 0.5, 0.2)); // copper color
+            cachedMeshes.scrapMetal = createScrapMesh(scene);
+            cachedMeshes.chicken = createAnimalMesh(scene, 0.5); // smaller
+            cachedMeshes.rabbit = createAnimalMesh(scene, 0.4); // smallest
+            cachedMeshes.deer = createAnimalMesh(scene, 0.8); // largest
+            cachedMeshes.barrel = createBarrelMesh(scene);
+            cachedMeshes.campfire = createCampfireMesh(scene);
+            cachedMeshes.woodenWall = createWallMesh(scene);
+            cachedMeshes.storageBox = createStorageBoxMesh(scene);
+            
+            // Hide the cached meshes
+            for (const mesh in cachedMeshes) {
+                cachedMeshes[mesh].isVisible = false;
+            }
+            
+            // Generate random positions for all resources
+            generateResources(scene);
+        }
+        
+        // Generate simple placeholder meshes for resources
+        function createTreeMesh(scene) {
+            // Trunk
+            const trunk = BABYLON.MeshBuilder.CreateCylinder("trunk", {
+                height: 6, 
+                diameter: 1
+            }, scene);
+            
+            // Foliage
+            const foliage = BABYLON.MeshBuilder.CreateSphere("foliage", {
+                segments: 8,
+                diameter: 6
+            }, scene);
+            foliage.position.y = 5;
+            foliage.scaling.y = 1.5;
+            
+            // Materials
+            const trunkMaterial = new BABYLON.StandardMaterial("trunkMaterial", scene);
+            trunkMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.3, 0.2);
+            trunk.material = trunkMaterial;
+            
+            const foliageMaterial = new BABYLON.StandardMaterial("foliageMaterial", scene);
+            foliageMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.6, 0.3);
+            foliage.material = foliageMaterial;
+            
+            // Merge meshes
+            const tree = BABYLON.Mesh.MergeMeshes([trunk, foliage], true, true);
+            tree.name = "tree";
+            return tree;
+        }
+        
+        function createRockMesh(scene) {
+            const rock = BABYLON.MeshBuilder.CreateSphere("rock", {
+                segments: 5,
+                diameter: 2
+            }, scene);
+            
+            // Make it look more like a rock by scaling
+            rock.scaling = new BABYLON.Vector3(1, 0.7, 0.8);
+            
+            // Rock material
+            const rockMaterial = new BABYLON.StandardMaterial("rockMaterial", scene);
+            rockMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+            rock.material = rockMaterial;
+            
+            return rock;
+        }
+        
+        function createGrassMesh(scene) {
+            // Simple billboard grass
+            const grass = BABYLON.MeshBuilder.CreatePlane("grass", {
+                width: 1, 
+                height: 1
+            }, scene);
+            
+            // Grass material
+            const grassMaterial = new BABYLON.StandardMaterial("grassMaterial", scene);
+            grassMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.8, 0.2);
+            grass.material = grassMaterial;
+            
+            return grass;
+        }
+        
+        function createOreMesh(scene, color) {
+            const ore = BABYLON.MeshBuilder.CreateSphere("ore", {
+                segments: 5,
+                diameter: 1.5
+            }, scene);
+            
+            // Make it look more like an ore deposit
+            ore.scaling = new BABYLON.Vector3(1, 0.5, 0.8);
+            
+            // Ore material
+            const oreMaterial = new BABYLON.StandardMaterial("oreMaterial", scene);
+            oreMaterial.diffuseColor = color;
+            oreMaterial.specularColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+            ore.material = oreMaterial;
+            
+            return ore;
+        }
+        
+        function createScrapMesh(scene) {
+            // Simple scrap metal pile
+            const scrap = BABYLON.MeshBuilder.CreateBox("scrap", {
+                width: 1.5, 
+                height: 0.5, 
+                depth: 1.5
+            }, scene);
+            
+            // Scrap material
+            const scrapMaterial = new BABYLON.StandardMaterial("scrapMaterial", scene);
+            scrapMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+            scrapMaterial.specularColor = new BABYLON.Color3(0.7, 0.7, 0.7);
+            scrap.material = scrapMaterial;
+            
+            return scrap;
+        }
+        
+        function createAnimalMesh(scene, size) {
+            // Simple animal placeholder
+            const body = BABYLON.MeshBuilder.CreateSphere("animalBody", {
+                segments: 8,
+                diameter: 1 * size
+            }, scene);
+            
+            const head = BABYLON.MeshBuilder.CreateSphere("animalHead", {
+                segments: 8,
+                diameter: 0.5 * size
+            }, scene);
+            head.position.z = 0.7 * size;
+            head.position.y = 0.2 * size;
+            
+            // Materials
+            const animalMaterial = new BABYLON.StandardMaterial("animalMaterial", scene);
+            animalMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.7, 0.5);
+            body.material = animalMaterial;
+            head.material = animalMaterial;
+            
+            // Merge meshes
+            const animal = BABYLON.Mesh.MergeMeshes([body, head], true, true);
+            animal.name = "animal";
+            return animal;
+        }
+        
+        function createBarrelMesh(scene) {
+            const barrel = BABYLON.MeshBuilder.CreateCylinder("barrel", {
+                height: 1.5, 
+                diameter: 1
+            }, scene);
+            
+            // Barrel material
+            const barrelMaterial = new BABYLON.StandardMaterial("barrelMaterial", scene);
+            barrelMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+            barrel.material = barrelMaterial;
+            
+            return barrel;
+        }
+        
+        function createCampfireMesh(scene) {
+            // Logs
+            const logs = BABYLON.MeshBuilder.CreateCylinder("logs", {
+                height: 0.3, 
+                diameter: 1.5
+            }, scene);
+            
+            // Stones around the campfire
+            const stones = [];
+            for (let i = 0; i < 8; i++) {
+                const stone = BABYLON.MeshBuilder.CreateSphere(`stone${i}`, {
+                    segments: 4,
+                    diameter: 0.3
+                }, scene);
+                const angle = i * Math.PI / 4;
+                stone.position.x = Math.cos(angle) * 0.8;
+                stone.position.z = Math.sin(angle) * 0.8;
+                stone.position.y = -0.1;
+                stones.push(stone);
+            }
+            
+            // Fire
+            const fire = BABYLON.MeshBuilder.CreateCylinder("fire", {
+                height: 0.5, 
+                diameter: 0.8,
+                diameterTop: 0
+            }, scene);
+            fire.position.y = 0.4;
+            
+            // Materials
+            const logMaterial = new BABYLON.StandardMaterial("logMaterial", scene);
+            logMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.2, 0.1);
+            logs.material = logMaterial;
+            
+            const stoneMaterial = new BABYLON.StandardMaterial("stoneMaterial", scene);
+            stoneMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+            stones.forEach(stone => stone.material = stoneMaterial);
+            
+            const fireMaterial = new BABYLON.StandardMaterial("fireMaterial", scene);
+            fireMaterial.diffuseColor = new BABYLON.Color3(1, 0.5, 0);
+            fireMaterial.emissiveColor = new BABYLON.Color3(1, 0.5, 0);
+            fire.material = fireMaterial;
+            
+            // Merge meshes
+            const meshes = [logs, fire, ...stones];
+            const campfire = BABYLON.Mesh.MergeMeshes(meshes, true, true);
+            campfire.name = "campfire";
+            return campfire;
+        }
+        
+        function createWallMesh(scene) {
+            // Create wooden wall
+            const wall = BABYLON.MeshBuilder.CreateBox("wall", {
+                width: 3,
+                height: 2,
+                depth: 0.2
+            }, scene);
+            
+            // Wall material
+            const wallMaterial = new BABYLON.StandardMaterial("wallMaterial", scene);
+            wallMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+            
+            // Create wood grain texture with procedural stripes
+            const woodGrainTexture = new BABYLON.DynamicTexture("woodGrain", {width: 256, height: 256}, scene);
+            const textureContext = woodGrainTexture.getContext();
+            
+            // Draw wood grain pattern
+            textureContext.fillStyle = "#5D4037";
+            textureContext.fillRect(0, 0, 256, 256);
+            
+            // Draw grain lines
+            textureContext.fillStyle = "#8D6E63";
+            for (let i = 0; i < 20; i++) {
+                const y = Math.random() * 256;
+                const height = 2 + Math.random() * 5;
+                textureContext.fillRect(0, y, 256, height);
+            }
+            
+            woodGrainTexture.update();
+            wallMaterial.diffuseTexture = woodGrainTexture;
+            
+            wall.material = wallMaterial;
+            wall.name = "woodenWall";
+            return wall;
+        }
+        
+        function createStorageBoxMesh(scene) {
+            // Create storage box
+            const box = BABYLON.MeshBuilder.CreateBox("storageBox", {
+                width: 1.5,
+                height: 1,
+                depth: 1.5
+            }, scene);
+            
+            // Create lid
+            const lid = BABYLON.MeshBuilder.CreateBox("lid", {
+                width: 1.6,
+                height: 0.2,
+                depth: 1.6
+            }, scene);
+            lid.position.y = 0.6;
+            
+            // Box material
+            const boxMaterial = new BABYLON.StandardMaterial("boxMaterial", scene);
+            boxMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.35, 0.15);
+            box.material = boxMaterial;
+            
+            // Lid material
+            const lidMaterial = new BABYLON.StandardMaterial("lidMaterial", scene);
+            lidMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+            lid.material = lidMaterial;
+            
+            // Create metal parts (hinges, lock)
+            const metalHinge1 = BABYLON.MeshBuilder.CreateBox("hinge1", {
+                width: 0.1,
+                height: 0.1,
+                depth: 0.3
+            }, scene);
+            metalHinge1.position = new BABYLON.Vector3(-0.7, 0.5, 0.5);
+            
+            const metalHinge2 = BABYLON.MeshBuilder.CreateBox("hinge2", {
+                width: 0.1,
+                height: 0.1,
+                depth: 0.3
+            }, scene);
+            metalHinge2.position = new BABYLON.Vector3(-0.7, 0.5, -0.5);
+            
+            const lock = BABYLON.MeshBuilder.CreateBox("lock", {
+                width: 0.2,
+                height: 0.2,
+                depth: 0.1
+            }, scene);
+            lock.position = new BABYLON.Vector3(0.7, 0.5, 0);
+            
+            // Metal material
+            const metalMaterial = new BABYLON.StandardMaterial("metalMaterial", scene);
+            metalMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+            metalMaterial.specularColor = new BABYLON.Color3(0.7, 0.7, 0.7);
+            metalHinge1.material = metalMaterial;
+            metalHinge2.material = metalMaterial;
+            lock.material = metalMaterial;
+            
+            // Merge meshes
+            const storageBox = BABYLON.Mesh.MergeMeshes([box, lid, metalHinge1, metalHinge2, lock], true, true);
+            storageBox.name = "storageBox";
+            return storageBox;
+        }
+        
+        // Generate resources across the world
+        function generateResources(scene) {
+            const worldHalfSize = CONFIG.worldSize / 2;
+            
+            // Helper function to get terrain height at position
+            function getTerrainHeight(x, z) {
+                // In a real implementation, this would use ray casting or height map data
+                // For this demo, we'll use a simple sine wave pattern
+                return Math.sin(x / 20) * 2 + Math.cos(z / 20) * 2 + 5;
+            }
+            
+            // Place trees
+            const treeCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.treeDensity);
+            for (let i = 0; i < treeCount; i++) {
+                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const y = getTerrainHeight(x, z);
+                
+                // Only place trees above water level
+                if (y > CONFIG.waterLevel + 1) {
+                    const tree = cachedMeshes.tree.createInstance(`tree_${i}`);
+                    tree.position = new BABYLON.Vector3(x, y, z);
+                    tree.scaling = new BABYLON.Vector3(
+                        0.7 + Math.random() * 0.6,
+                        0.8 + Math.random() * 0.4,
+                        0.7 + Math.random() * 0.6
+                    );
+                    
+                    // Add to entities array
+                    entities.trees.push({
+                        mesh: tree,
+                        position: tree.position.clone(),
+                        health: 100,
+                        resources: {
+                            wood: 10 + Math.floor(Math.random() * 5)
+                        }
+                    });
+                }
+            }
+            
+            // Place rocks
+            const rockCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.rockDensity);
+            for (let i = 0; i < rockCount; i++) {
+                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const y = getTerrainHeight(x, z);
+                
+                if (y > CONFIG.waterLevel) {
+                    const rock = cachedMeshes.rock.createInstance(`rock_${i}`);
+                    rock.position = new BABYLON.Vector3(x, y, z);
+                    rock.scaling = new BABYLON.Vector3(
+                        0.8 + Math.random() * 0.8,
+                        0.6 + Math.random() * 0.6,
+                        0.8 + Math.random() * 0.7
+                    );
+                    rock.rotation.y = Math.random() * Math.PI * 2;
+                    
+                    // Add to entities array
+                    entities.rocks.push({
+                        mesh: rock,
+                        position: rock.position.clone(),
+                        health: 100,
+                        resources: {
+                            stone: 5 + Math.floor(Math.random() * 5)
+                        }
+                    });
+                }
+            }
+            
+            // Place ores (iron, zinc, copper)
+            placeOres("ironOre", CONFIG.ironOreDensity, new BABYLON.Color3(0.6, 0.6, 0.6));
+            placeOres("zincOre", CONFIG.zincOreDensity, new BABYLON.Color3(0.8, 0.8, 0.9));
+            placeOres("copperOre", CONFIG.copperOreDensity, new BABYLON.Color3(0.8, 0.5, 0.2));
+            
+            // Place scrap metal
+            const scrapCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.scrapMetalDensity);
+            for (let i = 0; i < scrapCount; i++) {
+                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const y = getTerrainHeight(x, z);
+                
+                if (y > CONFIG.waterLevel) {
+                    const scrap = cachedMeshes.scrapMetal.createInstance(`scrap_${i}`);
+                    scrap.position = new BABYLON.Vector3(x, y, z);
+                    scrap.rotation.y = Math.random() * Math.PI * 2;
+                    
+                    // Add to entities array
+                    entities.ores.push({
+                        mesh: scrap,
+                        type: "scrapMetal",
+                        position: scrap.position.clone(),
+                        health: 100,
+                        resources: {
+                            scrapMetal: 3 + Math.floor(Math.random() * 3)
+                        }
+                    });
+                }
+            }
+            
+            // Place grass
+            const grassCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.grassDensity);
+            for (let i = 0; i < grassCount; i++) {
+                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const y = getTerrainHeight(x, z);
+                
+                if (y > CONFIG.waterLevel) {
+                    const grass = cachedMeshes.grass.createInstance(`grass_${i}`);
+                    grass.position = new BABYLON.Vector3(x, y, z);
+                    grass.rotation.y = Math.random() * Math.PI * 2;
+                    
+                    // Add to entities array
+                    entities.grass.push({
+                        mesh: grass,
+                        position: grass.position.clone(),
+                        health: 100,
+                        resources: {
+                            grass: 1 + Math.floor(Math.random() * 2)
+                        }
+                    });
+                }
+            }
+            
+            // Place animals (chicken, rabbit, deer)
+            placeAnimals("chicken", CONFIG.chickenDensity, 0.5);
+            placeAnimals("rabbit", CONFIG.rabbitDensity, 0.4);
+            placeAnimals("deer", CONFIG.deerDensity, 0.8);
+            
+            // Place barrels
+            const barrelCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.barrelDensity);
+            for (let i = 0; i < barrelCount; i++) {
+                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                const y = getTerrainHeight(x, z);
+                
+                if (y > CONFIG.waterLevel) {
+                    const barrel = cachedMeshes.barrel.createInstance(`barrel_${i}`);
+                    barrel.position = new BABYLON.Vector3(x, y, z);
+                    
+                    // Generate random loot for the barrel
+                    const loot = {};
+                    if (Math.random() < 0.5) loot.wood = 1 + Math.floor(Math.random() * 3);
+                    if (Math.random() < 0.3) loot.stone = 1 + Math.floor(Math.random() * 2);
+                    if (Math.random() < 0.2) loot.scrapMetal = 1 + Math.floor(Math.random() * 2);
+                    if (Math.random() < 0.1) loot.ironOre = 1;
+                    
+                    // Add to entities array
+                    entities.barrels.push({
+                        mesh: barrel,
+                        position: barrel.position.clone(),
+                        health: 100,
+                        resources: loot
+                    });
+                }
+            }
+            
+            // Helper function to place ores
+            function placeOres(oreType, density, color) {
+                const oreCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * density);
+                for (let i = 0; i < oreCount; i++) {
+                    const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const y = getTerrainHeight(x, z);
+                    
+                    if (y > CONFIG.waterLevel) {
+                        const ore = cachedMeshes[oreType].createInstance(`${oreType}_${i}`);
+                        ore.position = new BABYLON.Vector3(x, y, z);
+                        ore.scaling = new BABYLON.Vector3(
+                            0.7 + Math.random() * 0.6,
+                            0.5 + Math.random() * 0.3,
+                            0.7 + Math.random() * 0.5
+                        );
+                        
+                        // Add to entities array
+                        const resources = {};
+                        resources[oreType] = 3 + Math.floor(Math.random() * 4);
+                        
+                        entities.ores.push({
+                            mesh: ore,
+                            type: oreType,
+                            position: ore.position.clone(),
+                            health: 100,
+                            resources: resources
+                        });
+                    }
+                }
+            }
+            
+            // Helper function to place animals
+            function placeAnimals(animalType, density, size) {
+                const animalCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * density);
+                for (let i = 0; i < animalCount; i++) {
+                    const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const y = getTerrainHeight(x, z);
+                    
+                    if (y > CONFIG.waterLevel) {
+                        const animal = cachedMeshes[animalType].createInstance(`${animalType}_${i}`);
+                        animal.position = new BABYLON.Vector3(x, y, z);
+                        
+                        // Generate random resources based on animal type
+                        const resources = { meat: 1 + Math.floor(Math.random() * 3) };
+                        
+                        if (animalType === "chicken") {
+                            resources.feathers = 2 + Math.floor(Math.random() * 2);
+                        } else if (animalType === "rabbit") {
+                            resources.leather = 1;
+                        } else if (animalType === "deer") {
+                            resources.leather = 2 + Math.floor(Math.random() * 2);
+                            resources.fat = 1 + Math.floor(Math.random() * 2);
+                        }
+                        
+                        // Add to entities array
+                        entities.animals.push({
+                            mesh: animal,
+                            type: animalType,
+                            position: animal.position.clone(),
+                            health: 100,
+                            resources: resources,
+                            speed: 0.05 + Math.random() * 0.05,
+                            movementTimer: 0,
+                            movementDirection: new BABYLON.Vector3(
+                                Math.random() - 0.5,
+                                0,
+                                Math.random() - 0.5
+                            ).normalize()
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Setup player interaction system
+        function setupInteractionSystem(scene, camera) {
+            // Interaction distance
+            const INTERACTION_DISTANCE = 5;
+            
+            // Current target
+            let currentTarget = null;
+            
+            // Raycast to detect entities player is looking at
+            scene.registerBeforeRender(() => {
+                // Reset current target
+                if (currentTarget && currentTarget.mesh.material) {
+                    currentTarget.mesh.material.emissiveColor = new BABYLON.Color3(0, 0, 0);
+                }
+                currentTarget = null;
+                
+                // Cast ray from camera
+                const ray = camera.getForwardRay(INTERACTION_DISTANCE);
+                const hit = scene.pickWithRay(ray);
+                
+                if (hit.pickedMesh) {
+                    // Check if it's an entity
+                    for (const entityType in entities) {
+                        const entityArray = entities[entityType];
+                        const entity = entityArray.find(e => e.mesh === hit.pickedMesh || e.mesh === hit.pickedMesh.parent);
+                        
+                        if (entity) {
+                            currentTarget = entity;
+                            if (currentTarget.mesh.material) {
+                                currentTarget.mesh.material = currentTarget.mesh.material.clone();
+                                currentTarget.mesh.material.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+                            }
+                            break;
+                        }
+                    }
+                }
+            });
+            
+            // Handle interaction (E key)
+            scene.onKeyboardObservable.add((kbInfo) => {
+                if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+                    switch (kbInfo.event.key) {
+                        case 'e':
+                        case 'E':
+                            if (currentTarget) {
+                                harvestResource(currentTarget);
+                            }
+                            break;
+                        case 'i':
+                        case 'I':
+                            toggleInventory();
+                            break;
+                        case 'c':
+                        case 'C':
+                            toggleCrafting();
+                            break;
+                        case 'f':
+                        case 'F':
+                            toggleFog();
+                            break;
+                    }
+                }
+            });
+            
+            // Mouse click for attacking/using tools
+            scene.onPointerObservable.add((pointerInfo) => {
+                if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
+                    if (currentTarget) {
+                        harvestResource(currentTarget);
+                    }
+                }
+            });
+            
+            // Function to harvest a resource
+            function harvestResource(entity) {
+                // Apply damage based on the appropriate tool
+                let damage = 10;
+                let canHarvest = false;
+                
+                if (entity.mesh.name.includes('tree') && gameState.tools.axe) {
+                    damage = 25;
+                    canHarvest = true;
+                } else if ((entity.mesh.name.includes('rock') || entity.mesh.name.includes('Ore')) && gameState.tools.pickaxe) {
+                    damage = 20;
+                    canHarvest = true;
+                } else if (entity.mesh.name.includes('animal') && gameState.tools.knife) {
+                    damage = 30;
+                    canHarvest = true;
+                } else if (entity.mesh.name.includes('barrel') || entity.mesh.name.includes('grass') || entity.mesh.name.includes('scrap')) {
+                    canHarvest = true;
+                }
+                
+                if (canHarvest) {
+                    entity.health -= damage;
+                    
+                    // If health is depleted, collect resources and remove the entity
+                    if (entity.health <= 0) {
+                        // Collect resources
+                        for (const resource in entity.resources) {
+                            gameState.inventory[resource] = (gameState.inventory[resource] || 0) + entity.resources[resource];
+                        }
+                        
+                        // Remove the entity
+                        entity.mesh.dispose();
+                        
+                        // Remove from entities array
+                        for (const entityType in entities) {
+                            const index = entities[entityType].findIndex(e => e === entity);
+                            if (index !== -1) {
+                                entities[entityType].splice(index, 1);
+                                break;
+                            }
+                        }
+                        
+                        // Update UI
+                        updateUI();
+                    }
+                }
+            }
+        }
+        
+        // Setup day/night cycle
+        function setupDayNightCycle(scene, hemisphericLight, directionalLight) {
+            scene.registerBeforeRender(() => {
+                if (!gameState.isLoaded) return;
+                
+                // Update game time
+                gameState.gameTime += 1/60; // Increment time by 1 second / 60 fps
+                
+                // Day/night cycle
+                const dayProgress = (gameState.gameTime % CONFIG.dayLength) / CONFIG.dayLength;
+                
+                // Update lights based on time of day
+                if (dayProgress < 0.25 || dayProgress > 0.75) {
+                    // Night time
+                    gameState.isDaytime = false;
+                    const nightIntensity = 0.2;
+                    hemisphericLight.intensity = 0.1 + nightIntensity;
+                    directionalLight.intensity = nightIntensity;
+                    
+                    // Night sky color
+                    scene.fogColor = new BABYLON.Color3(0.05, 0.05, 0.2);
+                } else {
+                    // Day time
+                    gameState.isDaytime = true;
+                    const timeOfDay = (dayProgress - 0.25) * 2; // 0 to 1 during day
+                    const dayIntensity = 0.5 + Math.sin(timeOfDay * Math.PI) * 0.3;
+                    hemisphericLight.intensity = dayIntensity;
+                    directionalLight.intensity = 0.5 + dayIntensity;
+                    
+                    // Day sky color
+                    scene.fogColor = new BABYLON.Color3(0.8, 0.8, 0.9);
+                }
+                
+                // Update UI with time
+                document.getElementById('gameTime').textContent = gameState.isDaytime ? 'Day' : 'Night';
+            });
+        }
+        
+        // Toggle fog
+        function toggleFog() {
+            CONFIG.fogEnabled = !CONFIG.fogEnabled;
+            scene.fogDensity = CONFIG.fogEnabled ? CONFIG.fogDensity : 0;
+        }
+        
+        // Toggle inventory UI
+        function toggleInventory() {
+            gameState.isInventoryOpen = !gameState.isInventoryOpen;
+            document.getElementById('inventory').style.display = gameState.isInventoryOpen ? 'block' : 'none';
+            
+            if (gameState.isInventoryOpen) {
+                updateInventoryUI();
+            }
+        }
+        
+        // Toggle crafting UI
+        function toggleCrafting() {
+            gameState.isCraftingOpen = !gameState.isCraftingOpen;
+            document.getElementById('craftingMenu').style.display = gameState.isCraftingOpen ? 'block' : 'none';
+            
+            if (gameState.isCraftingOpen) {
+                updateCraftingUI();
+            }
+        }
+        
+        // Update all UI elements
+        function updateUI() {
+            document.getElementById('health').textContent = gameState.health;
+            document.getElementById('hunger').textContent = gameState.hunger;
+            document.getElementById('thirst').textContent = gameState.thirst;
+            
+            if (gameState.isInventoryOpen) {
+                updateInventoryUI();
+            }
+            
+            if (gameState.isCraftingOpen) {
+                updateCraftingUI();
+            }
+        }
+        
+        // Update inventory UI
+        function updateInventoryUI() {
+            const inventoryDiv = document.getElementById('inventory');
+            inventoryDiv.innerHTML = '<h3>Inventory</h3>';
+            
+            // Add resources
+            for (const item in gameState.inventory) {
+                if (gameState.inventory[item] > 0) {
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'resource';
+                    itemElement.textContent = `${item}: ${gameState.inventory[item]}`;
+                    inventoryDiv.appendChild(itemElement);
+                }
+            }
+            
+            // Add tools
+            inventoryDiv.appendChild(document.createElement('hr'));
+            inventoryDiv.appendChild(document.createElement('h4')).textContent = 'Tools:';
+            
+            for (const tool in gameState.tools) {
+                if (gameState.tools[tool]) {
+                    const toolElement = document.createElement('div');
+                    toolElement.className = 'resource';
+                    toolElement.textContent = tool;
+                    inventoryDiv.appendChild(toolElement);
+                }
+            }
+        }
+        
+        // Update crafting UI
+        function updateCraftingUI() {
+            const craftingItems = document.getElementById('craftingItems');
+            craftingItems.innerHTML = '';
+            
+            // Add crafting recipes
+            for (const recipe of craftingRecipes) {
+                const recipeDiv = document.createElement('div');
+                recipeDiv.className = 'recipe';
+                recipeDiv.style.marginBottom = '15px';
+                recipeDiv.style.padding = '5px';
+                recipeDiv.style.borderBottom = '1px solid rgba(255, 255, 255, 0.3)';
+                
+                // Recipe name
+                const nameElement = document.createElement('div');
+                nameElement.textContent = recipe.name;
+                nameElement.style.fontWeight = 'bold';
+                nameElement.style.marginBottom = '5px';
+                recipeDiv.appendChild(nameElement);
+                
+                // Recipe description
+                if (recipe.description) {
+                    const descElement = document.createElement('div');
+                    descElement.textContent = recipe.description;
+                    descElement.style.fontSize = '12px';
+                    descElement.style.fontStyle = 'italic';
+                    descElement.style.marginBottom = '5px';
+                    recipeDiv.appendChild(descElement);
+                }
+                
+                // Recipe requirements
+                const reqElement = document.createElement('div');
+                reqElement.style.fontSize = '12px';
+                
+                let reqText = 'Requires: ';
+                for (const req in recipe.requirements) {
+                    reqText += `${req}: ${recipe.requirements[req]}, `;
+                }
+                reqElement.textContent = reqText.slice(0, -2); // Remove trailing comma
+                recipeDiv.appendChild(reqElement);
+                
+                // Craft button
+                const craftButton = document.createElement('button');
+                craftButton.textContent = 'Craft';
+                craftButton.className = 'craftButton';
+                
+                // Check if player has resources
+                let canCraft = true;
+                for (const req in recipe.requirements) {
+                    if (!gameState.inventory[req] || gameState.inventory[req] < recipe.requirements[req]) {
+                        canCraft = false;
+                        break;
+                    }
+                }
+                
+                craftButton.disabled = !canCraft;
+                if (!canCraft) {
+                    craftButton.style.backgroundColor = '#666';
+                }
+                
+                // Craft action
+                craftButton.onclick = function() {
+                    craftItem(recipe);
+                };
+                
+                recipeDiv.appendChild(craftButton);
+                craftingItems.appendChild(recipeDiv);
+                craftingItems.appendChild(document.createElement('hr'));
+            }
+        }
+        
+        // Craft an item
+        function craftItem(recipe) {
+            // Check if player has resources
+            for (const req in recipe.requirements) {
+                if (!gameState.inventory[req] || gameState.inventory[req] < recipe.requirements[req]) {
+                    return; // Can't craft
+                }
+            }
+            
+            // Consume resources
+            for (const req in recipe.requirements) {
+                gameState.inventory[req] -= recipe.requirements[req];
+            }
+            
+            // Add item to inventory or place in world
+            if (recipe.placeable) {
+                // Show placement preview
+                const previewMesh = cachedMeshes[recipe.result].clone();
+                previewMesh.isVisible = true;
+                previewMesh.material = previewMesh.material.clone();
+                previewMesh.material.alpha = 0.5;
+                
+                // Placement mode
+                const placementMode = true;
+                let placementPosition = null;
+                
+                scene.registerBeforeRender(() => {
+                    if (placementMode) {
+                        // Cast ray from camera to ground
+                        const ray = scene.cameras[0].getForwardRay(10);
+                        const hit = scene.pickWithRay(ray);
+                        
+                        if (hit.pickedPoint) {
+                            placementPosition = hit.pickedPoint.clone();
+                            previewMesh.position = placementPosition;
+                        }
+                    }
+                });
+                
+                // Handle click to place
+                const clickHandler = scene.onPointerObservable.add((pointerInfo) => {
+                    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+                        if (placementMode && placementPosition) {
+                            // Place the item
+                            const placedItem = cachedMeshes[recipe.result].createInstance(`${recipe.result}_placed`);
+                            placedItem.position = placementPosition.clone();
+                            
+                            // Add to placed items
+                            entities.placedItems.push({
+                                mesh: placedItem,
+                                type: recipe.result,
+                                position: placedItem.position.clone()
+                            });
+                            
+                            // Exit placement mode
+                            previewMesh.dispose();
+                            scene.onPointerObservable.remove(clickHandler);
+                            
+                            // Update UI
+                            updateUI();
+                            toggleCrafting();
+                        }
+                    }
+                });
+                
+                // Cancel placement with right-click
+                const cancelHandler = scene.onPointerObservable.add((pointerInfo) => {
+                    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 2) {
+                        if (placementMode) {
+                            // Return resources
+                            for (const req in recipe.requirements) {
+                                gameState.inventory[req] += recipe.requirements[req];
+                            }
+                            
+                            // Exit placement mode
+                            previewMesh.dispose();
+                            scene.onPointerObservable.remove(clickHandler);
+                            scene.onPointerObservable.remove(cancelHandler);
+                            
+                            // Update UI
+                            updateUI();
+                        }
+                    }
+                });
+                
+                // Also cancel with ESC key
+                const keyHandler = scene.onKeyboardObservable.add((kbInfo) => {
+                    if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN && kbInfo.event.keyCode === 27) { // ESC key
+                        if (placementMode) {
+                            // Return resources
+                            for (const req in recipe.requirements) {
+                                gameState.inventory[req] += recipe.requirements[req];
+                            }
+                            
+                            // Exit placement mode
+                            previewMesh.dispose();
+                            scene.onPointerObservable.remove(clickHandler);
+                            scene.onPointerObservable.remove(cancelHandler);
+                            scene.onKeyboardObservable.remove(keyHandler);
+                            
+                            // Update UI
+                            updateUI();
+                        }
+                    }
+                });
+            } else {
+                // Add to inventory
+                gameState.inventory[recipe.result] = (gameState.inventory[recipe.result] || 0) + 1;
+            }
+            
+            // Update UI
+            updateUI();
+            
+            // Close crafting menu
+            toggleCrafting();
+        }
+    }
+    
+    // Animal movement and AI
+    scene.registerBeforeRender(() => {
+        if (!gameState.isLoaded) return;
+        
+        // Update animal movements
+        entities.animals.forEach(animal => {
+            // Update movement timer
+            animal.movementTimer -= 1/60;
+            
+            if (animal.movementTimer <= 0) {
+                // Change direction randomly
+                animal.movementDirection = new BABYLON.Vector3(
+                    Math.random() - 0.5,
+                    0,
+                    Math.random() - 0.5
+                ).normalize();
+                
+                // Set new random timer
+                animal.movementTimer = 2 + Math.random() * 3;
+            }
+            
+            // Move animal in current direction
+            const movement = animal.movementDirection.scale(animal.speed);
+            animal.mesh.position.x += movement.x;
+            animal.mesh.position.z += movement.z;
+            
+            // Rotate to face movement direction
+            if (movement.length() > 0.01) {
+                const targetRotation = Math.atan2(movement.x, movement.z);
+                animal.mesh.rotation.y = targetRotation;
+            }
+            
+            // Update stored position
+            animal.position = animal.mesh.position.clone();
+        });
+        
+        // Update player stats
+        if (gameState.isLoaded) {
+            // Decrease hunger and thirst over time
+            gameState.hunger -= 0.01;
+            gameState.thirst -= 0.02;
+            
+            // Clamp values
+            gameState.hunger = Math.max(0, Math.min(100, gameState.hunger));
+            gameState.thirst = Math.max(0, Math.min(100, gameState.thirst));
+            
+            // Health effects from hunger/thirst
+            if (gameState.hunger < 10 || gameState.thirst < 10) {
+                gameState.health -= 0.05;
+            }
+            
+            // Clamp health
+            gameState.health = Math.max(0, Math.min(100, gameState.health));
+            
+            // Update UI occasionally to save performance
+            if (Math.floor(gameState.gameTime) % 5 === 0) {
+                updateUI();
+            }
+        }
+    });
+    
+    // Function to find the closest water source
+    function findClosestWater(position) {
+        // Simple implementation - just check if near water level
+        return Math.abs(position.y - CONFIG.waterLevel) < 2;
+    }
+    
+    // Function to drink water
+    function drinkWater() {
+        if (findClosestWater(scene.cameras[0].position)) {
+            if (gameState.tools.canteen) {
+                gameState.thirst = 100;
+                updateUI();
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    // Function to eat food
+    function eatFood(foodType) {
+        if (foodType === 'meat' && gameState.inventory.meat > 0) {
+            gameState.inventory.meat--;
+            gameState.hunger += 30;
+            gameState.hunger = Math.min(100, gameState.hunger);
+            updateUI();
+            return true;
+        }
+        return false;
+    }
+    
+    // Add keyboard shortcuts for eating and drinking
+    scene.onKeyboardObservable.add((kbInfo) => {
+        if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+            switch (kbInfo.event.key) {
+                case 'q':
+                case 'Q':
+                    drinkWater();
+                    break;
+                case 'r':
+                case 'R':
+                    eatFood('meat');
+                    break;
+            }
+        }
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        engine.resize();
+    });
+    
+    // Start the game
+    createGame();
+    
+    // Run the render loop
+    engine.runRenderLoop(function() {
+        scene.render();
+    });
+};
+
+// Wait for DOM to load
+document.addEventListener('DOMContentLoaded', function() {
+    // Expose functions to window for UI button access
+    window.toggleInventory = toggleInventory;
+    window.toggleCrafting = toggleCrafting;
+    window.toggleFog = toggleFog;
+    
+    // Start the game
+    const loadingScreen = document.getElementById('loadingScreen');
+    loadingScreen.textContent = 'Loading World...';
+    
+    // Simulate loading delay for resources
+    setTimeout(function() {
+        // Initialize the game after resources loaded
+        createGame();
+    }, 1500);
+});
+    </script>
+</body>
+</html>
