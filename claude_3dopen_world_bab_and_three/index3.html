@@ -216,10 +216,11 @@
             health: 100, hunger: 100, thirst: 100,
             gameTime: 0, isDaytime: true,
             isInventoryOpen: false, isCraftingOpen: false,
-            isPlacingItem: false, // FIX: Added state for placement mode
-            placementRecipe: null, // FIX: Store recipe during placement
-            placementPreviewMesh: null, // FIX: Store preview mesh
-            placementListeners: [] // FIX: Store listeners to remove later
+            isPlacingItem: false, // State for placement mode
+            placementRecipe: null, // Store recipe during placement
+            placementPreviewMesh: null, // Store preview mesh
+            placementListeners: [], // Store listeners to remove later
+            placementValid: false // Added state for placement validity
         };
 
         // Crafting recipes
@@ -273,7 +274,7 @@
             // camera.keysUpward = [32]; // Space - Maybe handle jump separately
             // camera.keysDownward = [16]; // Shift
 
-            // FIX: Apply collisions and gravity to camera for simplicity FOR NOW
+            // Apply collisions and gravity to camera for simplicity FOR NOW
             // Ideally, use a collider mesh, but this fixes the immediate structure
             camera.position = new BABYLON.Vector3(0, 5, -10); // Initial position
 
@@ -301,7 +302,8 @@
             const skyboxMaterial = new BABYLON.StandardMaterial("skyBoxMaterial", scene);
             skyboxMaterial.backFaceCulling = false;
             // Ensure the skybox texture path is correct or use a valid online URL
-            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("textures/skybox", scene); // Example local path
+            // Example local path (make sure 'textures/skybox_nx.jpg', etc. exist)
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("textures/skybox", scene);
              // Alternate: skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://playground.babylonjs.com/textures/skybox", scene);
             skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
             skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
@@ -374,21 +376,23 @@
 
         // Create procedural terrain
         function createTerrain(scene) {
+             // Placeholder heightmap data URL - Replace with your actual heightmap if needed
+             // Ensure the base64 string or URL is valid and accessible
+             const heightMapURL = "data:image/png;base64,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";
+
             const groundOptions = {
                 width: CONFIG.worldSize,
                 height: CONFIG.worldSize,
-                // FIX: Corrected syntax
                 subdivisions: 100,
                 minHeight: 0,
                 maxHeight: 30,
-                updatable: false // Set to false if not updating heightmap dynamically
+                updatable: false // Keep false unless you need to query height directly from mesh later
             };
 
-            // Create ground mesh using the placeholder heightmap
-            // Ensure the base64 string is correct and accessible
+            // Create ground mesh using the heightmap URL
             const ground = BABYLON.MeshBuilder.CreateGroundFromHeightMap(
                 "ground",
-                "data:image/png;base64,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",
+                heightMapURL,
                 groundOptions,
                 scene
             );
@@ -404,7 +408,6 @@
 
         // Create water
         function createWater(scene, waterLevel) {
-            // FIX: Using BabylonJS plane as originally implemented, removed Three.js comment
             const waterMesh = BABYLON.MeshBuilder.CreateGround(
                 "water",
                 {width: CONFIG.worldSize * 1.5, height: CONFIG.worldSize * 1.5}, // Slightly larger
@@ -436,7 +439,7 @@
             cachedMeshes.chicken = createAnimalMesh(scene, 0.5, "chicken"); // Pass type
             cachedMeshes.rabbit = createAnimalMesh(scene, 0.4, "rabbit");
             cachedMeshes.deer = createAnimalMesh(scene, 0.8, "deer");
-            cachedMeshes.barrel = createBarrelMesh(scene);
+            cachedMeshes.barrel = createBarrelMesh(scene); // Barrel Mesh
             cachedMeshes.campfire = createCampfireMesh(scene);
             cachedMeshes.woodenWall = createWallMesh(scene);
             cachedMeshes.storageBox = createStorageBoxMesh(scene);
@@ -446,6 +449,8 @@
                 if (cachedMeshes[key]) {
                     cachedMeshes[key].isVisible = false;
                     cachedMeshes[key].setEnabled(false); // Also disable them fully
+                    // Ensure children are also disabled initially if they exist
+                    cachedMeshes[key].getChildMeshes().forEach(child => child.setEnabled(false));
                 }
             }
 
@@ -458,27 +463,30 @@
              const tree = new BABYLON.Mesh("treeRoot", scene); // Use a root node
 
              const trunk = BABYLON.MeshBuilder.CreateCylinder("trunk", { height: 6, diameter: 1 }, scene);
+             trunk.material = new BABYLON.StandardMaterial("trunkMaterial", scene);
+             trunk.material.diffuseColor = new BABYLON.Color3(0.4, 0.3, 0.2);
              trunk.parent = tree;
 
              const foliage = BABYLON.MeshBuilder.CreateSphere("foliage", { segments: 8, diameter: 6 }, scene);
              foliage.position.y = 5;
              foliage.scaling.y = 1.5;
+             foliage.material = new BABYLON.StandardMaterial("foliageMaterial", scene);
+             foliage.material.diffuseColor = new BABYLON.Color3(0.3, 0.6, 0.3);
              foliage.parent = tree;
 
-             const trunkMaterial = new BABYLON.StandardMaterial("trunkMaterial", scene);
-             trunkMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.3, 0.2);
-             trunk.material = trunkMaterial;
-
-             const foliageMaterial = new BABYLON.StandardMaterial("foliageMaterial", scene);
-             foliageMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.6, 0.3);
-             foliage.material = foliageMaterial;
-
-             // Combine into a single mesh for potential optimization if needed later
-             // const mergedTree = BABYLON.Mesh.MergeMeshes([trunk, foliage], true, true, undefined, false, true);
-             // mergedTree.name = "tree";
-             // return mergedTree;
              tree.name = "tree"; // Name the root node
-             return tree; // Return the root node
+             // Combine into a single mesh AFTER creating children and parenting
+             // For thin instances, we actually need the GEOMETRY on the source mesh used for thinInstanceAdd
+             // Let's merge trunk and foliage into the root 'tree' mesh itself.
+             const mergedTree = BABYLON.Mesh.MergeMeshes([trunk, foliage], true, true, tree, false, true);
+             if (mergedTree) {
+                 mergedTree.name = "tree"; // Name the merged mesh
+                 return mergedTree;
+             } else {
+                  // Fallback if merge fails - return the root (but thin instances might not work)
+                  console.warn("Could not merge tree mesh for thin instancing.");
+                  return tree;
+             }
         }
 
         function createRockMesh(scene) {
@@ -487,18 +495,17 @@
             const rockMaterial = new BABYLON.StandardMaterial("rockMaterial", scene);
             rockMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
             rock.material = rockMaterial;
-            rock.name = "rock";
+            rock.name = "rock"; // Mesh has geometry, good for thin instances
             return rock;
         }
 
         function createGrassMesh(scene) {
-             // Use thin instances for better performance if many grass patches
              const plane = BABYLON.MeshBuilder.CreatePlane("grassPlane", {width: 1, height: 1}, scene);
              const grassMaterial = new BABYLON.StandardMaterial("grassMaterial", scene);
              grassMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.8, 0.2);
              grassMaterial.backFaceCulling = false; // See grass from both sides
              plane.material = grassMaterial;
-             plane.name = "grass";
+             plane.name = "grass"; // Mesh has geometry
              return plane;
         }
 
@@ -509,7 +516,9 @@
             oreMaterial.diffuseColor = color;
             oreMaterial.specularColor = new BABYLON.Color3(0.8, 0.8, 0.8);
             ore.material = oreMaterial;
-             ore.name = "ore"; // Generic name, specific type stored in entity data
+             ore.name = "ore"; // Mesh has geometry
+             // Store type in metadata if needed later, name is generic "ore"
+             ore.metadata = { oreType: color.toHexString() }; // Example
             return ore;
         }
 
@@ -519,7 +528,7 @@
             scrapMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
             scrapMaterial.specularColor = new BABYLON.Color3(0.7, 0.7, 0.7);
             scrap.material = scrapMaterial;
-            scrap.name = "scrapMetal";
+            scrap.name = "scrapMetal"; // Mesh has geometry
             return scrap;
         }
 
@@ -536,31 +545,35 @@
 
              const animalMaterial = new BABYLON.StandardMaterial(`${type}Material`, scene);
              animalMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.7, 0.5);
+             // Apply material to children
              body.material = animalMaterial;
              head.material = animalMaterial;
 
-             // Optional: Merge meshes if performance is an issue
-             // const mergedAnimal = BABYLON.Mesh.MergeMeshes([body, head], true, true, undefined, false, true);
-             // mergedAnimal.name = type;
-             // return mergedAnimal;
-
              animalRoot.name = type; // Name the root
-             return animalRoot; // Return the root node
+             // DO NOT merge here if you want to use clone() later, keep root and children separate
+             return animalRoot; // Return the root node (no geometry itself)
         }
 
         function createBarrelMesh(scene) {
-            const barrel = BABYLON.MeshBuilder.CreateCylinder("barrel", { height: 1.5, diameter: 1 }, scene);
-            const barrelMaterial = new BABYLON.StandardMaterial("barrelMaterial", scene);
-            barrelMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
-            barrel.material = barrelMaterial;
-            barrel.name = "barrel";
-            return barrel;
+             // Barrel is a single cylinder - it has geometry, so createInstance *could* work
+             // but using clone for consistency with other placeables.
+             const barrelRoot = new BABYLON.Mesh("barrelRoot", scene); // Use root for consistency
+             const barrel = BABYLON.MeshBuilder.CreateCylinder("barrel", { height: 1.5, diameter: 1 }, scene);
+             const barrelMaterial = new BABYLON.StandardMaterial("barrelMaterial", scene);
+             barrelMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
+             barrel.material = barrelMaterial;
+             barrel.name = "barrelMesh"; // Give child a name
+             barrel.parent = barrelRoot; // Parent the geometry mesh to the root
+             barrelRoot.name = "barrel"; // Name the root
+             return barrelRoot; // Return the root
         }
 
         function createCampfireMesh(scene) {
              const campfireRoot = new BABYLON.Mesh("campfireRoot", scene); // Use a root node
 
              const logs = BABYLON.MeshBuilder.CreateCylinder("logs", { height: 0.3, diameter: 1.5 }, scene);
+             logs.material = new BABYLON.StandardMaterial("logMaterial", scene);
+             logs.material.diffuseColor = new BABYLON.Color3(0.4, 0.2, 0.1);
              logs.parent = campfireRoot;
 
              const stones = [];
@@ -586,56 +599,41 @@
              fire.material = fireMaterial;
              fire.parent = campfireRoot;
 
-             const logMaterial = new BABYLON.StandardMaterial("logMaterial", scene);
-             logMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.2, 0.1);
-             logs.material = logMaterial;
-
-             // Optional merge
-             // const mergedCampfire = BABYLON.Mesh.MergeMeshes([logs, fire, ...stones], true, true, undefined, false, true);
-             // mergedCampfire.name = "campfire";
-             // return mergedCampfire;
-
              campfireRoot.name = "campfire";
-             return campfireRoot;
+             return campfireRoot; // Return root node
         }
 
         function createWallMesh(scene) {
              const wallRoot = new BABYLON.Mesh("wallRoot", scene); // Root node
 
-             const wall = BABYLON.MeshBuilder.CreateBox("wall", { width: 3, height: 2, depth: 0.2 }, scene);
+             const wall = BABYLON.MeshBuilder.CreateBox("wallMesh", { width: 3, height: 2, depth: 0.2 }, scene); // Name child
              wall.parent = wallRoot;
 
              const wallMaterial = new BABYLON.StandardMaterial("wallMaterial", scene);
              wallMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
 
              // Simpler wood texture or use an image texture
-             const woodGrainTexture = new BABYLON.Texture("textures/wood.jpg", scene); // Example image texture
-             wallMaterial.diffuseTexture = woodGrainTexture;
-
-             /* // Keep procedural texture if preferred and working
-             const woodGrainTexture = new BABYLON.DynamicTexture("woodGrain", {width: 256, height: 256}, scene);
-             const textureContext = woodGrainTexture.getContext();
-             textureContext.fillStyle = "#5D4037";
-             textureContext.fillRect(0, 0, 256, 256);
-             textureContext.fillStyle = "#8D6E63";
-             for (let i = 0; i < 20; i++) {
-                 const y = Math.random() * 256;
-                 const height = 2 + Math.random() * 5;
-                 textureContext.fillRect(0, y, 256, height);
+             // Make sure 'textures/wood.jpg' exists relative to index2.html or use absolute URL
+             try {
+                 const woodGrainTexture = new BABYLON.Texture("textures/wood.jpg", scene, true, true, BABYLON.Texture.NEAREST_SAMPLINGMODE,
+                    () => {}, // success callback
+                    (message, exception) => { console.warn("Wood texture failed to load:", message); } // error callback
+                 );
+                 wallMaterial.diffuseTexture = woodGrainTexture;
+             } catch (e) {
+                  console.warn("Error creating wood texture:", e);
              }
-             woodGrainTexture.update();
-             wallMaterial.diffuseTexture = woodGrainTexture;
-             */
+
 
              wall.material = wallMaterial;
              wallRoot.name = "woodenWall";
-             return wallRoot;
+             return wallRoot; // Return root node
         }
 
         function createStorageBoxMesh(scene) {
              const boxRoot = new BABYLON.Mesh("storageBoxRoot", scene); // Root node
 
-             const box = BABYLON.MeshBuilder.CreateBox("storageBox", { width: 1.5, height: 1, depth: 1.5 }, scene);
+             const box = BABYLON.MeshBuilder.CreateBox("storageBoxMesh", { width: 1.5, height: 1, depth: 1.5 }, scene); // Name child
              box.parent = boxRoot;
              const lid = BABYLON.MeshBuilder.CreateBox("lid", { width: 1.6, height: 0.2, depth: 1.6 }, scene);
              lid.position.y = 0.6;
@@ -667,13 +665,8 @@
              lock.material = metalMaterial;
              lock.parent = boxRoot;
 
-             // Optional merge
-             // const mergedBox = BABYLON.Mesh.MergeMeshes([box, lid, metalHinge1, metalHinge2, lock], true, true, undefined, false, true);
-             // mergedBox.name = "storageBox";
-             // return mergedBox;
-
              boxRoot.name = "storageBox";
-             return boxRoot;
+             return boxRoot; // Return root node
         }
 
 
@@ -681,12 +674,21 @@
         function generateResources(scene) {
             const worldHalfSize = CONFIG.worldSize / 2;
 
-            // Helper function to get terrain height (using simple pattern for now)
-            function getTerrainHeight(x, z) {
-                 // Placeholder: Use actual terrain height checking (raycast or heightmap data) in production
-                 // This simple function doesn't reflect the actual heightmap used.
-                return Math.sin(x / 50) * 5 + Math.cos(z / 30) * 4 + 10; // Example procedural height
-            }
+             // CRITICAL FIX: Function to get actual terrain height using raycasting
+            function getRealTerrainHeight(x, z, defaultHeight = 0) {
+                const groundMesh = scene.getMeshByName("ground");
+                if (!groundMesh) return defaultHeight; // Ground not found
+
+                // Cast ray downwards from above the expected max height
+                 const ray = new BABYLON.Ray(new BABYLON.Vector3(x, 50, z), new BABYLON.Vector3(0, -1, 0));
+                 const hit = scene.pickWithRay(ray, (mesh) => mesh === groundMesh); // Only pick the ground
+
+                 if (hit && hit.pickedPoint) {
+                     return hit.pickedPoint.y;
+                 }
+                 return defaultHeight; // Fallback if ray misses ground (e.g., outside bounds)
+             }
+
 
              // Use Thin Instances for performance (Trees, Rocks, Grass, Ores)
              const treeMatrices = [];
@@ -698,55 +700,67 @@
              const scrapMatrices = [];
 
             // Place Trees
-            const treeCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.treeDensity);
-            for (let i = 0; i < treeCount; i++) {
-                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const y = getTerrainHeight(x, z);
-                if (y > CONFIG.waterLevel + 1) {
-                     const scale = 0.7 + Math.random() * 0.6;
-                     const matrix = BABYLON.Matrix.Compose(
-                         new BABYLON.Vector3(scale, 0.8 + Math.random() * 0.4, scale), // Scaling
-                         BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0), // Rotation
-                         new BABYLON.Vector3(x, y, z) // Position
-                     );
-                     treeMatrices.push(matrix);
-                     // Store simplified entity data - mesh reference will be added after thin instance creation
-                     entities.trees.push({
-                         position: new BABYLON.Vector3(x, y, z), // Store position for later lookup
-                         health: 100,
-                         resources: { wood: 10 + Math.floor(Math.random() * 5) },
-                         matrixIndex: treeMatrices.length - 1 // Link entity data to the matrix buffer index
-                     });
+             const treeSourceMesh = cachedMeshes.tree; // Mesh MUST have geometry for thin instances
+             if (treeSourceMesh && treeSourceMesh.geometry) {
+                const treeCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.treeDensity);
+                for (let i = 0; i < treeCount; i++) {
+                    const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const y = getRealTerrainHeight(x, z); // Use real height
+                    if (y > CONFIG.waterLevel + 1) {
+                         const scale = 0.7 + Math.random() * 0.6;
+                         const matrix = BABYLON.Matrix.Compose(
+                             new BABYLON.Vector3(scale, 0.8 + Math.random() * 0.4, scale), // Scaling
+                             BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0), // Rotation
+                             new BABYLON.Vector3(x, y, z) // Position (at correct terrain height)
+                         );
+                         treeMatrices.push(matrix);
+                         entities.trees.push({
+                             position: new BABYLON.Vector3(x, y, z),
+                             health: 100,
+                             resources: { wood: 10 + Math.floor(Math.random() * 5) },
+                             matrixIndex: treeMatrices.length - 1,
+                             meshCacheKey: 'tree' // Link entity data to the matrix buffer index and cache key
+                         });
+                    }
                 }
-            }
-             if(cachedMeshes.tree) cachedMeshes.tree.thinInstanceAdd(treeMatrices);
+                treeSourceMesh.thinInstanceAdd(treeMatrices); // Apply matrices
+             } else {
+                  console.error("Cannot place trees: Source tree mesh has no geometry or is missing.");
+             }
+
 
             // Place Rocks
-            const rockCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.rockDensity);
-            for (let i = 0; i < rockCount; i++) {
-                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const y = getTerrainHeight(x, z);
-                if (y > CONFIG.waterLevel) {
-                     const scaleX = 0.8 + Math.random() * 0.8;
-                     const scaleY = 0.6 + Math.random() * 0.6;
-                     const scaleZ = 0.8 + Math.random() * 0.7;
-                     const matrix = BABYLON.Matrix.Compose(
-                         new BABYLON.Vector3(scaleX, scaleY, scaleZ),
-                         BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0),
-                         new BABYLON.Vector3(x, y, z)
-                     );
-                     rockMatrices.push(matrix);
-                     entities.rocks.push({
-                         position: new BABYLON.Vector3(x, y, z),
-                         health: 100,
-                         resources: { stone: 5 + Math.floor(Math.random() * 5) },
-                         matrixIndex: rockMatrices.length - 1
-                     });
+            const rockSourceMesh = cachedMeshes.rock;
+             if (rockSourceMesh && rockSourceMesh.geometry) {
+                const rockCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.rockDensity);
+                for (let i = 0; i < rockCount; i++) {
+                    const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const y = getRealTerrainHeight(x, z); // Use real height
+                    if (y > CONFIG.waterLevel) {
+                         const scaleX = 0.8 + Math.random() * 0.8;
+                         const scaleY = 0.6 + Math.random() * 0.6;
+                         const scaleZ = 0.8 + Math.random() * 0.7;
+                         const matrix = BABYLON.Matrix.Compose(
+                             new BABYLON.Vector3(scaleX, scaleY, scaleZ),
+                             BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0),
+                             new BABYLON.Vector3(x, y, z) // Position at correct height
+                         );
+                         rockMatrices.push(matrix);
+                         entities.rocks.push({
+                             position: new BABYLON.Vector3(x, y, z),
+                             health: 100,
+                             resources: { stone: 5 + Math.floor(Math.random() * 5) },
+                             matrixIndex: rockMatrices.length - 1,
+                             meshCacheKey: 'rock'
+                         });
+                    }
                 }
-            }
-             if(cachedMeshes.rock) cachedMeshes.rock.thinInstanceAdd(rockMatrices);
+                 rockSourceMesh.thinInstanceAdd(rockMatrices);
+             } else {
+                  console.error("Cannot place rocks: Source rock mesh has no geometry or is missing.");
+             }
 
 
              // Place Ores using helper function
@@ -754,81 +768,101 @@
              placeOres("zincOre", CONFIG.zincOreDensity, zincOreMatrices);
              placeOres("copperOre", CONFIG.copperOreDensity, copperOreMatrices);
 
-             if(cachedMeshes.ironOre) cachedMeshes.ironOre.thinInstanceAdd(ironOreMatrices);
-             if(cachedMeshes.zincOre) cachedMeshes.zincOre.thinInstanceAdd(zincOreMatrices);
-             if(cachedMeshes.copperOre) cachedMeshes.copperOre.thinInstanceAdd(copperOreMatrices);
+             if(cachedMeshes.ironOre?.geometry) cachedMeshes.ironOre.thinInstanceAdd(ironOreMatrices); else console.error("IronOre mesh missing geometry");
+             if(cachedMeshes.zincOre?.geometry) cachedMeshes.zincOre.thinInstanceAdd(zincOreMatrices); else console.error("ZincOre mesh missing geometry");
+             if(cachedMeshes.copperOre?.geometry) cachedMeshes.copperOre.thinInstanceAdd(copperOreMatrices); else console.error("CopperOre mesh missing geometry");
+
 
             // Place Scrap Metal
-            const scrapCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.scrapMetalDensity);
-            for (let i = 0; i < scrapCount; i++) {
-                const x = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const y = getTerrainHeight(x, z);
-                 if (y > CONFIG.waterLevel) {
-                     const matrix = BABYLON.Matrix.Compose(
-                         new BABYLON.Vector3(1, 1, 1), // Scaling
-                         BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0), // Rotation
-                         new BABYLON.Vector3(x, y, z) // Position
-                     );
-                     scrapMatrices.push(matrix);
-                     entities.ores.push({ // Group scrap with ores for interaction logic? Or separate array?
-                         type: "scrapMetal",
-                         position: new BABYLON.Vector3(x, y, z),
-                         health: 100,
-                         resources: { scrapMetal: 3 + Math.floor(Math.random() * 3) },
-                         matrixIndex: scrapMatrices.length - 1,
-                         meshCacheKey: 'scrapMetal' // Store which cache key it belongs to
-                     });
-                 }
-            }
-             if(cachedMeshes.scrapMetal) cachedMeshes.scrapMetal.thinInstanceAdd(scrapMatrices);
+            const scrapSourceMesh = cachedMeshes.scrapMetal;
+             if (scrapSourceMesh && scrapSourceMesh.geometry) {
+                const scrapCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.scrapMetalDensity);
+                for (let i = 0; i < scrapCount; i++) {
+                    const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                    const y = getRealTerrainHeight(x, z); // Use real height
+                     if (y > CONFIG.waterLevel) {
+                         const matrix = BABYLON.Matrix.Compose(
+                             new BABYLON.Vector3(1, 1, 1), // Scaling
+                             BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0), // Rotation
+                             new BABYLON.Vector3(x, y, z) // Position
+                         );
+                         scrapMatrices.push(matrix);
+                         entities.ores.push({ // Group scrap with ores for interaction logic? Or separate array?
+                             type: "scrapMetal",
+                             position: new BABYLON.Vector3(x, y, z),
+                             health: 100,
+                             resources: { scrapMetal: 3 + Math.floor(Math.random() * 3) },
+                             matrixIndex: scrapMatrices.length - 1,
+                             meshCacheKey: 'scrapMetal' // Store which cache key it belongs to
+                         });
+                     }
+                }
+                 scrapSourceMesh.thinInstanceAdd(scrapMatrices);
+             } else {
+                  console.error("Cannot place scrap: Source scrap mesh has no geometry or is missing.");
+             }
+
 
              // Place Grass
-             const grassCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.grassDensity);
-             for (let i = 0; i < grassCount; i++) {
-                 const x = Math.random() * CONFIG.worldSize - worldHalfSize;
-                 const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                 const y = getTerrainHeight(x, z);
-                 if (y > CONFIG.waterLevel) {
-                     const matrix = BABYLON.Matrix.Compose(
-                         new BABYLON.Vector3(1, 1, 1),
-                         BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0),
-                         new BABYLON.Vector3(x, y + 0.5, z) // Position slightly above ground
-                     );
-                     grassMatrices.push(matrix);
-                     entities.grass.push({
-                         position: new BABYLON.Vector3(x, y + 0.5, z),
-                         health: 100, // Can be harvested
-                         resources: { grass: 1 + Math.floor(Math.random() * 2) },
-                         matrixIndex: grassMatrices.length - 1
-                     });
+             const grassSourceMesh = cachedMeshes.grass;
+              if (grassSourceMesh && grassSourceMesh.geometry) {
+                 const grassCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.grassDensity);
+                 for (let i = 0; i < grassCount; i++) {
+                     const x = Math.random() * CONFIG.worldSize - worldHalfSize;
+                     const z = Math.random() * CONFIG.worldSize - worldHalfSize;
+                     const y = getRealTerrainHeight(x, z); // Use real height
+                     if (y > CONFIG.waterLevel) {
+                         const matrix = BABYLON.Matrix.Compose(
+                             new BABYLON.Vector3(1, 1, 1),
+                             BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0),
+                             new BABYLON.Vector3(x, y + 0.5, z) // Position slightly above ground
+                         );
+                         grassMatrices.push(matrix);
+                         entities.grass.push({
+                             position: new BABYLON.Vector3(x, y + 0.5, z),
+                             health: 100, // Can be harvested
+                             resources: { grass: 1 + Math.floor(Math.random() * 2) },
+                             matrixIndex: grassMatrices.length - 1,
+                             meshCacheKey: 'grass'
+                         });
+                     }
                  }
-             }
-             if(cachedMeshes.grass) {
-                 cachedMeshes.grass.thinInstanceAdd(grassMatrices);
+                 grassSourceMesh.thinInstanceAdd(grassMatrices);
                  // Optional: Make grass billboards face the camera
-                 // cachedMeshes.grass.billboardMode = BABYLON.Mesh.BILLBOARDMODE_Y;
+                 // grassSourceMesh.billboardMode = BABYLON.Mesh.BILLBOARDMODE_Y;
+             } else {
+                  console.error("Cannot place grass: Source grass mesh has no geometry or is missing.");
              }
 
 
-            // Place Animals (using Instances, not thin instances, as they need individual logic/movement)
+
+             // Place Animals (using Clones, not instances, as they need individual logic/movement and root has no geometry)
             placeAnimals("chicken", CONFIG.chickenDensity);
             placeAnimals("rabbit", CONFIG.rabbitDensity);
             placeAnimals("deer", CONFIG.deerDensity);
 
-            // Place Barrels (using Instances)
+            // Place Barrels (using Clones for consistency)
             const barrelCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * CONFIG.barrelDensity);
             for (let i = 0; i < barrelCount; i++) {
                 const x = Math.random() * CONFIG.worldSize - worldHalfSize;
                 const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                const y = getTerrainHeight(x, z);
+                const y = getRealTerrainHeight(x, z); // Use real height
 
                 if (y > CONFIG.waterLevel && cachedMeshes.barrel) {
-                    const barrel = cachedMeshes.barrel.createInstance(`barrel_${i}`);
-                    if (!barrel) continue; // Skip if instance creation failed
+                     // FIX: Use clone instead of createInstance for meshes without geometry on root
+                    const barrel = cachedMeshes.barrel.clone(`barrel_${i}`, null); // Clone the root node
+
+                    if (!barrel) continue; // Skip if clone creation failed
+
+                     // Enable the clone itself and its children
+                     barrel.setEnabled(true);
+                     barrel.getChildMeshes().forEach(child => child.setEnabled(true)); // Make sure geometry is visible
+
+                     barrel.isPickable = true; // Make the root pickable for interaction
+
                     barrel.position = new BABYLON.Vector3(x, y + 0.75, z); // Position correctly on ground
-                     barrel.setEnabled(true); // Enable the instance
-                     barrel.isPickable = true; // Make sure it's interactable
+
 
                     const loot = {};
                     if (Math.random() < 0.5) loot.wood = 1 + Math.floor(Math.random() * 3);
@@ -837,7 +871,7 @@
                     if (Math.random() < 0.1) loot.ironOre = 1;
 
                     entities.barrels.push({
-                        mesh: barrel, // Direct reference to the instance
+                        mesh: barrel, // Direct reference to the clone root
                         type: "barrel",
                         position: barrel.position.clone(),
                         health: 100,
@@ -848,11 +882,16 @@
 
             // Helper function to place ores (populates matrix buffer and entity data)
             function placeOres(oreType, density, matrixBuffer) {
+                 const oreSourceMesh = cachedMeshes[oreType];
+                 if (!oreSourceMesh || !oreSourceMesh.geometry) {
+                     console.error(`Cannot place ${oreType}: Source mesh missing or has no geometry.`);
+                     return;
+                 }
                 const oreCount = Math.floor(CONFIG.worldSize * CONFIG.worldSize * density);
                 for (let i = 0; i < oreCount; i++) {
                     const x = Math.random() * CONFIG.worldSize - worldHalfSize;
                     const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                    const y = getTerrainHeight(x, z);
+                    const y = getRealTerrainHeight(x, z); // Use real height
 
                     if (y > CONFIG.waterLevel) {
                          const scaleX = 0.7 + Math.random() * 0.6;
@@ -861,7 +900,7 @@
                          const matrix = BABYLON.Matrix.Compose(
                              new BABYLON.Vector3(scaleX, scaleY, scaleZ),
                              BABYLON.Quaternion.RotationYawPitchRoll(Math.random() * Math.PI * 2, 0, 0),
-                             new BABYLON.Vector3(x, y, z)
+                             new BABYLON.Vector3(x, y, z) // Position
                          );
                          matrixBuffer.push(matrix);
 
@@ -880,7 +919,7 @@
                 }
             }
 
-            // Helper function to place animals (creates instances)
+            // Helper function to place animals (creates clones)
             function placeAnimals(animalType, density) {
                  const cacheKey = animalType; // e.g., 'chicken', 'rabbit'
                 if (!cachedMeshes[cacheKey]) {
@@ -891,14 +930,22 @@
                 for (let i = 0; i < animalCount; i++) {
                     const x = Math.random() * CONFIG.worldSize - worldHalfSize;
                     const z = Math.random() * CONFIG.worldSize - worldHalfSize;
-                    const y = getTerrainHeight(x, z);
+                    const y = getRealTerrainHeight(x, z); // Use real height
 
                     if (y > CONFIG.waterLevel) {
-                        const animal = cachedMeshes[cacheKey].createInstance(`${animalType}_${i}`);
-                         if (!animal) continue; // Skip if instance creation failed
+                         // FIX: Use clone instead of createInstance for meshes without geometry on root
+                        const animal = cachedMeshes[cacheKey].clone(`${animalType}_${i}`, null); // Clone the root
+
+                         if (!animal) continue; // Skip if clone creation failed
+
+                         // Enable the clone itself and its children
+                         animal.setEnabled(true);
+                         animal.getChildMeshes().forEach(child => child.setEnabled(true));
+
+                         animal.isPickable = true; // Make the root interactable
+
                         animal.position = new BABYLON.Vector3(x, y + 0.5, z); // Adjust Y based on animal size/origin
-                         animal.setEnabled(true); // Enable the instance
-                         animal.isPickable = true; // Make interactable
+
 
                         const resources = { meat: 1 + Math.floor(Math.random() * 3) };
                         if (animalType === "chicken") resources.feathers = 2 + Math.floor(Math.random() * 2);
@@ -909,13 +956,14 @@
                         }
 
                         entities.animals.push({
-                            mesh: animal, // Direct reference to the instance
+                            mesh: animal, // Direct reference to the clone root
                             type: animalType,
                             position: animal.position.clone(),
                             health: 100,
                             resources: resources,
                             speed: 0.5 + Math.random() * 1.5, // Adjusted speed (units per second)
                             movementTimer: 0,
+                            isMoving: false, // Add state for movement
                             movementDirection: new BABYLON.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize()
                         });
                     }
@@ -929,35 +977,86 @@
             const INTERACTION_DISTANCE = 5;
              let lastHighlightedEntity = null; // Keep track of the last highlighted one
 
-             // Find the actual mesh (could be child of instance root)
-             function getInteractableMesh(mesh) {
-                 if (!mesh) return null;
-                 if (mesh.metadata?.entityLink) return mesh; // Already tagged
-                 let current = mesh;
-                 while (current) {
-                     if (current.metadata?.entityLink) return current; // Found tagged ancestor
-                     // Check specific names if not using metadata systematically
-                     if (["tree", "rock", "ore", "scrapMetal", "grass", "animal", "barrel", "campfire", "woodenWall", "storageBox", "chicken", "rabbit", "deer"].includes(current.name?.split('_')[0])) { // Check base name
-                        return current;
-                     }
-                     // For thin instances, we might need a different approach as pickedMesh is the source mesh
-                     current = current.parent;
+             // Find the actual entity data associated with a picked mesh (handles clones, instances, thin instances)
+             function getEntityFromPick(pickInfo) {
+                 if (!pickInfo || !pickInfo.pickedMesh) return null;
+
+                 const pickedMesh = pickInfo.pickedMesh;
+
+                  // --- Thin Instance Handling ---
+                 // FIX: Use thinInstanceIndex if available (preferred) or calculate based on pickedPoint
+                 if (pickedMesh.hasThinInstances && pickInfo.thinInstanceIndex !== undefined && pickInfo.thinInstanceIndex >= 0) {
+                     const instanceId = pickInfo.thinInstanceIndex;
+                     const meshCacheKey = pickedMesh.name; // Assumes source mesh name matches cache key
+                     const entityArray = entities.trees.concat(entities.rocks, entities.ores, entities.grass);
+                     return entityArray.find(e => e.meshCacheKey === meshCacheKey && e.matrixIndex === instanceId);
                  }
-                 return null; // No interactable mesh found in hierarchy
+                 // Fallback for older versions or specific setups (less reliable)
+                 /* else if (pickedMesh.hasThinInstances && pickInfo.faceId !== undefined) {
+                      // Finding instance by faceId or pickedPoint is complex and less reliable
+                      // For now, prioritize thinInstanceIndex check.
+                 } */
+
+
+                  // --- Regular Mesh / Clone Handling ---
+                 else {
+                      // Check if the picked mesh itself is a tracked entity root (clone or simple mesh)
+                     const directMatch = findEntityByMesh(pickedMesh);
+                     if (directMatch) return directMatch;
+
+                      // Check if a parent of the picked mesh is a tracked entity root (for children of clones)
+                     let parent = pickedMesh.parent;
+                     while (parent) {
+                         const parentMatch = findEntityByMesh(parent);
+                         if (parentMatch) return parentMatch;
+                         parent = parent.parent;
+                     }
+                 }
+
+                 return null; // No matching entity found
              }
+
+             // Helper to find entity matching a specific mesh reference
+             function findEntityByMesh(meshToFind) {
+                  const entityArrays = [entities.animals, entities.barrels, entities.placedItems]; // Arrays with direct mesh references
+                  for (const arr of entityArrays) {
+                      const entity = arr.find(e => e.mesh === meshToFind);
+                      if (entity) return entity;
+                  }
+                  return null;
+             }
+
+             // Function to apply/remove highlight (handles standard materials)
+             function setHighlight(entity, highlight) {
+                  if (!entity || !entity.mesh || entity.mesh.hasThinInstances) return; // Don't highlight thin instances this way
+
+                  const highlightColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+                  const blackColor = BABYLON.Color3.Black();
+
+                  // Function to apply highlight to a mesh's material
+                  const applyHighlightToMesh = (mesh) => {
+                      if (!mesh || !mesh.material) return;
+                      // Ensure material is StandardMaterial and has emissiveColor
+                      if (mesh.material instanceof BABYLON.StandardMaterial) {
+                           // Clone material ONLY if different highlights needed simultaneously (unlikely here)
+                           // mesh.material = mesh.material.clone(`${mesh.name}_highlightMat`);
+                          mesh.material.emissiveColor = highlight ? highlightColor : blackColor;
+                      }
+                  };
+
+                  // Apply to the root mesh
+                  applyHighlightToMesh(entity.mesh);
+                  // Apply to children as well (important for clones)
+                  entity.mesh.getChildMeshes().forEach(child => applyHighlightToMesh(child));
+             }
+
 
              // Raycast moved to main loop for highlight update
              window.updateInteractionHighlight = () => { // Make globally accessible for the loop
                  if (!camera || !scene || gameState.isPlacingItem) { // Don't highlight during placement
                       // Clear previous highlight if any
-                     if (lastHighlightedEntity && lastHighlightedEntity.mesh && lastHighlightedEntity.mesh.material) {
-                         // Check if it's an instance or original mesh
-                         if(lastHighlightedEntity.mesh.material.emissiveColor) { // Check if property exists
-                             lastHighlightedEntity.mesh.material.emissiveColor = BABYLON.Color3.Black();
-                         } else if (lastHighlightedEntity.mesh.instancedBuffers?.color) {
-                              // Handle thin instance color reset (more complex)
-                              // Need to know the original color or reset specific instance
-                         }
+                     if (lastHighlightedEntity) {
+                         setHighlight(lastHighlightedEntity, false);
                      }
                      lastHighlightedEntity = null;
                      currentTarget = null;
@@ -965,62 +1064,25 @@
                  };
 
                  const ray = camera.getForwardRay(INTERACTION_DISTANCE);
-                 // Optimize picking: only pick meshes that are potentially interactable
                  const hit = scene.pickWithRay(ray, (mesh) => {
-                     // Basic check: is it pickable and visible/enabled?
-                     // Add more specific checks if needed (e.g., based on layer mask or name patterns)
+                     // Basic check: is it pickable and enabled? Check root and children state?
+                     // Pickability usually checked on the specific mesh hit.
                      return mesh.isPickable && mesh.isEnabled();
                  });
 
-                 let newTargetEntity = null;
-
-                 if (hit.pickedMesh) {
-                     // --- Thin Instance Handling ---
-                      if (hit.pickedMesh.hasThinInstances && hit.faceId !== undefined && hit.subMeshId !== undefined) {
-                          const instanceId = hit.pickedMesh.thinInstanceGetWorldMatrices().length > hit.faceId ? hit.faceId : -1; // Approximation, might need adjustment based on mesh geometry
-                          if(instanceId !== -1) {
-                              // Find the entity associated with this instanceId and mesh type
-                              const meshCacheKey = hit.pickedMesh.name; // e.g., 'tree', 'rock'
-                              const entityArray = entities.trees.concat(entities.rocks, entities.ores, entities.grass); // Combine relevant arrays
-                              newTargetEntity = entityArray.find(e => e.meshCacheKey === meshCacheKey && e.matrixIndex === instanceId);
-                              // NOTE: Highlighting individual thin instances requires advanced shader techniques or temporarily replacing with a regular instance.
-                              // Simple emissive color won't work directly on thin instances.
-                              // For now, we identify it but don't visually highlight thin instances this way.
-                         }
-                      }
-                      // --- Regular Instance / Mesh Handling ---
-                      else {
-                          // Find entity associated with the picked mesh instance or its parent
-                          let interactableMesh = getInteractableMesh(hit.pickedMesh);
-                          if (interactableMesh) {
-                              // Find in entities arrays (excluding thin instanced ones handled above)
-                              const entityArrays = [entities.animals, entities.barrels, entities.placedItems];
-                              for (const arr of entityArrays) {
-                                  newTargetEntity = arr.find(e => e.mesh === interactableMesh);
-                                  if (newTargetEntity) break;
-                              }
-                          }
-                      }
-                 }
+                 let newTargetEntity = getEntityFromPick(hit); // Use helper to find entity
 
 
                   // --- Update Highlighting ---
                   if (newTargetEntity !== lastHighlightedEntity) {
                       // Remove highlight from the old entity
-                      if (lastHighlightedEntity && lastHighlightedEntity.mesh && lastHighlightedEntity.mesh.material && !lastHighlightedEntity.mesh.hasThinInstances) {
-                           if(lastHighlightedEntity.mesh.material.emissiveColor) { // Check if property exists
-                               lastHighlightedEntity.mesh.material.emissiveColor = BABYLON.Color3.Black();
-                           }
+                      if (lastHighlightedEntity) {
+                           setHighlight(lastHighlightedEntity, false);
                       }
 
-                      // Add highlight to the new entity (if it's not a thin instance)
-                      if (newTargetEntity && newTargetEntity.mesh && newTargetEntity.mesh.material && !newTargetEntity.mesh.hasThinInstances) {
-                          if (newTargetEntity.mesh.material.emissiveColor) { // Check if property exists
-                              // Clone material ONLY if necessary (e.g., if different instances need different highlights later)
-                              // For simple emissive toggle, modifying directly is often fine if all instances share material
-                              // newTargetEntity.mesh.material = newTargetEntity.mesh.material.clone(); // Use if cloning is needed
-                              newTargetEntity.mesh.material.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2);
-                          }
+                      // Add highlight to the new entity
+                      if (newTargetEntity) {
+                          setHighlight(newTargetEntity, true);
                       }
 
                       lastHighlightedEntity = newTargetEntity;
@@ -1059,14 +1121,13 @@
                 }
             });
 
-            // Mouse click for attacking/using tools
+            // Mouse click for attacking/using tools or placement
             scene.onPointerObservable.add((pointerInfo) => {
                  if (gameState.isPlacingItem) { // Handle placement click
                       if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) { // Left Click
                           confirmPlacement();
-                      } else if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 2) { // Right Click
-                          cancelPlacement();
                       }
+                      // Right click cancel handled by ESC key now for consistency
                       return; // Don't process harvesting clicks during placement
                  }
 
@@ -1078,7 +1139,7 @@
                 }
             });
 
-             // Handle ESC key for cancelling placement
+             // Handle ESC key for cancelling placement / closing menus
              scene.onKeyboardObservable.add((kbInfo) => {
                  if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN && kbInfo.event.key === "Escape") {
                      if (gameState.isPlacingItem) {
@@ -1087,6 +1148,8 @@
                           toggleInventory();
                      } else if (gameState.isCraftingOpen) {
                           toggleCrafting();
+                     } else {
+                          // Optional: Add pause menu toggle or other ESC behavior here
                      }
                  }
              });
@@ -1107,15 +1170,16 @@
                  let damage = 5; // Base damage
                  let requiredTool = null;
                  let canHarvest = false;
-                 const entityType = entity.type || entity.mesh?.name?.split('_')[0]; // Get type
+                 // Use entity.type (set during creation/placement) or derive from meshCacheKey/name if needed
+                 const entityType = entity.type || entity.meshCacheKey || entity.mesh?.name?.split('_')[0];
 
-                 if (entityType === 'tree' || entity.meshCacheKey === 'tree') {
+                 if (entityType === 'tree') {
                      requiredTool = 'axe'; damage = gameState.tools.axe ? 25 : 5; canHarvest = true;
-                 } else if (entityType === 'rock' || entity.meshCacheKey === 'rock' || entityType?.includes('Ore') || entity.meshCacheKey?.includes('Ore')) {
+                 } else if (entityType === 'rock' || entityType?.includes('Ore') || entityType === 'scrapMetal') {
                      requiredTool = 'pickaxe'; damage = gameState.tools.pickaxe ? 20 : 5; canHarvest = true;
                  } else if (entityType === 'chicken' || entityType === 'rabbit' || entityType === 'deer') {
                      requiredTool = 'knife'; damage = gameState.tools.knife ? 30 : 10; canHarvest = true; // Animals can be damaged without knife, but less effectively
-                 } else if (entityType === 'barrel' || entityType === 'grass' || entity.meshCacheKey === 'grass' || entityType === 'scrapMetal' || entity.meshCacheKey === 'scrapMetal') {
+                 } else if (entityType === 'barrel' || entityType === 'grass') {
                      canHarvest = true; // No specific tool needed, just base damage
                  } else if (entityType === 'campfire' || entityType === 'woodenWall' || entityType === 'storageBox') {
                       // Placed items might require tools to deconstruct
@@ -1132,40 +1196,37 @@
                      if (entity.health <= 0) {
                          // --- Resource Collection ---
                          let collected = [];
-                         for (const resource in entity.resources) {
-                             gameState.inventory[resource] = (gameState.inventory[resource] || 0) + entity.resources[resource];
-                              collected.push(`${entity.resources[resource]} ${resource}`);
+                         if (entity.resources) { // Check if resources exist
+                            for (const resource in entity.resources) {
+                                gameState.inventory[resource] = (gameState.inventory[resource] || 0) + entity.resources[resource];
+                                collected.push(`${entity.resources[resource]} ${resource}`);
+                            }
+                            if(collected.length > 0) {
+                                showNotification(`Collected: ${collected.join(', ')}`);
+                            }
                          }
-                          if(collected.length > 0) {
-                              showNotification(`Collected: ${collected.join(', ')}`);
-                          }
+
 
                          // --- Remove Entity ---
-                          // Thin Instance Removal (more complex):
+                          // Thin Instance Removal (use scaling to zero to avoid index issues)
                           if (entity.matrixIndex !== undefined && entity.meshCacheKey) {
                               const sourceMesh = cachedMeshes[entity.meshCacheKey];
-                              if (sourceMesh && sourceMesh.thinInstanceRemoveAtIndex) {
-                                   sourceMesh.thinInstanceRemoveAtIndex(entity.matrixIndex);
-                                   // IMPORTANT: Need to update matrixIndex for all subsequent entities in the same buffer!
-                                   // This is complex. A simpler way is to just hide it (set scale to 0).
-                                   const zeroMatrix = BABYLON.Matrix.Scaling(0, 0, 0);
-                                   sourceMesh.thinInstanceSetMatrixAt(entity.matrixIndex, zeroMatrix);
+                              if (sourceMesh && sourceMesh.thinInstanceSetMatrixAt) {
+                                   const zeroMatrix = BABYLON.Matrix.Scaling(0.001, 0.001, 0.001); // Use near-zero scale
+                                   sourceMesh.thinInstanceSetMatrixAt(entity.matrixIndex, zeroMatrix, true); // Refresh buffer
+                                   // Note: Entity data remains, but object is effectively gone visually & for picking
                               }
                           }
-                          // Regular Instance/Mesh Removal:
+                          // Regular Instance/Clone Removal:
                           else if (entity.mesh) {
-                              entity.mesh.dispose();
+                              entity.mesh.dispose(); // Dispose the mesh and its children
                           }
 
                          // Remove from entities tracking array
                          let found = false;
                          for (const key in entities) {
                               const arr = entities[key];
-                              // Find based on unique property (like matrixIndex or mesh reference)
-                              const index = arr.findIndex(e =>
-                                 (entity.matrixIndex !== undefined && e.matrixIndex === entity.matrixIndex && e.meshCacheKey === entity.meshCacheKey) ||
-                                 (entity.mesh && e.mesh === entity.mesh)
-                              );
+                              const index = arr.indexOf(entity); // Find direct reference
                              if (index !== -1) {
                                  arr.splice(index, 1);
                                  found = true;
@@ -1175,8 +1236,10 @@
 
                          // Clear target if it was the destroyed entity
                          if (currentTarget === entity) {
+                              if (lastHighlightedEntity === entity) { // Also clear highlight if it was highlighted
+                                  lastHighlightedEntity = null;
+                              }
                              currentTarget = null;
-                              lastHighlightedEntity = null; // Clear highlight reference too
                          }
 
                          updateUI(); // Update inventory display
@@ -1249,8 +1312,18 @@
 
         // --- Animal AI ---
         function updateAnimals(deltaTime) {
+              // CRITICAL FIX: Function to get actual terrain height using raycasting (same as in generateResources)
+              // Could be moved to a shared utility function
+             function getRealTerrainHeight(x, z, defaultHeight = 0) {
+                const groundMesh = scene.getMeshByName("ground");
+                if (!groundMesh) return defaultHeight;
+                 const ray = new BABYLON.Ray(new BABYLON.Vector3(x, 50, z), new BABYLON.Vector3(0, -1, 0));
+                 const hit = scene.pickWithRay(ray, (mesh) => mesh === groundMesh);
+                 return (hit && hit.pickedPoint) ? hit.pickedPoint.y : defaultHeight;
+             }
+
              entities.animals.forEach(animal => {
-                 if (!animal.mesh || !animal.mesh.isEnabled()) return; // Skip if disposed or disabled
+                 if (!animal.mesh || !animal.mesh.isEnabled() || animal.health <= 0) return; // Skip if disposed, disabled, or dead
 
                  // --- Simple State Machine (Idle, Wander) ---
                  animal.movementTimer -= deltaTime;
@@ -1272,47 +1345,52 @@
                  // --- Movement ---
                  if (animal.isMoving) {
                      const moveVector = animal.movementDirection.scale(animal.speed * deltaTime);
-                     // Basic Collision Avoidance (Check point ahead) - Very Simple!
-                     const checkDistance = 1.0;
-                     const pointAhead = animal.mesh.position.add(animal.movementDirection.scale(checkDistance));
+                     const currentPos = animal.mesh.position;
+                     const nextPos = currentPos.add(moveVector);
 
-                     // TODO: Add better collision checking (e.g., raycast down to check ground height, raycast forward)
-                      let canMove = true; // Assume can move unless obstacle detected
+                     // Basic Collision Avoidance / Terrain Following Prep
+                     const terrainHeightAtNextPos = getRealTerrainHeight(nextPos.x, nextPos.z, currentPos.y); // Get target height
+                     let canMove = true;
 
-                      // Example: Prevent moving into water (simple check)
-                      if (pointAhead.y < CONFIG.waterLevel + 0.5) {
-                           canMove = false;
-                           animal.movementTimer = 0; // Force direction change next frame
-                      }
+                     // Example: Prevent moving into deep water
+                     if (terrainHeightAtNextPos < CONFIG.waterLevel + 0.2) { // Check height at next position
+                          canMove = false;
+                          animal.movementTimer = 0; // Force direction change next frame
+                     }
+                     // TODO: Add checks against trees, rocks, placed items (raycast forward or sphere check)
 
-                      if (canMove) {
-                          animal.mesh.moveWithCollisions(moveVector); // Use built-in collision
+                     if (canMove) {
+                          // Adjust target Y position to follow terrain smoothly
+                          const targetY = terrainHeightAtNextPos + 0.5; // Adjust offset based on animal model origin
+                          const lerpedY = BABYLON.Scalar.Lerp(currentPos.y, targetY, 0.1); // Smooth Y transition
+                          const finalMoveVector = new BABYLON.Vector3(moveVector.x, lerpedY - currentPos.y, moveVector.z);
+
+                          animal.mesh.moveWithCollisions(finalMoveVector); // Use built-in collision AFTER adjusting Y
                           animal.position.copyFrom(animal.mesh.position); // Update stored position
 
                           // --- Rotation ---
-                          // Smoothly rotate towards movement direction
-                          const targetAngle = Math.atan2(animal.movementDirection.x, animal.movementDirection.z);
+                          // FIX: Change const to let for targetAngle
+                          let targetAngle = Math.atan2(animal.movementDirection.x, animal.movementDirection.z);
                           let currentAngle = animal.mesh.rotation.y;
                           // Ensure angles are in the same range (e.g., -PI to PI)
                           while (targetAngle - currentAngle > Math.PI) targetAngle -= Math.PI * 2;
                           while (targetAngle - currentAngle < -Math.PI) targetAngle += Math.PI * 2;
                           // Lerp rotation
                           animal.mesh.rotation.y = BABYLON.Scalar.Lerp(currentAngle, targetAngle, 0.1); // Adjust lerp factor for speed
-                      } else {
-                           // If movement blocked, trigger direction change
-                           animal.movementTimer = 0;
-                           animal.isMoving = false;
-                      }
+                     } else {
+                          // If movement blocked, trigger direction change
+                          animal.movementTimer = 0;
+                          animal.isMoving = false;
+                     }
 
                  } else {
                      // Idle behavior (e.g., play idle animation if available)
                  }
 
-                 // --- Keep animal on terrain (Simple Y adjustment) ---
-                  // This is a basic fix, raycasting is better
-                  const terrainHeight = 0; // Replace with actual getTerrainHeight(animal.mesh.position.x, animal.mesh.position.z);
-                  // animal.mesh.position.y = terrainHeight + 0.5; // Adjust based on animal pivot
-                  // animal.position.copyFrom(animal.mesh.position);
+                 // Final terrain height check (snap if needed, less smooth)
+                 // const finalTerrainHeight = getRealTerrainHeight(animal.mesh.position.x, animal.mesh.position.z, animal.mesh.position.y);
+                 // animal.mesh.position.y = finalTerrainHeight + 0.5;
+                 // animal.position.copyFrom(animal.mesh.position);
 
              });
          }
@@ -1378,10 +1456,10 @@
 
             if (gameState.isInventoryOpen) {
                 updateInventoryUI();
+                 camera.detachControl(canvas); // Prevent movement/look while UI is open
+            } else {
+                 camera.attachControl(canvas, true); // Re-attach control
             }
-             // Optional: Pause game or lock camera look when inventory is open
-             // engine.stopRenderLoop(); / scene.detachControl();
-             // else engine.runRenderLoop(...); / scene.attachControl();
         }
 
         // Toggle Crafting UI
@@ -1395,11 +1473,16 @@
 
             if (gameState.isCraftingOpen) {
                 updateCraftingUI();
+                 camera.detachControl(canvas); // Prevent movement/look while UI is open
+            } else {
+                 // Only re-attach if inventory isn't also open
+                 if (!gameState.isInventoryOpen) {
+                    camera.attachControl(canvas, true);
+                 }
             }
-             // Optional: Pause game or lock camera look
         }
 
-         // FIX: Debounce UI updates to avoid excessive DOM manipulation
+         // Debounce UI updates to avoid excessive DOM manipulation
          let uiUpdateTimer = null;
          const UI_UPDATE_INTERVAL = 200; // Milliseconds (5 times per second max)
 
@@ -1418,7 +1501,7 @@
                  document.getElementById('hunger').textContent = Math.floor(gameState.hunger);
                  document.getElementById('thirst').textContent = Math.floor(gameState.thirst);
 
-                 // FIX: Update Progress Bar Widths
+                 // Update Progress Bar Widths
                  document.getElementById('healthBar').style.width = gameState.health + '%';
                  document.getElementById('hungerBar').style.width = gameState.hunger + '%';
                  document.getElementById('thirstBar').style.width = gameState.thirst + '%';
@@ -1572,7 +1655,7 @@
                       updateUI();
                       return;
                   }
-                 startPlacement(recipe);
+                 startPlacement(recipe); // Pass recipe to placement
              } else {
                  // Add non-placeable item to inventory
                  gameState.inventory[recipe.result] = (gameState.inventory[recipe.result] || 0) + 1;
@@ -1582,8 +1665,7 @@
                  if (gameState.isCraftingOpen) updateCraftingUI();
              }
 
-             // Close crafting menu AFTER initiating craft/placement
-             // toggleCrafting(); // FIX: Removed immediate close, close after placement or non-placeable craft
+             // Don't close crafting menu automatically here - placement handles it
          }
 
          // Start placement mode
@@ -1591,30 +1673,61 @@
              gameState.isPlacingItem = true;
              gameState.placementRecipe = recipe;
 
-             // Create preview mesh
-             gameState.placementPreviewMesh = cachedMeshes[recipe.result].createInstance("placementPreview");
+             // FIX: Use clone for placement preview
+             gameState.placementPreviewMesh = cachedMeshes[recipe.result].clone("placementPreview", null);
+
+             if (!gameState.placementPreviewMesh) {
+                 console.error(`Failed to clone placement preview for ${recipe.result}`);
+                 showNotification(`Error starting placement for ${recipe.name}!`);
+                 // Return resources since placement failed
+                 for (const req in recipe.requirements) { gameState.inventory[req] += recipe.requirements[req]; }
+                 cleanUpPlacement(); // Clean up partial state
+                 updateUI();
+                 return;
+             }
+
              gameState.placementPreviewMesh.setEnabled(true);
              gameState.placementPreviewMesh.isPickable = false; // Don't interact with preview
+             // Disable children as well
+             gameState.placementPreviewMesh.getChildMeshes().forEach(child => {
+                  child.setEnabled(true); // Ensure they are visible for preview
+                  child.isPickable = false;
+             });
 
              // Apply semi-transparent material
              const previewMaterial = new BABYLON.StandardMaterial("previewMat", scene);
-             // Try to base color on original material if possible
-             const originalMaterial = cachedMeshes[recipe.result].material;
-             if (originalMaterial && originalMaterial.diffuseColor) {
+             // Try to base color on original material if possible (check child materials if root has none)
+             let originalMaterial = gameState.placementPreviewMesh.material;
+             if (!originalMaterial && gameState.placementPreviewMesh.getChildMeshes().length > 0) {
+                 // Find first child with a standard material
+                 const childWithMat = gameState.placementPreviewMesh.getChildMeshes().find(m => m.material instanceof BABYLON.StandardMaterial);
+                 if (childWithMat) originalMaterial = childWithMat.material;
+             }
+
+             if (originalMaterial instanceof BABYLON.StandardMaterial && originalMaterial.diffuseColor) {
                  previewMaterial.diffuseColor = originalMaterial.diffuseColor.clone();
              } else {
                  previewMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.8, 0.5); // Default preview color
              }
              previewMaterial.alpha = 0.6;
+
+             // Apply to root and all children
              gameState.placementPreviewMesh.material = previewMaterial;
+             gameState.placementPreviewMesh.getChildMeshes().forEach(child => {
+                  // Create separate instances of the material for children if they need independent emissive colors
+                  // (though usually setting the root's material works visually for simple previews)
+                  child.material = previewMaterial.clone(`${child.name}_previewMat`);
+                  child.material.alpha = 0.6; // Ensure alpha is set on cloned mats too
+             });
+
 
              // Hide crafting menu during placement
              if (gameState.isCraftingOpen) {
                   document.getElementById('craftingMenu').style.display = 'none';
              }
-             showNotification(`Placing ${recipe.name}... (Left Click to place, Right Click / ESC to cancel)`);
-
-             // Listeners are handled by the main interaction setup now
+              // Detach controls during placement as well
+              camera.detachControl(canvas);
+             showNotification(`Placing ${recipe.name}... (Left Click to place, ESC to cancel)`);
          }
 
          // Update placement preview position and validation
@@ -1622,31 +1735,53 @@
              if (!gameState.isPlacingItem || !gameState.placementPreviewMesh) return;
 
              const PLACEMENT_DISTANCE = 8;
-             const ray = camera.getForwardRay(PLACEMENT_DISTANCE);
-             const hit = scene.pickWithRay(ray, (mesh) => mesh.isPickable && mesh !== gameState.placementPreviewMesh && mesh.name !== "playerCollider"); // Ignore self and player
+             const ray = camera.getForwardRay(PLACEMENT_DISTANCE); // Use camera from global scope
+             const hit = scene.pickWithRay(ray, (mesh) => mesh.isPickable && mesh !== gameState.placementPreviewMesh && !mesh.parent); // Ignore self, maybe ignore children of things? Only pick ground/rocks etc.
 
              let placementValid = false;
+             let placementPosition = null;
+
              if (hit.pickedMesh && hit.pickedPoint) {
-                 // Check if placement is on valid surface (e.g., ground)
-                 if (hit.pickedMesh.name === "ground") { // Example: Only place on ground
-                      gameState.placementPreviewMesh.position.copyFrom(hit.pickedPoint);
-                       // TODO: Add more validation (e.g., check for collisions with other objects at placement position)
-                       placementValid = true;
-                 } else {
-                      // Optional: Snap to grid or other surfaces if needed
+                 placementPosition = hit.pickedPoint.clone();
+                 // Basic validation: Place only on ground for now
+                 if (hit.pickedMesh.name === "ground") {
+                     // TODO: Add more validation: Check for overlaps with other placedItems, resources etc.
+                     // Use bounding box intersection checks:
+                     // gameState.placementPreviewMesh.position = placementPosition; // Temporarily move for check
+                     // let intersects = false;
+                     // const checkEntities = [...entities.placedItems, ...entities.trees, ...entities.rocks, ...entities.ores, ...entities.animals]; // Add more if needed
+                     // for (const entity of checkEntities) {
+                     //    if (entity.mesh && entity.mesh !== gameState.placementPreviewMesh && gameState.placementPreviewMesh.intersectsMesh(entity.mesh, true)) {
+                     //       intersects = true;
+                     //       break;
+                     //    }
+                     // }
+                     // if (!intersects) {
+                     //      placementValid = true;
+                     // }
+                     placementValid = true; // Simplified validation for now
                  }
+             }
+
+             // Update position if a valid point was found
+             if (placementPosition) {
+                  gameState.placementPreviewMesh.position = placementPosition;
              }
 
              // Update preview material color based on validity
-             const previewMat = gameState.placementPreviewMesh.material;
-             if (placementValid) {
-                 previewMat.emissiveColor = new BABYLON.Color3(0, 0.3, 0); // Green tint for valid
-             } else {
-                 previewMat.emissiveColor = new BABYLON.Color3(0.5, 0, 0); // Red tint for invalid
-                 if (gameState.placementPreviewMesh.position) { // Move slightly away if invalid
-                     gameState.placementPreviewMesh.position.y += 0.1;
+             const validColor = new BABYLON.Color3(0, 0.3, 0); // Green tint
+             const invalidColor = new BABYLON.Color3(0.5, 0, 0); // Red tint
+             const targetColor = placementValid ? validColor : invalidColor;
+
+             // Apply emissive color to root and children materials
+             const applyEmissive = (mesh) => {
+                 if (mesh && mesh.material instanceof BABYLON.StandardMaterial) {
+                     mesh.material.emissiveColor = targetColor;
                  }
-             }
+             };
+             applyEmissive(gameState.placementPreviewMesh);
+             gameState.placementPreviewMesh.getChildMeshes().forEach(applyEmissive);
+
              gameState.placementValid = placementValid; // Store validity state
          }
 
@@ -1660,14 +1795,32 @@
 
              const recipe = gameState.placementRecipe;
              const position = gameState.placementPreviewMesh.position.clone();
+              // TODO: Add rotation control during placement if needed
               const rotation = gameState.placementPreviewMesh.rotationQuaternion ? gameState.placementPreviewMesh.rotationQuaternion.clone() : BABYLON.Quaternion.Identity(); // Copy rotation if needed
 
-             // Create the actual placed item instance
-             const placedItemMesh = cachedMeshes[recipe.result].createInstance(`${recipe.result}_placed_${entities.placedItems.length}`);
+             // FIX: Use clone to create the final placed item
+             const placedItemMesh = cachedMeshes[recipe.result].clone(`${recipe.result}_placed_${entities.placedItems.length}`, null);
+
+              if (!placedItemMesh) {
+                  console.error(`Failed to clone placed item ${recipe.result}`);
+                  showNotification(`Error placing ${recipe.name}!`);
+                  // Return resources if final clone fails
+                  for (const req in recipe.requirements) { gameState.inventory[req] += recipe.requirements[req]; }
+                  cleanUpPlacement();
+                  updateUI();
+                  return;
+              }
+
              placedItemMesh.position = position;
               // placedItemMesh.rotationQuaternion = rotation; // Apply rotation if preview allows it
              placedItemMesh.setEnabled(true);
              placedItemMesh.isPickable = true; // Make the final item interactable
+              // Enable children and make them pickable (if needed for interaction)
+              placedItemMesh.getChildMeshes().forEach(child => {
+                  child.setEnabled(true);
+                  child.isPickable = true; // Or false, depending on design
+              });
+
 
               // Optional: Add physics impostor if needed
               // placedItemMesh.physicsImpostor = new BABYLON.PhysicsImpostor(placedItemMesh, BABYLON.PhysicsImpostor.BoxImpostor, { mass: 0, restitution: 0.1 }, scene);
@@ -1675,55 +1828,72 @@
 
              // Add to placed items entity list
              entities.placedItems.push({
-                 mesh: placedItemMesh,
+                 mesh: placedItemMesh, // Reference to the clone root
                  type: recipe.result,
                  position: position.clone(),
                   health: 100, // Give placed items health for deconstruction
-                  resources: { ...recipe.requirements } // Store resources needed (e.g., for deconstruction yield)
+                  // Store required resources for potential deconstruction yield (adjust yield calculation later)
+                  resources: { ...recipe.requirements }
              });
 
              showNotification(`Placed ${recipe.name}`);
 
-             // Clean up placement state
+             // Clean up placement state (disposes preview mesh)
              cleanUpPlacement();
 
-              // Update crafting UI if it was open
-              if (gameState.isCraftingOpen) updateCraftingUI();
+              // Re-enable controls ONLY if other menus aren't open
+              if (!gameState.isCraftingOpen && !gameState.isInventoryOpen) {
+                 camera.attachControl(canvas, true);
+              }
+
+              // Update crafting UI if it was the source (to reflect resource changes)
+              // if (gameState.isCraftingOpen) updateCraftingUI(); // Crafting menu is closed during placement
          }
 
          // Cancel placement action
          function cancelPlacement() {
              if (!gameState.isPlacingItem) return;
 
-             // Return resources
-             const recipe = gameState.placementRecipe;
-             for (const req in recipe.requirements) {
-                 gameState.inventory[req] = (gameState.inventory[req] || 0) + recipe.requirements[req];
+             const recipe = gameState.placementRecipe; // Get recipe BEFORE cleanup
+
+             // Return resources only if a valid recipe was being placed
+             if (recipe && recipe.requirements) {
+                 for (const req in recipe.requirements) {
+                     gameState.inventory[req] = (gameState.inventory[req] || 0) + recipe.requirements[req];
+                 }
+                 showNotification(`Placement cancelled for ${recipe.name}. Resources returned.`);
+             } else {
+                  showNotification(`Placement cancelled.`);
              }
 
-             showNotification(`Placement cancelled for ${recipe.name}. Resources returned.`);
 
-             // Clean up placement state
+             // Clean up placement state (disposes preview mesh)
              cleanUpPlacement();
              updateUI(); // Update inventory display
 
-              // Re-open crafting menu if it was open before placement
-             if (gameState.isCraftingOpen) {
-                  document.getElementById('craftingMenu').style.display = 'block';
-                 updateCraftingUI();
-             }
+              // Re-open crafting menu ONLY if it was open before placement started
+             // (Need to track this state if desired, or just don't reopen)
+             // if (wasCraftingOpenBeforePlacement) { // Requires tracking this state
+             //    document.getElementById('craftingMenu').style.display = 'block';
+             //    updateCraftingUI();
+             // }
+
+              // Re-enable controls ONLY if other menus aren't open
+              if (!gameState.isCraftingOpen && !gameState.isInventoryOpen) {
+                 camera.attachControl(canvas, true);
+              }
          }
 
          // Clean up placement variables and preview mesh
          function cleanUpPlacement() {
              if (gameState.placementPreviewMesh) {
-                 gameState.placementPreviewMesh.dispose();
+                 gameState.placementPreviewMesh.dispose(); // Dispose clone and children
                  gameState.placementPreviewMesh = null;
              }
              gameState.isPlacingItem = false;
              gameState.placementRecipe = null;
              gameState.placementValid = false;
-             // Clear notification after a delay?
+             // Clear notification after a delay? Handled by showNotification timeout
          }
 
 
@@ -1731,16 +1901,22 @@
 
         // Function to find the closest water source
         function findClosestWater(position) {
-             // Simple check: is player close to water Y level?
-             // More robust: Raycast down, check if hit water mesh, or check distance to water bodies
-            return camera.position.y < CONFIG.waterLevel + 1.5; // Check if player is near water level
+            // FIX: More robust water check - raycast down
+             const waterCheckRay = new BABYLON.Ray(position, new BABYLON.Vector3(0, -1, 0));
+             const waterCheckDistance = 2.0; // How far down to check
+             const hit = scene.pickWithRay(waterCheckRay, (mesh) => mesh.name === "water", true, waterCheckDistance); // Only pick water mesh
+
+            return hit && hit.pickedMesh; // Return true if water was hit within range
         }
 
         // Function to drink water
         function drinkWater() {
             if (gameState.isPlacingItem) return;
 
-            if (findClosestWater(camera.position)) {
+            // Use camera position slightly in front for the check
+             const checkPos = camera.position.add(camera.getDirection(BABYLON.Axis.Z).scale(0.5));
+
+            if (findClosestWater(checkPos)) {
                  if (gameState.tools.canteen) { // Assume canteen auto-refills for simplicity
                      gameState.thirst = 100;
                      showNotification("Drank water.");
@@ -1795,8 +1971,14 @@
               notificationTimeout = setTimeout(() => {
                   notificationElement.style.opacity = 0;
                   // Use transition end or another timeout to set display: none
-                  setTimeout(() => { notificationElement.style.display = 'none'; }, 500); // Match CSS transition
+                  setTimeout(() => {
+                      // Check if this is still the active timeout before hiding
+                      if (notificationTimeout === timeoutId) {
+                          notificationElement.style.display = 'none';
+                      }
+                   }, 500); // Match CSS transition duration
               }, duration);
+              const timeoutId = notificationTimeout; // Store the ID for the check in the hide timeout
          }
 
 
@@ -1824,7 +2006,7 @@
                  return;
             }
 
-             // FIX: Call createGame only ONCE, after a delay (simulating asset loading)
+             // Call createGame only ONCE, after a delay (simulating asset loading)
              // In a real game, you'd use Babylon's AssetsManager here.
             setTimeout(function() {
                 try {
