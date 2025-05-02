@@ -7,7 +7,8 @@ import * as Player from './player.js';
 import * as InfectedManager from './infected.js';
 import * as Crafting from './crafting.js';
 import * as Building from './building.js';
-// Import others as needed
+import * as Vehicles from './vehicles.js';
+import * as UIManager from './ui.js';
 
 const SAVE_SLOT_KEY = 'mistSurvival_saveGame';
 
@@ -15,29 +16,32 @@ const SAVE_SLOT_KEY = 'mistSurvival_saveGame';
 export function saveGame() {
     console.log("Saving game...");
     try {
+        // Collect state from each module
         const gameState = {
             saveFormatVersion: 1, // To handle future changes
             saveTimestamp: Date.now(),
-            world: World.getState(),
-            player: Player.getState(),
-            infected: InfectedManager.getState(),
-            crafting: Crafting.getState(),
-            building: Building.getState(),
-            // Add state from other modules here...
-             // vehicles: VehicleManager.getState(),
+            world: typeof World.getState === 'function' ? World.getState() : {},
+            player: typeof Player.getState === 'function' ? Player.getState() : {},
+            infected: typeof InfectedManager.getState === 'function' ? InfectedManager.getState() : [],
+            crafting: typeof Crafting.getState === 'function' ? Crafting.getState() : {},
+            building: typeof Building.getState === 'function' ? Building.getState() : {},
+            vehicles: typeof Vehicles.getState === 'function' ? Vehicles.getState() : [],
         };
 
-        // Convert complex objects (like Vector3) to simpler structures if needed before stringifying
-        // (Though the current getState implementations return simple objects)
-
+        // Convert to JSON string
         const jsonString = JSON.stringify(gameState);
         localStorage.setItem(SAVE_SLOT_KEY, jsonString);
         console.log("Game saved successfully!");
-        // UIManager.addLogMessage("Game Saved."); // Use UI Manager
+        
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Game Saved.");
+        }
 
     } catch (error) {
         console.error("Error saving game:", error);
-        // UIManager.addLogMessage("Error saving game!");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Error saving game!");
+        }
         // Potentially alert the user
     }
 }
@@ -49,24 +53,36 @@ export function loadGame() {
         const jsonString = localStorage.getItem(SAVE_SLOT_KEY);
         if (!jsonString) {
             console.log("No save data found.");
-            // UIManager.addLogMessage("No save game found.");
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage("No save game found.");
+            }
             return null; // Indicate no save data exists
         }
 
         const gameState = JSON.parse(jsonString);
 
-        // TODO: Check gameState.saveFormatVersion if handling multiple versions
+        // Check for version compatibility
+        const currentVersion = 1;
+        const savedVersion = gameState.saveFormatVersion || 0;
+        
+        if (savedVersion > currentVersion) {
+            console.warn(`Save data is from a newer version (${savedVersion} vs ${currentVersion}). Some features may not load correctly.`);
+        }
 
         console.log("Save data found, loading state...");
-        // UIManager.addLogMessage("Loading saved game...");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Loading saved game...");
+        }
 
         // Return the loaded state object for main.js to distribute
         return gameState;
 
     } catch (error) {
         console.error("Error loading game:", error);
-        // UIManager.addLogMessage("Error loading save game!");
-        // Corrupted save? Delete it?
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Error loading save game!");
+        }
+        // If save data is corrupted, consider deleteing it
         // localStorage.removeItem(SAVE_SLOT_KEY);
         return null; // Indicate error during load
     }
@@ -79,5 +95,7 @@ export function hasSaveGame() {
 export function deleteSaveGame() {
     console.log("Deleting save game...");
     localStorage.removeItem(SAVE_SLOT_KEY);
-    // UIManager.addLogMessage("Save game deleted.");
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage("Save game deleted.");
+    }
 }

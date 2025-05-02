@@ -10,6 +10,7 @@ import * as Vehicles from './vehicles.js'; // Added import for vehicle interacti
 // --- Player State ---
 let playerMesh = null; // Reference to the player's 3D mesh
 let camera = null; // Reference to the game camera
+let sceneRef = null; // Reference to the scene for raycasting
 let playerStats = {
     health: 100,
     maxHealth: 100,
@@ -42,6 +43,7 @@ const playerRadius = 0.4;
 export function init(scene, gameCamera, loadData = null) {
     console.log("Initializing Player...");
     camera = gameCamera;
+    sceneRef = scene; // Store scene reference for raycasting
 
     // Create player mesh (cylinder for now)
     const geometry = new THREE.CylinderGeometry(playerRadius, playerRadius, playerHeight, 16);
@@ -94,9 +96,9 @@ export function update(dt, gameDt, inputState) {
 
     // --- Process Actions/Input ---
     // Movement/sprinting logic is now handled in main loop using player state
-    isSprinting = inputState.keys['ShiftLeft'] && playerStats.stamina > 1;
+    isSprinting = inputState && inputState.keys && inputState.keys['ShiftLeft'] && playerStats.stamina > 1;
     // Determine if moving based on WASD keys
-    isMoving = inputState.keys['KeyW'] || inputState.keys['KeyS'] || inputState.keys['KeyA'] || inputState.keys['KeyD'];
+    isMoving = inputState && inputState.keys && (inputState.keys['KeyW'] || inputState.keys['KeyS'] || inputState.keys['KeyA'] || inputState.keys['KeyD']);
 
     // Update camera position to follow player AFTER movement calculations in main.js
     updateCameraPosition();
@@ -117,7 +119,6 @@ export function update(dt, gameDt, inputState) {
     }
 }
 
-
 function updatePlayerStats(dt, gameDt) {
     const gameMinutesPassed = gameDt / 60;
 
@@ -130,7 +131,6 @@ function updatePlayerStats(dt, gameDt) {
     // Stamina regen/drain (handled based on isSprinting in main loop now)
     // Placeholder: Regen moved to main loop, just handle caps here
     playerStats.stamina = Math.max(0, Math.min(playerStats.stamina, playerStats.maxStamina));
-
 
     // Health effects
     let healthChange = 0;
@@ -145,7 +145,6 @@ function updatePlayerStats(dt, gameDt) {
     applyHealthChange(healthChange);
 }
 
-
 function updateCameraPosition() {
     if (playerMesh && camera) {
          // Offset from player's feet position + eye height adjustment
@@ -154,12 +153,13 @@ function updateCameraPosition() {
     }
 }
 
-
 // --- Actions ---
 
 export function applyDamage(amount) {
     applyHealthChange(-amount);
-    UIManager.showDamageIndicator(); // Example UI feedback
+    if (UIManager && typeof UIManager.showDamageIndicator === 'function') {
+        UIManager.showDamageIndicator(); // Example UI feedback
+    }
     console.log(`Player took ${amount} damage.`);
 }
 
@@ -170,9 +170,10 @@ function applyHealthChange(amount) {
      playerStats.health = Math.max(0, Math.min(playerStats.health, playerStats.maxHealth)); // Clamp health
 }
 
-
 function handleDeath() {
-    UIManager.addLogMessage("YOU DIED");
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage("YOU DIED");
+    }
     // TODO: Play death sound, fade screen?
     // Force pointer unlock if needed: document.exitPointerLock();
     if (!deathTimeout) {
@@ -184,7 +185,15 @@ function handleDeath() {
 }
 
 function respawn() {
-     UIManager.addLogMessage("Respawning...");
+     if (UIManager && typeof UIManager.addLogMessage === 'function') {
+         UIManager.addLogMessage("Respawning...");
+     }
+     
+     if (!playerMesh) {
+         console.error("Cannot respawn - player mesh is not initialized");
+         return;
+     }
+     
      playerStats.health = playerStats.maxHealth * 0.75; // Respawn with partial health
      playerStats.hunger = 50;
      playerStats.thirst = 50;
@@ -197,98 +206,126 @@ function respawn() {
 }
 
 export function interact() {
-    if (!playerMesh || !camera) return;
-    UIManager.addLogMessage("Interacting...");
+    if (!playerMesh || !camera || !sceneRef) {
+        console.error("Cannot interact - player, camera, or scene not initialized");
+        return;
+    }
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage("Interacting...");
+    }
+    
     // Raycast forward to find interactable objects
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera({ x: 0, y: 0 }, camera); // Center screen
     const interactDistance = 2.5;
     raycaster.far = interactDistance;
 
-    // TODO: Get list of interactable objects from World or other managers
-    const interactableMeshes = World.getEnvironmentObjects().map(obj => obj.mesh).filter(mesh => mesh); // Example
-    // const interactableMeshes = [...World.getInteractables(), ...Building.getStations(), ...VehicleManager.getVehicles()];
+    // Get list of interactable objects from World or other managers
+    const environmentObjects = World.getEnvironmentObjects() || [];
+    const interactableMeshes = environmentObjects
+        .filter(obj => obj && obj.mesh)
+        .map(obj => obj.mesh);
 
-    const intersects = raycaster.intersectObjects(scene.children, true); // Check all scene children for simplicity (inefficient)
+    // Use the stored scene reference instead of undefined scene
+    const intersects = raycaster.intersectObjects(sceneRef.children, true); // Check all scene children for simplicity (inefficient)
 
     if (intersects.length > 0) {
         let closestInteractable = null;
         for(const intersect of intersects) {
             // Find the first object with an interaction handler or type
-            if (intersect.object.userData?.interact) {
+            if (intersect.object && intersect.object.userData && intersect.object.userData.interact) {
                 closestInteractable = intersect.object;
                 break;
             }
             // Could check object names, types etc.
-             if (intersect.object.name.includes("ResourceNode")) { // Example check
-                 closestInteractable = intersect.object;
-                 break;
-             }
+            if (intersect.object && intersect.object.name && intersect.object.name.includes("ResourceNode")) { // Example check
+                closestInteractable = intersect.object;
+                break;
+            }
         }
-
 
         if (closestInteractable) {
             console.log("Interacting with:", closestInteractable.name);
-            if (closestInteractable.userData.interact) {
-                 closestInteractable.userData.interact(playerMesh); // Call object's interaction function
+            if (closestInteractable.userData && typeof closestInteractable.userData.interact === 'function') {
+                closestInteractable.userData.interact(playerMesh); // Call object's interaction function
             } else {
                 // Default interaction? (e.g., harvest node)
-                UIManager.addLogMessage(`Used ${equippedItem?.name || 'hands'} on ${closestInteractable.name}.`);
-                 // TODO: Implement harvesting logic (check tool, add resources to inventory)
-                 // Example: if (equippedItem?.type === 'tool') { harvest(closestInteractable); }
+                if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                    UIManager.addLogMessage(`Used ${equippedItem?.name || 'hands'} on ${closestInteractable.name}.`);
+                }
+                // TODO: Implement harvesting logic (check tool, add resources to inventory)
+                // Example: if (equippedItem?.type === 'tool') { harvest(closestInteractable); }
             }
         } else {
-            UIManager.addLogMessage("Nothing useful to interact with there.");
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage("Nothing useful to interact with there.");
+            }
         }
     } else {
-         UIManager.addLogMessage("Nothing close enough to interact with.");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Nothing close enough to interact with.");
+        }
     }
 }
 
 export function performAttack() {
-     if (!equippedItem || equippedItem.type !== 'tool' || playerStats.stamina < 5) { // Basic check
-        UIManager.addLogMessage("Cannot attack (No tool/too tired).");
+    if (!playerMesh || !camera || !sceneRef) {
+        console.error("Cannot attack - player, camera, or scene not initialized");
         return;
-     }
-     UIManager.addLogMessage(`Attacking with ${equippedItem.name}...`);
-     playerStats.stamina -= 10; // Stamina cost for attack
+    }
+    
+    if (!equippedItem || equippedItem.type !== 'tool' || playerStats.stamina < 5) { // Basic check
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Cannot attack (No tool/too tired).");
+        }
+        return;
+    }
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Attacking with ${equippedItem.name}...`);
+    }
+    
+    playerStats.stamina -= 10; // Stamina cost for attack
 
-     // TODO: Play attack animation/sound
+    // TODO: Play attack animation/sound
 
-     // Raycast forward for hit detection
-     const raycaster = new THREE.Raycaster();
-     raycaster.setFromCamera({ x: 0, y: 0 }, camera);
-     const attackRange = equippedItem.range || 2.0; // Get range from item data?
-     raycaster.far = attackRange;
+    // Raycast forward for hit detection
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const attackRange = equippedItem.range || 2.0; // Get range from item data?
+    raycaster.far = attackRange;
 
-     // TODO: Get list of attackable targets (Infected primarily)
-     // const attackableMeshes = InfectedManager.getInfectedMeshes();
-     const intersects = raycaster.intersectObjects(scene.children, true); // Inefficient check
+    // TODO: Get list of attackable targets (Infected primarily)
+    // const attackableMeshes = InfectedManager.getInfectedMeshes();
+    const intersects = raycaster.intersectObjects(sceneRef.children, true); // Use sceneRef instead of scene
 
-      if (intersects.length > 0) {
+    if (intersects.length > 0) {
         let hitTarget = null;
-         for(const intersect of intersects) {
+        for(const intersect of intersects) {
             // Check if hit object is an infected (or other attackable)
             // Example: if (InfectedManager.isMeshInfected(intersect.object)) { ... }
-            if (intersect.object.name.toLowerCase().includes("infected_")) { // Simple name check
-                 hitTarget = intersect.object;
-                 break;
+            if (intersect.object && intersect.object.name && intersect.object.name.toLowerCase().includes("infected_")) { // Simple name check
+                hitTarget = intersect.object;
+                break;
             }
             // Could also hit resources like trees/rocks
-             if (intersect.object.name.includes("ResourceNode")) {
-                  hitTarget = intersect.object;
-                  break;
-             }
-         }
+            if (intersect.object && intersect.object.name && intersect.object.name.includes("ResourceNode")) {
+                hitTarget = intersect.object;
+                break;
+            }
+        }
 
-         if(hitTarget) {
-             console.log("Hit:", hitTarget.name);
-              UIManager.addLogMessage(`Hit ${hitTarget.name}!`);
-             // TODO: Apply damage to infected or gather resource from node
-             // Example: InfectedManager.applyDamage(hitTarget.userData.id, equippedItem.damage);
-             // Example: World.harvestResource(hitTarget.userData.id, equippedItem.type);
-         }
-      }
+        if(hitTarget) {
+            console.log("Hit:", hitTarget.name);
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`Hit ${hitTarget.name}!`);
+            }
+            // TODO: Apply damage to infected or gather resource from node
+            // Example: InfectedManager.applyDamage(hitTarget.userData.id, equippedItem.damage);
+            // Example: World.harvestResource(hitTarget.userData.id, equippedItem.type);
+        }
+    }
 }
 
 // --- Inventory Management ---
@@ -297,6 +334,17 @@ export function getInventory() {
 }
 
 export function addItem(itemData) {
+    if (!itemData) {
+        console.error("Cannot add undefined item to inventory");
+        return;
+    }
+    
+    // Check for required properties
+    if (!itemData.id || !itemData.name || typeof itemData.quantity !== 'number') {
+        console.error("Invalid item data:", itemData);
+        return;
+    }
+    
     // TODO: Implement stacking logic
     const existingItem = inventory.find(item => item.id === itemData.id && item.stackable); // Assuming 'stackable' property
     if (existingItem) {
@@ -304,11 +352,22 @@ export function addItem(itemData) {
     } else {
         inventory.push({ ...itemData }); // Add as new item object
     }
-    UIManager.addLogMessage(`Added ${itemData.quantity}x ${itemData.name}.`);
-    UIManager.updateInventoryUI(inventory); // Update UI
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Added ${itemData.quantity}x ${itemData.name}.`);
+    }
+    
+    if (UIManager && typeof UIManager.updateInventoryUI === 'function') {
+        UIManager.updateInventoryUI(inventory); // Update UI
+    }
 }
 
 export function removeItem(itemId, quantity) {
+    if (!itemId || typeof quantity !== 'number' || quantity <= 0) {
+        console.error("Invalid item removal parameters:", itemId, quantity);
+        return false;
+    }
+    
     const itemIndex = inventory.findIndex(item => item.id === itemId);
     if (itemIndex > -1) {
         inventory[itemIndex].quantity -= quantity;
@@ -319,7 +378,10 @@ export function removeItem(itemId, quantity) {
             }
             inventory.splice(itemIndex, 1); // Remove item fully
         }
-        UIManager.updateInventoryUI(inventory); // Update UI
+        
+        if (UIManager && typeof UIManager.updateInventoryUI === 'function') {
+            UIManager.updateInventoryUI(inventory); // Update UI
+        }
         return true; // Item removed successfully
     }
     return false; // Item not found
@@ -333,18 +395,27 @@ export function hasItem(itemId, quantity = 1) {
 export function consumeItem(item) {
     if (!item || item.type !== 'consumable') return;
 
-    UIManager.addLogMessage(`Using ${item.name}...`);
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Using ${item.name}...`);
+    }
+    
     // Apply item effects (needs data lookup for effects)
     // Example:
     if (item.id === 'bandage') {
         applyHealthChange(25); // Heal 25 health
-        UIManager.addLogMessage(`Healed some health.`);
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`Healed some health.`);
+        }
     } else if (item.id === 'canned_food') { // Example food item
-         playerStats.hunger = Math.max(0, playerStats.hunger - 40);
-         UIManager.addLogMessage(`Ate some food.`);
+        playerStats.hunger = Math.max(0, playerStats.hunger - 40);
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`Ate some food.`);
+        }
     } else if (item.id === 'water_bottle') { // Example water item
-         playerStats.thirst = Math.max(0, playerStats.thirst - 50);
-         UIManager.addLogMessage(`Drank some water.`);
+        playerStats.thirst = Math.max(0, playerStats.thirst - 50);
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`Drank some water.`);
+        }
     }
 
     // Remove one of the consumed item
@@ -353,14 +424,21 @@ export function consumeItem(item) {
 
 export function equipItem(item) {
     if (item && item.type !== 'tool' && item.type !== 'weapon') {
-        UIManager.addLogMessage(`Cannot equip ${item.name}.`);
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`Cannot equip ${item.name}.`);
+        }
         equippedItem = null;
     } else {
         equippedItem = item;
-         UIManager.addLogMessage(`Equipped ${item ? item.name : 'nothing'}.`);
-         // TODO: Update player model visually? Show item in hand?
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`Equipped ${item ? item.name : 'nothing'}.`);
+        }
+        // TODO: Update player model visually? Show item in hand?
     }
-     UIManager.updateEquippedUI(equippedItem);
+    
+    if (UIManager && typeof UIManager.updateEquippedUI === 'function') {
+        UIManager.updateEquippedUI(equippedItem);
+    }
 }
 
 // --- Getters for main loop ---
@@ -391,6 +469,11 @@ export function isPlayerSprinting() {
  * @param {number} amount Amount to modify stamina by (positive to add, negative to subtract)
  */
 export function modifyStamina(amount) {
+    if (typeof amount !== 'number') {
+        console.error("modifyStamina called with invalid amount:", amount);
+        return;
+    }
+    
     playerStats.stamina += amount;
     playerStats.stamina = Math.max(0, Math.min(playerStats.stamina, playerStats.maxStamina));
 }
@@ -414,7 +497,7 @@ export function getEquippedItem() {
  */
 export function isInVehicle() {
     // This should link to the VehicleManager's state
-    return Vehicles.getPlayerVehicle() !== null;
+    return Vehicles && typeof Vehicles.getPlayerVehicle === 'function' && Vehicles.getPlayerVehicle() !== null;
 }
 
 /**
@@ -434,11 +517,16 @@ export function getPlayerReference() {
  */
 export function setActive(active) {
     // Disables player movement when in vehicle or otherwise incapacitated
-    playerActive = active;
+    playerActive = !!active; // Convert to boolean
 }
 
 // --- Persistence ---
 export function getState() {
+    if (!playerMesh) {
+        console.error("Cannot get player state - player not initialized");
+        return {};
+    }
+    
     return {
         stats: { ...playerStats },
         inventory: [...inventory],

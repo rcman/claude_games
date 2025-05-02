@@ -74,7 +74,9 @@ function initEngine() {
 
     // Initialize simple physics world
     physicsWorld = new PhysicsPlaceholder.World();
-    physicsWorld.setGravity(new THREE.Vector3(0, -9.81, 0));
+    if (physicsWorld && typeof physicsWorld.setGravity === 'function') {
+        physicsWorld.setGravity(new THREE.Vector3(0, -9.81, 0));
+    }
 
     // Initialize UI Manager First (for logging etc.)
     UIManager.init();
@@ -86,21 +88,31 @@ function initEngine() {
 
 async function initGame() {
     console.log("Initializing Game Modules...");
-    UIManager.showLoadingScreen("Loading Assets...");
+    if (UIManager && typeof UIManager.showLoadingScreen === 'function') {
+        UIManager.showLoadingScreen("Loading Assets...");
+    }
 
     try {
         // Initialize Asset Manager and wait for essential assets
         // Pass camera for audio listener attachment
         await Assets.init(camera); // Assets.init should return a Promise
-        UIManager.showLoadingScreen("Assets Loaded. Initializing World...");
+        if (UIManager && typeof UIManager.showLoadingScreen === 'function') {
+            UIManager.showLoadingScreen("Assets Loaded. Initializing World...");
+        }
 
         // Try loading saved game data
         let loadedData = null;
-        if (Persistence.hasSaveGame()) {
-            UIManager.showLoadingScreen("Loading Save Game...");
-            loadedData = Persistence.loadGame();
-            if (!loadedData) {
-                UIManager.addLogMessage("Failed to load save game, starting new game.");
+        if (Persistence && typeof Persistence.hasSaveGame === 'function' && Persistence.hasSaveGame()) {
+            if (UIManager && typeof UIManager.showLoadingScreen === 'function') {
+                UIManager.showLoadingScreen("Loading Save Game...");
+            }
+            if (typeof Persistence.loadGame === 'function') {
+                loadedData = Persistence.loadGame();
+                if (!loadedData) {
+                    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                        UIManager.addLogMessage("Failed to load save game, starting new game.");
+                    }
+                }
             }
         }
 
@@ -114,15 +126,21 @@ async function initGame() {
         Vehicles.init(scene, physicsWorld, loadedData); // Vehicles needs scene & physics
         // Persistence doesn't need init unless loading settings etc.
 
-        UIManager.addLogMessage("Game Initialized.");
-        if(loadedData) UIManager.addLogMessage("Save game loaded successfully.");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Game Initialized.");
+            if(loadedData) UIManager.addLogMessage("Save game loaded successfully.");
+        }
 
-        UIManager.hideLoadingScreen();
+        if (UIManager && typeof UIManager.hideLoadingScreen === 'function') {
+            UIManager.hideLoadingScreen();
+        }
         startGameLoop();
 
     } catch (error) {
         console.error("Critical error during game initialization:", error);
-        UIManager.showLoadingScreen("Error initializing game!", true); // Show error state
+        if (UIManager && typeof UIManager.showLoadingScreen === 'function') {
+            UIManager.showLoadingScreen("Error initializing game!", true); // Show error state
+        }
     }
 }
 
@@ -146,59 +164,95 @@ function animate() {
 
     // --- Game Logic Updates ---
     if (!gamePaused) {
-        const gameDt = cappedDt * World.secondsPerTick; // Get scaled game time delta from World
-
-        // Update world first to set environment state
-        World.update(cappedDt, scene); 
-        
-        // Get world state once and use it throughout the frame
-        const worldState = World.getWorldState();
-        
-        // Apply world changes to renderer (fog, lighting)
-        const bgColor = World.updateSceneBackground(scene);
-        scene.fog.color.copy(bgColor); // Match fog and background
-        scene.fog.near = worldState.fogNear ?? scene.fog.near;
-        scene.fog.far = worldState.fogFar ?? scene.fog.far;
-        scene.userData.ambientLight.intensity = worldState.ambientIntensity ?? scene.userData.ambientLight.intensity;
-        scene.userData.directionalLight.intensity = worldState.directionalIntensity ?? scene.userData.directionalLight.intensity;
-
-        // First check if player is in a vehicle - this affects other updates
-        const playerInVehicle = Vehicles.getPlayerVehicle() !== null;
-        
-        // Update modules that depend on player position *after* movement is applied
-        InfectedManager.update(cappedDt, playerMesh); // AI needs current player position
-        Vehicles.update(cappedDt, inputState); // Update vehicle physics/state
-
-        // Update Player AFTER movement/collisions applied, using gameDt for stats
-        Player.update(cappedDt, gameDt, inputState);
-
-        Crafting.update(cappedDt); // Update crafting timers
-        Building.update(cappedDt, inputState.isPointerLocked); // Update ghost mesh placement
-
-        // --- Physics Update ---
-        if (physicsWorld) {
-            physicsWorld.step(cappedDt); // Step the physics simulation
-            // Sync physics bodies <-> THREE meshes AFTER physics step
-            // Update mesh positions for player, infected, vehicles based on physics results
+        try {
+            const gameDt = cappedDt * World.secondsPerTick; // Get scaled game time delta from World
+            
+            // Update world first to set environment state
+            World.update(cappedDt, scene); 
+            
+            // Get world state once and use it throughout the frame
+            const worldState = World.getWorldState();
+            
+            // Apply world changes to renderer (fog, lighting)
+            const bgColor = World.updateSceneBackground(scene);
+            if (scene.fog) {
+                scene.fog.color.copy(bgColor); // Match fog and background
+                scene.fog.near = worldState.fogNear ?? scene.fog.near;
+                scene.fog.far = worldState.fogFar ?? scene.fog.far;
+            }
+            
+            if (scene.userData.ambientLight) {
+                scene.userData.ambientLight.intensity = worldState.ambientIntensity ?? scene.userData.ambientLight.intensity;
+            }
+            
+            if (scene.userData.directionalLight) {
+                scene.userData.directionalLight.intensity = worldState.directionalIntensity ?? scene.userData.directionalLight.intensity;
+            }
+            
+            // First check if player is in a vehicle - this affects other updates
+            const playerInVehicle = Vehicles.getPlayerVehicle() !== null;
+            
+            // Update modules that depend on player position *after* movement is applied
+            if (playerMesh) {
+                InfectedManager.update(cappedDt, playerMesh); // AI needs current player position
+            }
+            
+            Vehicles.update(cappedDt, inputState); // Update vehicle physics/state
+            
+            // Update Player AFTER movement/collisions applied, using gameDt for stats
+            Player.update(cappedDt, gameDt, inputState);
+            
+            Crafting.update(cappedDt); // Update crafting timers
+            Building.update(cappedDt, inputState.isPointerLocked); // Update ghost mesh placement
+            
+            // --- Physics Update ---
+            if (physicsWorld && typeof physicsWorld.step === 'function') {
+                physicsWorld.step(cappedDt); // Step the physics simulation
+                // Sync physics bodies <-> THREE meshes AFTER physics step
+                // Update mesh positions for player, infected, vehicles based on physics results
+            }
+        } catch (error) {
+            console.error("Error in game update loop:", error);
         }
     }
 
     // --- UI Updates (Last) ---
-    UIManager.updateStatsUI(Player.getPlayerStats());
-    // Pass state needed for world UI update
-    UIManager.updateWorldUI({
-        gameTime: World.getCurrentTime(),
-        isMistActive: World.getIsMistActive(),
-    });
-    UIManager.updateBuildModeUI(Building.isBuildModeActive(), Building.getCurrentBuildableName());
-    UIManager.updateEquippedUI(Player.getEquippedItem());
-     
-    // Update vehicle UI only if player is in a vehicle
-    const playerVehicle = Vehicles.getPlayerVehicle();
-    if (playerVehicle) {
-        // Calculate vehicle speed (placeholder - should be from physics)
-        const speed = 0; // Replace with actual speed calculation
-        UIManager.updateVehicleUI(playerVehicle.stats, speed);
+    try {
+        if (typeof Player.getPlayerStats === 'function') {
+            const playerStats = Player.getPlayerStats();
+            if (UIManager && typeof UIManager.updateStatsUI === 'function') {
+                UIManager.updateStatsUI(playerStats);
+            }
+        }
+        
+        // Pass state needed for world UI update
+        if (UIManager && typeof UIManager.updateWorldUI === 'function') {
+            UIManager.updateWorldUI({
+                gameTime: World.getCurrentTime(),
+                isMistActive: World.getIsMistActive(),
+            });
+        }
+        
+        if (UIManager && typeof UIManager.updateBuildModeUI === 'function' && 
+            typeof Building.isBuildModeActive === 'function' && 
+            typeof Building.getCurrentBuildableName === 'function') {
+            UIManager.updateBuildModeUI(Building.isBuildModeActive(), Building.getCurrentBuildableName());
+        }
+        
+        if (UIManager && typeof UIManager.updateEquippedUI === 'function' && 
+            typeof Player.getEquippedItem === 'function') {
+            UIManager.updateEquippedUI(Player.getEquippedItem());
+        }
+        
+        // Update vehicle UI only if player is in a vehicle
+        const playerVehicle = Vehicles.getPlayerVehicle();
+        if (playerVehicle && UIManager && typeof UIManager.updateVehicleUI === 'function') {
+            // Calculate vehicle speed (placeholder - should be from physics)
+            const speed = 0; // Replace with actual speed calculation
+            UIManager.updateVehicleUI(playerVehicle.stats, speed);
+        }
+    } catch (uiError) {
+        console.error("Error updating UI:", uiError);
     }
 
     // --- Rendering ---
@@ -219,19 +273,32 @@ function handlePlayerMovement(dt) {
     const sprintMultiplier = 1.8;
     let currentSpeed = moveSpeed;
     let isMoving = false;
-    const playerStats = Player.getPlayerStats(); // Get current stats
+    
+    // Get current stats
+    const playerStats = typeof Player.getPlayerStats === 'function' ? Player.getPlayerStats() : { 
+        stamina: 100, 
+        maxStamina: 100,
+        staminaDrainRate: 10,
+        staminaRegenRate: 5,
+        hunger: 0,
+        thirst: 0
+    };
 
     // Sprinting Check (using Player module's state)
     const canSprint = playerStats.stamina > 1;
-    const isTryingToSprint = inputState.keys['ShiftLeft'];
+    const isTryingToSprint = inputState.keys && inputState.keys['ShiftLeft'];
     if (isTryingToSprint && canSprint) {
         currentSpeed *= sprintMultiplier;
         // Stamina drain logic might be inside Player.update or here
-        Player.modifyStamina(-playerStats.staminaDrainRate * dt); // Example direct modification
+        if (typeof Player.modifyStamina === 'function') {
+            Player.modifyStamina(-playerStats.staminaDrainRate * dt); // Example direct modification
+        }
     } else if (playerStats.stamina < playerStats.maxStamina && !isTryingToSprint) {
         // Stamina regen logic might be inside Player.update or here
-         const regenMultiplier = (playerStats.hunger < 80 && playerStats.thirst < 80) ? 1.0 : 0.3;
-         Player.modifyStamina(playerStats.staminaRegenRate * regenMultiplier * dt); // Example direct modification
+        const regenMultiplier = (playerStats.hunger < 80 && playerStats.thirst < 80) ? 1.0 : 0.3;
+        if (typeof Player.modifyStamina === 'function') {
+            Player.modifyStamina(playerStats.staminaRegenRate * regenMultiplier * dt); // Example direct modification
+        }
     }
 
     // Calculate Movement Direction based on Camera
@@ -243,10 +310,10 @@ function handlePlayerMovement(dt) {
     right.crossVectors(camera.up, forward).normalize();
 
     const moveDirection = new THREE.Vector3(0, 0, 0);
-    if (inputState.keys['KeyW']) { moveDirection.add(forward); isMoving = true; }
-    if (inputState.keys['KeyS']) { moveDirection.sub(forward); isMoving = true; }
-    if (inputState.keys['KeyA']) { moveDirection.sub(right); isMoving = true; }
-    if (inputState.keys['KeyD']) { moveDirection.add(right); isMoving = true; }
+    if (inputState.keys && inputState.keys['KeyW']) { moveDirection.add(forward); isMoving = true; }
+    if (inputState.keys && inputState.keys['KeyS']) { moveDirection.sub(forward); isMoving = true; }
+    if (inputState.keys && inputState.keys['KeyA']) { moveDirection.sub(right); isMoving = true; }
+    if (inputState.keys && inputState.keys['KeyD']) { moveDirection.add(right); isMoving = true; }
 
     if (isMoving) {
         moveDirection.normalize();
@@ -272,28 +339,29 @@ function handlePlayerMovement(dt) {
 
     // Keep player on ground (simple) - physics handles this better
     if (!physicsWorld) {
-        playerMesh.position.y = Player.getPlayerHeight() / 2;
+        const playerHeight = typeof Player.getPlayerHeight === 'function' ? Player.getPlayerHeight() : 1.8;
+        playerMesh.position.y = playerHeight / 2;
     }
 }
 
 function handlePlayerLook() {
-     if (!inputState.isPointerLocked || !playerMesh || gamePaused) return;
+    if (!inputState.isPointerLocked || !playerMesh || gamePaused) return;
 
-     const lookSpeed = 0.002;
-     const MAX_PITCH = Math.PI / 2 - 0.1;
+    const lookSpeed = 0.002;
+    const MAX_PITCH = Math.PI / 2 - 0.1;
 
-     // Calculate new rotation based on mouse delta
-     const currentYaw = playerMesh.rotation.y;
-     const currentPitch = camera.rotation.x; // Camera handles pitch
+    // Calculate new rotation based on mouse delta
+    const currentYaw = playerMesh.rotation.y;
+    const currentPitch = camera.rotation.x; // Camera handles pitch
 
-     let newYaw = currentYaw - inputState.mouseDelta.x * lookSpeed;
-     let newPitch = currentPitch - inputState.mouseDelta.y * lookSpeed;
-     newPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, newPitch)); // Clamp pitch
+    let newYaw = currentYaw - inputState.mouseDelta.x * lookSpeed;
+    let newPitch = currentPitch - inputState.mouseDelta.y * lookSpeed;
+    newPitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, newPitch)); // Clamp pitch
 
-     // Apply rotation
-     playerMesh.rotation.y = newYaw;
-     camera.rotation.x = newPitch;
-     camera.rotation.y = newYaw; // Keep camera yaw aligned with player
+    // Apply rotation
+    playerMesh.rotation.y = newYaw;
+    camera.rotation.x = newPitch;
+    camera.rotation.y = newYaw; // Keep camera yaw aligned with player
 }
 
 // --- Event Listeners ---
@@ -323,10 +391,14 @@ function setupEventListeners() {
             // Pointer lock lost unexpectedly (e.g., Alt+Tab) - Pause game?
             // togglePause(true); // Force pause
             console.log("Pointer Lock Lost - Consider Pausing");
-             UIManager.showPauseMenu(); // Show pause menu when lock lost
+            if (UIManager && typeof UIManager.showPauseMenu === 'function') {
+                UIManager.showPauseMenu(); // Show pause menu when lock lost
+            }
         } else if (inputState.isPointerLocked) {
-             UIManager.hidePauseMenu(); // Hide pause menu when lock acquired
-             inputState.mouseDelta = {x: 0, y: 0}; // Reset delta on acquire/resume
+            if (UIManager && typeof UIManager.hidePauseMenu === 'function') {
+                UIManager.hidePauseMenu(); // Hide pause menu when lock acquired
+            }
+            inputState.mouseDelta = {x: 0, y: 0}; // Reset delta on acquire/resume
         }
     });
 
@@ -336,25 +408,43 @@ function setupEventListeners() {
                 .catch(err => console.error("Pointer lock request failed:", err));
         } else if (!gamePaused) {
             // Handle clicks when locked and not paused
-            if (Building.isBuildModeActive()) {
-                Building.tryPlaceStructure();
-            } else if (Player.getEquippedItem()?.type === 'tool') { // Check player module for equipped item
-                Player.performAttack();
+            if (Building && typeof Building.isBuildModeActive === 'function' && Building.isBuildModeActive()) {
+                if (typeof Building.tryPlaceStructure === 'function') {
+                    Building.tryPlaceStructure();
+                }
             } else {
-                // Default click action?
+                const equippedItem = typeof Player.getEquippedItem === 'function' ? Player.getEquippedItem() : null;
+                if (equippedItem?.type === 'tool') { // Check player module for equipped item
+                    if (typeof Player.performAttack === 'function') {
+                        Player.performAttack();
+                    }
+                } else {
+                    // Default click action?
+                }
             }
         }
     });
 
-     // Pause Menu Button Listeners (Example)
-     document.getElementById('resume-button')?.addEventListener('click', () => togglePause(false));
-     document.getElementById('save-button')?.addEventListener('click', Persistence.saveGame);
-     document.getElementById('load-button')?.addEventListener('click', () => {
-         if (confirm("Load last save? Unsaved progress will be lost.")) {
-             window.location.reload(); // Simplest way to reload the game state
-         }
-     });
-     // Add listeners for other pause menu buttons...
+    // Pause Menu Button Listeners (Example)
+    const resumeBtn = document.getElementById('resume-button');
+    if (resumeBtn) {
+        resumeBtn.addEventListener('click', () => togglePause(false));
+    }
+    
+    const saveBtn = document.getElementById('save-button');
+    if (saveBtn && typeof Persistence.saveGame === 'function') {
+        saveBtn.addEventListener('click', Persistence.saveGame);
+    }
+    
+    const loadBtn = document.getElementById('load-button');
+    if (loadBtn) {
+        loadBtn.addEventListener('click', () => {
+            if (confirm("Load last save? Unsaved progress will be lost.")) {
+                window.location.reload(); // Simplest way to reload the game state
+            }
+        });
+    }
+    // Add listeners for other pause menu buttons...
 }
 
 function handleKeyPress(code) {
@@ -363,8 +453,10 @@ function handleKeyPress(code) {
     // Toggle Pause (Escape) - Allow even if pointer lock lost
     if (code === 'Escape') {
         togglePause(); // Toggle pause state
-        if(Building.isBuildModeActive()) {
-            Building.exitBuildMode(); // Also exit build mode on escape
+        if(Building && typeof Building.isBuildModeActive === 'function' && Building.isBuildModeActive()) {
+            if (typeof Building.exitBuildMode === 'function') {
+                Building.exitBuildMode(); // Also exit build mode on escape
+            }
         }
         return; // Don't process other keys if pausing/unpausing
     }
@@ -373,7 +465,7 @@ function handleKeyPress(code) {
     if (gamePaused || !inputState.isPointerLocked) return;
 
     // Check if player is in a vehicle first
-    const playerInVehicle = Vehicles.getPlayerVehicle() !== null;
+    const playerInVehicle = Vehicles && typeof Vehicles.getPlayerVehicle === 'function' && Vehicles.getPlayerVehicle() !== null;
 
     // Game Actions (require pointer lock)
     switch (code) {
@@ -381,43 +473,66 @@ function handleKeyPress(code) {
             if (playerInVehicle) {
                 // Nothing for E in vehicle
             } else {
-                Player.interact();
+                if (typeof Player.interact === 'function') {
+                    Player.interact();
+                }
             }
             break;
         case 'KeyF': // Use 'F' for vehicle exit
             if (playerInVehicle) {
-                Vehicles.tryExitVehicle();
+                if (typeof Vehicles.tryExitVehicle === 'function') {
+                    Vehicles.tryExitVehicle();
+                }
             }
             // Could 'F' also be flashlight toggle when not in vehicle?
             break;
         case 'KeyX': // Toggle Vehicle Engine
             if (playerInVehicle) {
-                Vehicles.toggleEngine();
+                if (typeof Vehicles.toggleEngine === 'function') {
+                    Vehicles.toggleEngine();
+                }
             }
             break;
         case 'KeyI': // Inventory
-            UIManager.toggleInventoryUI(Player.getInventory());
+            if (UIManager && typeof UIManager.toggleInventoryUI === 'function' && 
+                typeof Player.getInventory === 'function') {
+                UIManager.toggleInventoryUI(Player.getInventory());
+            }
             break;
         case 'KeyC': // Crafting
             if (!playerInVehicle) {
                 // Need to determine available recipes based on context (inventory vs station)
-                const station = Building.getStationPlayerIsNear();
-                const recipes = Crafting.getAvailableRecipes(station?.typeId || null);
-                UIManager.toggleCraftingUI(recipes, Crafting.canCraft); // Pass check function
+                const station = Building && typeof Building.getStationPlayerIsNear === 'function' ? 
+                    Building.getStationPlayerIsNear() : null;
+                const recipes = Crafting && typeof Crafting.getAvailableRecipes === 'function' ? 
+                    Crafting.getAvailableRecipes(station?.typeId || null) : [];
+                    
+                if (UIManager && typeof UIManager.toggleCraftingUI === 'function') {
+                    UIManager.toggleCraftingUI(recipes, Crafting.canCraft); // Pass check function
+                }
             }
             break;
         case 'KeyB': // Build Menu / Mode
             if (!playerInVehicle) {
-                if (Building.isBuildModeActive()) {
-                    Building.exitBuildMode();
-                } else {
-                    Building.enterBuildMode();
+                if (Building && typeof Building.isBuildModeActive === 'function') {
+                    if (Building.isBuildModeActive()) {
+                        if (typeof Building.exitBuildMode === 'function') {
+                            Building.exitBuildMode();
+                        }
+                    } else {
+                        if (typeof Building.enterBuildMode === 'function') {
+                            Building.enterBuildMode();
+                        }
+                    }
                 }
             }
             break;
         case 'KeyR': // Reload Weapon (Example)
-            if (!playerInVehicle && Player.getEquippedItem()?.type === 'weapon') {
-                // Player.reloadWeapon(); // Uncomment when implemented
+            if (!playerInVehicle) {
+                const equippedItem = typeof Player.getEquippedItem === 'function' ? Player.getEquippedItem() : null;
+                if (equippedItem?.type === 'weapon') {
+                    // Player.reloadWeapon(); // Uncomment when implemented
+                }
             }
             break;
         case 'Digit1': // Equip slot 1 (Example)
@@ -436,13 +551,17 @@ function togglePause(forceState = null) {
 
     if (gamePaused && !previouslyPaused) {
         console.log("Game Paused");
-        UIManager.showPauseMenu();
+        if (UIManager && typeof UIManager.showPauseMenu === 'function') {
+            UIManager.showPauseMenu();
+        }
         if (inputState.isPointerLocked) {
              document.exitPointerLock(); // Release cursor when pausing
         }
     } else if (!gamePaused && previouslyPaused) {
         console.log("Game Resumed");
-        UIManager.hidePauseMenu();
+        if (UIManager && typeof UIManager.hidePauseMenu === 'function') {
+            UIManager.hidePauseMenu();
+        }
         // Attempt to re-acquire pointer lock if game canvas has focus
         if(document.activeElement === renderer.domElement) {
             renderer.domElement.requestPointerLock().catch(err => console.error("Pointer lock request failed:", err));

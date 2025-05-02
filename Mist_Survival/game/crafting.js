@@ -85,12 +85,16 @@ export function update(dt) {
         if (performance.now() >= currentCraft.startTime + currentCraft.duration * 1000) {
             finishCraft(currentCraft.recipeId);
             currentCraft = null;
-            UIManager.updateCraftingProgress(0); // Clear progress bar
+            if (UIManager && typeof UIManager.updateCraftingProgress === 'function') {
+                UIManager.updateCraftingProgress(0); // Clear progress bar
+            }
         } else {
              // Update progress UI
              const elapsed = performance.now() - currentCraft.startTime;
              const progress = elapsed / (currentCraft.duration * 1000);
-             UIManager.updateCraftingProgress(progress);
+             if (UIManager && typeof UIManager.updateCraftingProgress === 'function') {
+                 UIManager.updateCraftingProgress(progress);
+             }
         }
     }
 }
@@ -116,7 +120,7 @@ export function canCraft(recipeId) {
     if (!recipe) return false;
 
     for (const req of recipe.requires) {
-        if (!Player.hasItem(req.item, req.count)) {
+        if (!Player.hasItem || !Player.hasItem(req.item, req.count)) {
             return false; // Missing required item
         }
     }
@@ -130,36 +134,58 @@ export function canCraft(recipeId) {
  */
 export function startCraft(recipeId) {
     if (currentCraft) {
-        UIManager.addLogMessage("Already crafting something else.");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Already crafting something else.");
+        }
         return false;
     }
 
     const recipe = recipes.find(r => r.id === recipeId);
     if (!recipe) {
-         UIManager.addLogMessage("Unknown recipe.");
-         return false;
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Unknown recipe.");
+        }
+        return false;
     }
 
     if (!canCraft(recipeId)) {
-        UIManager.addLogMessage("Missing required materials.");
-         // TODO: Highlight missing materials in UI
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Missing required materials.");
+        }
+        // TODO: Highlight missing materials in UI
         return false;
     }
 
     // Consume materials
     let consumedOk = true;
+    let consumedItems = []; // Track what we've removed for rollback if needed
+    
     for (const req of recipe.requires) {
-        if (!Player.removeItem(req.item, req.count)) {
-             console.error(`Crafting Error: Failed to remove item ${req.item} even though canCraft passed.`);
-             consumedOk = false;
-             // TODO: Rollback any previously consumed items for this craft? Complex.
-             break;
+        if (!Player.removeItem || !Player.removeItem(req.item, req.count)) {
+            console.error(`Crafting Error: Failed to remove item ${req.item} even though canCraft passed.`);
+            consumedOk = false;
+            break;
+        } else {
+            consumedItems.push({ item: req.item, count: req.count });
         }
     }
 
     if (!consumedOk) {
-        UIManager.addLogMessage("Error consuming materials. Craft cancelled.");
-         // Need to potentially refund items here if some were consumed.
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Error consuming materials. Craft cancelled.");
+        }
+            
+        // Rollback consumed items
+        if (consumedItems.length > 0 && Player.addItem) {
+            for (const item of consumedItems) {
+                Player.addItem({ 
+                    id: item.item, 
+                    name: item.item, // Simple name = id for rollback
+                    quantity: item.count,
+                    type: 'material' // Assuming a type is required
+                });
+            }
+        }
         return false;
     }
 
@@ -170,7 +196,10 @@ export function startCraft(recipeId) {
         duration: recipe.craftTime || 1, // Default 1 second if time not specified
     };
     isCraftingPaused = false; // Ensure not paused
-    UIManager.addLogMessage(`Started crafting ${recipe.name}...`);
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Started crafting ${recipe.name}...`);
+    }
     // TODO: Play crafting start sound
 
     return true;
@@ -184,18 +213,55 @@ function finishCraft(recipeId) {
     const recipe = recipes.find(r => r.id === recipeId);
     if (!recipe) return; // Should not happen if startCraft worked
 
+    // Format item data properly for addItem function
+    const itemData = {
+        id: recipe.output.item,
+        name: recipe.name,
+        quantity: recipe.output.count,
+        type: getItemTypeFromId(recipe.output.item) // Helper function to determine type
+    };
+    
     // Add output item(s) to player inventory
-    Player.addItem(recipe.output);
-    UIManager.addLogMessage(`Finished crafting ${recipe.output.quantity}x ${recipe.name}!`);
+    if (Player.addItem) {
+        Player.addItem(itemData);
+    }
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Finished crafting ${recipe.output.count}x ${recipe.name}!`);
+    }
     // TODO: Play crafting complete sound
+}
+
+/**
+ * Helper function to determine item type based on ID
+ * @param {string} itemId The item ID to check
+ * @returns {string} The item type
+ */
+function getItemTypeFromId(itemId) {
+    // Simple mapping based on item IDs
+    if (itemId.includes('axe') || itemId.includes('pickaxe') || itemId.includes('hammer')) {
+        return 'tool';
+    } else if (itemId.includes('weapon') || itemId.includes('gun') || itemId.includes('knife')) {
+        return 'weapon';
+    } else if (itemId.includes('meat') || itemId.includes('food') || itemId.includes('drink')) {
+        return 'consumable';
+    } else if (itemId.includes('bandage') || itemId.includes('medkit')) {
+        return 'consumable';
+    } else {
+        return 'material'; // Default type
+    }
 }
 
 export function cancelCraft() {
     if (currentCraft) {
-         UIManager.addLogMessage("Crafting cancelled.");
-         // TODO: Refund consumed materials? (Depends on game design - maybe partial refund?)
-         currentCraft = null;
-         UIManager.updateCraftingProgress(0);
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Crafting cancelled.");
+        }
+        // TODO: Refund consumed materials? (Depends on game design - maybe partial refund?)
+        currentCraft = null;
+        if (UIManager && typeof UIManager.updateCraftingProgress === 'function') {
+            UIManager.updateCraftingProgress(0);
+        }
     }
 }
 

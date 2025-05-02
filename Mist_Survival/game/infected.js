@@ -20,9 +20,13 @@ export function init(scene, loadData = null) {
     sceneRef = scene;
     infectedList = []; // Clear list on init
 
-    if (loadData && loadData.infected) {
-        // TODO: Re-spawn infected based on saved data
-        loadData.infected.forEach(infData => spawnInfected(infData.position, infData.state, infData.health));
+    if (loadData && loadData.infected && Array.isArray(loadData.infected)) {
+        // Re-spawn infected based on saved data
+        loadData.infected.forEach(infData => {
+            if (infData && infData.position) {
+                spawnInfected(infData.position, infData.state, infData.health);
+            }
+        });
         console.log(`Infected state loaded (${infectedList.length} individuals).`);
     } else {
         // Spawn initial infected
@@ -47,21 +51,31 @@ export function update(dt, playerMesh) {
     if (nextSpawnTime <= 0 && infectedList.length < MAX_INFECTED) {
         spawnInfected(); // TODO: Add more sophisticated spawn logic (locations, conditions)
         const worldState = World.getWorldState(); // Need world module for this
-        const multiplier = worldState.isMistActive ? 0.5 : (worldState.nightRatio > 0.5 ? 0.7 : 1.0); // Faster spawns in mist/night
-        nextSpawnTime = (SPAWN_INTERVAL_MIN + Math.random() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN)) * multiplier;
+        if (worldState) {
+            const multiplier = worldState.isMistActive ? 0.5 : (worldState.nightRatio > 0.5 ? 0.7 : 1.0); // Faster spawns in mist/night
+            nextSpawnTime = (SPAWN_INTERVAL_MIN + Math.random() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN)) * multiplier;
+        } else {
+            nextSpawnTime = SPAWN_INTERVAL_MIN + Math.random() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN);
+        }
     }
 
     // Update individual infected AI
-    const isMistActive = World.getIsMistActive();
-    const nightRatio = World.getNightRatio();
+    const isMistActive = typeof World.getIsMistActive === 'function' ? World.getIsMistActive() : false;
+    const nightRatio = typeof World.getNightRatio === 'function' ? World.getNightRatio() : 0.5;
     const playerPos = playerMesh.position;
 
     // Iterate backwards for safe removal
     for (let i = infectedList.length - 1; i >= 0; i--) {
         const inf = infectedList[i];
+        if (!inf || !inf.mesh) {
+            // Remove invalid infected objects
+            infectedList.splice(i, 1);
+            continue;
+        }
+        
         updateInfectedAI(inf, dt, playerPos, isMistActive, nightRatio);
 
-        // TODO: Implement health and death
+        // Check health and handle death
         if (inf.health <= 0) {
             handleInfectedDeath(inf, i);
         }
@@ -69,6 +83,8 @@ export function update(dt, playerMesh) {
 }
 
 function updateInfectedAI(inf, dt, playerPos, isMistActive, nightRatio) {
+    if (!inf || !inf.mesh || !playerPos) return;
+    
     const infectedPos = inf.mesh.position;
     const distanceToPlayer = infectedPos.distanceTo(playerPos);
 
@@ -81,7 +97,7 @@ function updateInfectedAI(inf, dt, playerPos, isMistActive, nightRatio) {
     const currentState = inf.state;
     let nextState = currentState;
 
-    // Simple state transitions (same as main.js example for now)
+    // Simple state transitions
     if (distanceToPlayer < attackRange) {
         nextState = 'attacking';
     } else if (distanceToPlayer < detectionRange) {
@@ -113,27 +129,35 @@ function updateInfectedAI(inf, dt, playerPos, isMistActive, nightRatio) {
     // --- Action Logic ---
     switch (inf.state) {
         case 'attacking':
-            inf.mesh.material.color.setHex(0xff0000);
+            if (inf.mesh && inf.mesh.material) {
+                inf.mesh.material.color.setHex(0xff0000);
+            }
             inf.mesh.lookAt(playerPos.x, inf.mesh.position.y, playerPos.z);
             inf.attackCooldown -= dt;
             if (inf.attackCooldown <= 0) {
                 // Perform attack (damage applied in Player module via raycast/collision checks ideally)
                 // Here, we just trigger damage directly for simplicity
-                Player.applyDamage(inf.attackDamage * (isMistActive ? 1.5 : 1.0));
+                if (typeof Player.applyDamage === 'function') {
+                    Player.applyDamage(inf.attackDamage * (isMistActive ? 1.5 : 1.0));
+                }
                 inf.attackCooldown = inf.attackSpeed; // Reset cooldown
                  // TODO: Play attack sound/animation
             }
             break;
         case 'chasing':
-            inf.mesh.material.color.setHex(0xffa500);
+            if (inf.mesh && inf.mesh.material) {
+                inf.mesh.material.color.setHex(0xffa500);
+            }
             const directionToPlayer = new THREE.Vector3().subVectors(playerPos, infectedPos).normalize();
             directionToPlayer.y = 0;
             moveInfected(inf, directionToPlayer, infectedSpeed * dt);
             inf.mesh.lookAt(playerPos.x, inf.mesh.position.y, playerPos.z);
-             inf.attackCooldown = inf.attackSpeed; // Reset attack timer when chasing
+            inf.attackCooldown = inf.attackSpeed; // Reset attack timer when chasing
             break;
         case 'wandering':
-             inf.mesh.material.color.setHex(0xffff00);
+             if (inf.mesh && inf.mesh.material) {
+                 inf.mesh.material.color.setHex(0xffff00);
+             }
              if (inf.wanderTarget) {
                  const directionToTarget = new THREE.Vector3().subVectors(inf.wanderTarget, infectedPos).normalize();
                  directionToTarget.y = 0;
@@ -151,8 +175,10 @@ function updateInfectedAI(inf, dt, playerPos, isMistActive, nightRatio) {
             break;
         case 'idle':
         default:
-            inf.mesh.material.color.setHex(0x8B0000);
-             inf.attackCooldown = inf.attackSpeed; // Reset attack timer
+            if (inf.mesh && inf.mesh.material) {
+                inf.mesh.material.color.setHex(0x8B0000);
+            }
+            inf.attackCooldown = inf.attackSpeed; // Reset attack timer
             // TODO: Idle animation/behavior
             break;
     }
@@ -167,30 +193,34 @@ function updateInfectedAI(inf, dt, playerPos, isMistActive, nightRatio) {
 }
 
 function moveInfected(inf, direction, distance) {
-     // !!! TODO: Implement collision detection against world objects and other infected
-     // Simple move for now:
-     inf.mesh.position.addScaledVector(direction, distance);
+    if (!inf || !inf.mesh || !direction) return;
+     
+    // !!! TODO: Implement collision detection against world objects and other infected
+    // Simple move for now:
+    inf.mesh.position.addScaledVector(direction, distance);
 }
 
 
 function getRandomWanderTarget(currentPos) {
-     const wanderDist = 20;
-     const target = new THREE.Vector3(
-         currentPos.x + (Math.random() - 0.5) * wanderDist * 2,
-         currentPos.y, // Keep y the same
-         currentPos.z + (Math.random() - 0.5) * wanderDist * 2
-     );
-     // Clamp to bounds
-     const boundary = 98;
-     target.x = Math.max(-boundary, Math.min(boundary, target.x));
-     target.z = Math.max(-boundary, Math.min(boundary, target.z));
-     return target;
+    if (!currentPos) return null;
+    
+    const wanderDist = 20;
+    const target = new THREE.Vector3(
+        currentPos.x + (Math.random() - 0.5) * wanderDist * 2,
+        currentPos.y, // Keep y the same
+        currentPos.z + (Math.random() - 0.5) * wanderDist * 2
+    );
+    // Clamp to bounds
+    const boundary = 98;
+    target.x = Math.max(-boundary, Math.min(boundary, target.x));
+    target.z = Math.max(-boundary, Math.min(boundary, target.z));
+    return target;
 }
 
 // --- Spawning & Death ---
 let nextInfectedId = 0;
 function spawnInfected(position = null, initialState = 'idle', initialHealth = 100) {
-    if (!sceneRef) return;
+    if (!sceneRef) return null;
 
     const infectedHeight = 1.5 + (Math.random() - 0.5) * 0.4; // Vary height slightly
     const geometry = new THREE.BoxGeometry(0.8, infectedHeight, 0.8); // Use Box for now
@@ -214,7 +244,6 @@ function spawnInfected(position = null, initialState = 'idle', initialHealth = 1
          // TODO: Check spawn location validity (not inside objects/player view?)
     }
 
-
     const infectedData = {
         id: nextInfectedId++,
         mesh: mesh,
@@ -233,58 +262,102 @@ function spawnInfected(position = null, initialState = 'idle', initialHealth = 1
     infectedList.push(infectedData);
     sceneRef.add(mesh);
     // console.log(`Spawned Infected ${infectedData.id}`); // Use UIManager?
+    
+    return infectedData;
 }
 
 function handleInfectedDeath(inf, index) {
+    if (!inf || !sceneRef) return;
+    
     console.log(`Infected ${inf.id} died.`);
     // TODO: Play death animation/sound
     // TODO: Spawn loot? (e.g., World.spawnLoot(inf.mesh.position))
 
     // Remove mesh from scene
-    sceneRef.remove(inf.mesh);
-    inf.mesh.geometry.dispose(); // Cleanup geometry
-    inf.mesh.material.dispose(); // Cleanup material
+    if (inf.mesh) {
+        sceneRef.remove(inf.mesh);
+        if (inf.mesh.geometry) {
+            inf.mesh.geometry.dispose();
+        }
+        if (inf.mesh.material) {
+            if (Array.isArray(inf.mesh.material)) {
+                inf.mesh.material.forEach(m => m.dispose());
+            } else {
+                inf.mesh.material.dispose();
+            }
+        }
+    }
 
-    // Remove data from list
-    infectedList.splice(index, 1);
+    // Remove data from list if index is valid
+    if (index >= 0 && index < infectedList.length) {
+        infectedList.splice(index, 1);
+    } else {
+        // Try removing by ID if index doesn't match
+        const actualIndex = infectedList.findIndex(i => i.id === inf.id);
+        if (actualIndex >= 0) {
+            infectedList.splice(actualIndex, 1);
+        }
+    }
 }
 
 // --- Public Functions ---
 
 export function applyDamageToInfected(infectedId, amount) {
-     const inf = infectedList.find(i => i.id === infectedId);
-     if (inf) {
-         inf.health -= amount;
-         console.log(`Infected ${infectedId} took ${amount} damage, health: ${inf.health}`);
-         // TODO: Play hit sound/visual effect on infected mesh
-         // Make infected aware (e.g., force state to 'chasing' if hit)
-         if (inf.state === 'idle' || inf.state === 'wandering') {
-             inf.state = 'chasing';
-             UIManager.addLogMessage(`Infected ${inf.id} alerted by attack!`);
-         }
-         return true;
-     }
-     return false;
+    if (typeof infectedId !== 'number' || typeof amount !== 'number') {
+        console.error("Invalid parameters for applyDamageToInfected:", infectedId, amount);
+        return false;
+    }
+    
+    const inf = infectedList.find(i => i.id === infectedId);
+    if (inf) {
+        inf.health -= amount;
+        console.log(`Infected ${infectedId} took ${amount} damage, health: ${inf.health}`);
+        // TODO: Play hit sound/visual effect on infected mesh
+        // Make infected aware (e.g., force state to 'chasing' if hit)
+        if (inf.state === 'idle' || inf.state === 'wandering') {
+            inf.state = 'chasing';
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`Infected ${inf.id} alerted by attack!`);
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 export function getInfectedList() {
     // Return data, not meshes directly unless needed
-    return infectedList.map(inf => ({ id: inf.id, position: inf.mesh.position, state: inf.state, health: inf.health }));
+    return infectedList.map(inf => {
+        if (!inf || !inf.mesh) return null;
+        
+        return { 
+            id: inf.id, 
+            position: inf.mesh.position.clone(),
+            state: inf.state, 
+            health: inf.health 
+        };
+    }).filter(item => item !== null);
 }
 
 export function isMeshInfected(mesh) {
-     // Check if a given mesh belongs to an active infected
-     return infectedList.some(inf => inf.mesh === mesh);
+    if (!mesh) return false;
+    
+    // Check if a given mesh belongs to an active infected
+    return infectedList.some(inf => inf.mesh === mesh);
 }
 
 // --- Persistence ---
 export function getState() {
     // Only save essential data to recreate them, not the THREE.Mesh objects
-    return infectedList.map(inf => ({
-        id: inf.id, // Not strictly needed if re-IDing on load
-        position: { x: inf.mesh.position.x, y: inf.mesh.position.y, z: inf.mesh.position.z },
-        health: inf.health,
-        state: inf.state, // Might reset state on load?
-        // Save other relevant persistent stats if needed
-    }));
+    return infectedList.map(inf => {
+        if (!inf || !inf.mesh) return null;
+        
+        return {
+            id: inf.id, // Not strictly needed if re-IDing on load
+            position: { x: inf.mesh.position.x, y: inf.mesh.position.y, z: inf.mesh.position.z },
+            health: inf.health,
+            state: inf.state, // Might reset state on load?
+            // Save other relevant persistent stats if needed
+        };
+    }).filter(item => item !== null);
 }

@@ -62,10 +62,16 @@ export function init(scene, camera, playerMesh, loadData = null) {
 
     if (loadData && loadData.building) {
         // Recreate placed structures from saved data
-        loadData.building.placedStructures?.forEach(data => {
-             placeStructureFromLoad(data);
-        });
-         console.log(`Building state loaded (${placedStructures.length} structures).`);
+        if (Array.isArray(loadData.building.placedStructures)) {
+            loadData.building.placedStructures.forEach(data => {
+                if (data) {
+                    placeStructureFromLoad(data);
+                }
+            });
+            console.log(`Building state loaded (${placedStructures.length} structures).`);
+        } else {
+            console.warn("Building state invalid or empty");
+        }
     }
 }
 
@@ -79,12 +85,17 @@ export function update(dt, isPointerLocked) {
 // --- Build Mode Control ---
 export function enterBuildMode() {
     // Check if player is in a vehicle - don't allow building from vehicles
-    if (buildModeActive || Player.isInVehicle()) return;
+    if (buildModeActive || (typeof Player.isInVehicle === 'function' && Player.isInVehicle())) return;
     
     buildModeActive = true;
-    // TODO: Show Building UI (categories, items) via UIManager
-    UIManager.showBuildUI(getBuildableCategories());
-    UIManager.addLogMessage("Entered build mode. Select item and click to place.");
+    // Show Building UI (categories, items) via UIManager
+    if (UIManager && typeof UIManager.showBuildUI === 'function') {
+        UIManager.showBuildUI(getBuildableCategories());
+    }
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage("Entered build mode. Select item and click to place.");
+    }
     // Don't create ghost mesh until an item is selected
 }
 
@@ -93,8 +104,14 @@ export function exitBuildMode() {
     buildModeActive = false;
     removeGhostMesh();
     currentBuildableData = null;
-    UIManager.hideBuildUI();
-    UIManager.addLogMessage("Exited build mode.");
+    
+    if (UIManager && typeof UIManager.hideBuildUI === 'function') {
+        UIManager.hideBuildUI();
+    }
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage("Exited build mode.");
+    }
 }
 
 export function isBuildModeActive() {
@@ -112,7 +129,10 @@ export function selectBuildable(buildableId) {
     if (data) {
         currentBuildableData = data;
         createGhostMesh(currentBuildableData);
-        UIManager.addLogMessage(`Selected ${currentBuildableData.name}.`);
+        
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`Selected ${currentBuildableData.name}.`);
+        }
     } else {
         console.error(`Buildable item with ID ${buildableId} not found!`);
         currentBuildableData = null;
@@ -123,6 +143,8 @@ export function selectBuildable(buildableId) {
 // --- Ghost Mesh Logic ---
 function createGhostMesh(buildableData) {
     removeGhostMesh(); // Remove previous one if any
+
+    if (!sceneRef || !buildableData) return;
 
     // TODO: Load appropriate model using AssetManager based on buildableData.modelId
     // For now, use BoxGeometry based on size data
@@ -142,16 +164,24 @@ function createGhostMesh(buildableData) {
 }
 
 function removeGhostMesh() {
-    if (ghostMesh) {
-        sceneRef.remove(ghostMesh);
+    if (!ghostMesh || !sceneRef) return;
+    
+    sceneRef.remove(ghostMesh);
+    if (ghostMesh.geometry) {
         ghostMesh.geometry.dispose();
-        ghostMesh.material.dispose();
-        ghostMesh = null;
     }
+    if (ghostMesh.material) {
+        if (Array.isArray(ghostMesh.material)) {
+            ghostMesh.material.forEach(m => m.dispose());
+        } else {
+            ghostMesh.material.dispose();
+        }
+    }
+    ghostMesh = null;
 }
 
 function updateGhostMeshPlacement() {
-    if (!ghostMesh || !cameraRef || !playerMeshRef || !currentBuildableData) return;
+    if (!ghostMesh || !cameraRef || !playerMeshRef || !currentBuildableData || !sceneRef) return;
 
     const placeDistance = 4; // Max distance player can place from self
     const raycaster = new THREE.Raycaster();
@@ -167,7 +197,9 @@ function updateGhostMeshPlacement() {
 
     if (intersects.length > 0 && intersects[0].distance <= placeDistance) {
         targetPosition = intersects[0].point;
-        surfaceNormal = intersects[0].face.normal; // Get normal of the ground face hit
+        if (intersects[0].face) {
+            surfaceNormal = intersects[0].face.normal.clone(); // Get normal of the ground face hit
+        }
     } else {
         // If no hit or too far, place at max distance in front of player
         const forward = new THREE.Vector3();
@@ -204,6 +236,8 @@ function updateGhostMeshPlacement() {
 }
 
 function checkPlacementValidity(meshToCheck) {
+    if (!meshToCheck || !playerMeshRef) return false;
+    
     // TODO: Implement more robust checks:
     // 1. Collision check: Use meshToCheck's bounding box/sphere against bounding boxes of:
     //    - Player
@@ -214,7 +248,8 @@ function checkPlacementValidity(meshToCheck) {
     // 3. Structural integrity check (optional, advanced): Requires connection to foundation/other supports?
 
     // Simple check: Not too close to player
-    if (playerMeshRef.position.distanceTo(meshToCheck.position) < Player.playerRadius + 0.5) {
+    const playerRadius = Player.getPlayerHeight ? Player.getPlayerHeight() / 2 : 0.5;
+    if (playerMeshRef.position.distanceTo(meshToCheck.position) < playerRadius + 0.5) {
         return false;
     }
 
@@ -229,7 +264,6 @@ function checkPlacementValidity(meshToCheck) {
         }
     }
 
-
     return true; // Placeholder: assume valid for now if basic checks pass
 }
 
@@ -239,16 +273,20 @@ function checkPlacementValidity(meshToCheck) {
  */
 export function tryPlaceStructure() {
     if (!buildModeActive || !ghostMesh || !currentBuildableData || !ghostMesh.userData.canPlace) {
-        UIManager.addLogMessage("Cannot place structure here.");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Cannot place structure here.");
+        }
         return false;
     }
 
     // 1. Check materials
     let hasMaterials = true;
     for (const req of currentBuildableData.requires) {
-        if (!Player.hasItem(req.item, req.count)) {
+        if (!Player.hasItem || !Player.hasItem(req.item, req.count)) {
             hasMaterials = false;
-            UIManager.addLogMessage(`Missing ${req.count}x ${req.item}.`);
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`Missing ${req.count}x ${req.item}.`);
+            }
             break;
         }
     }
@@ -257,7 +295,7 @@ export function tryPlaceStructure() {
     // 2. Consume materials
     let consumedOk = true;
     for (const req of currentBuildableData.requires) {
-        if (!Player.removeItem(req.item, req.count)) {
+        if (!Player.removeItem || !Player.removeItem(req.item, req.count)) {
             console.error(`Building Error: Failed to remove item ${req.item}.`);
              // TODO: Rollback consumed items if needed
             consumedOk = false;
@@ -265,15 +303,18 @@ export function tryPlaceStructure() {
         }
     }
     if (!consumedOk) {
-        UIManager.addLogMessage("Error consuming materials. Placement cancelled.");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Error consuming materials. Placement cancelled.");
+        }
         return false;
     }
-
 
     // 3. Create the actual structure
     placeActualStructure(currentBuildableData, ghostMesh.position.clone(), ghostMesh.rotation.clone());
 
-    UIManager.addLogMessage(`Placed ${currentBuildableData.name}!`);
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Placed ${currentBuildableData.name}!`);
+    }
     // TODO: Play placement sound
 
     // Keep build mode active with the same item selected for faster building?
@@ -282,86 +323,105 @@ export function tryPlaceStructure() {
 }
 
 function placeActualStructure(data, position, rotation) {
-     // TODO: Load actual model via AssetManager
-     const size = data.size || { x: 1, y: 1, z: 1 };
-     const geometry = new THREE.BoxGeometry(size.x, size.y, size.z); // Use ghost geometry? Clone it.
-     // TODO: Use appropriate material (wood, metal, etc.)
-     const material = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+    if (!data || !position || !rotation || !sceneRef) {
+        console.error("Cannot place structure: Missing required parameters");
+        return null;
+    }
+    
+    // TODO: Load actual model via AssetManager
+    const size = data.size || { x: 1, y: 1, z: 1 };
+    const geometry = new THREE.BoxGeometry(size.x, size.y, size.z); // Use ghost geometry? Clone it.
+    // TODO: Use appropriate material (wood, metal, etc.)
+    const material = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
 
-     const actualMesh = new THREE.Mesh(geometry, material);
-     actualMesh.position.copy(position);
-     actualMesh.rotation.copy(rotation);
-     actualMesh.castShadow = true;
-     actualMesh.receiveShadow = true;
-     actualMesh.name = `Structure_${data.id}`; // Identify placed structure
-     sceneRef.add(actualMesh);
+    const actualMesh = new THREE.Mesh(geometry, material);
+    actualMesh.position.copy(position);
+    actualMesh.rotation.copy(rotation);
+    actualMesh.castShadow = true;
+    actualMesh.receiveShadow = true;
+    actualMesh.name = `Structure_${data.id}`; // Identify placed structure
+    sceneRef.add(actualMesh);
 
-     // Store data about the placed structure
-     const structureData = {
-         id: `${data.id}_${Date.now()}`, // Unique ID for this instance
-         typeId: data.id, // Original buildable ID
-         position: { x: position.x, y: position.y, z: position.z },
-         rotation: { x: rotation.x, y: rotation.y, z: rotation.z, order: rotation.order },
-         health: 100, // Example: give structures health
-         isStation: data.isStation || false,
-         mesh: actualMesh, // Keep reference to the mesh (careful with saving this)
-     };
-     placedStructures.push(structureData);
+    // Generate a unique ID for this instance
+    const uniqueId = `${data.id}_${Date.now()}_${Math.floor(Math.random() * 1000)}`; 
+    
+    // Store data about the placed structure
+    const structureData = {
+        id: uniqueId,
+        typeId: data.id, // Original buildable ID
+        position: { x: position.x, y: position.y, z: position.z },
+        rotation: { x: rotation.x, y: rotation.y, z: rotation.z, order: rotation.order },
+        health: 100, // Example: give structures health
+        isStation: data.isStation || false,
+        mesh: actualMesh, // Keep reference to the mesh (careful with saving this)
+    };
+    placedStructures.push(structureData);
 
-     // Add structure info to the world module if needed for broader interactions/saving
-     World.addEnvironmentObject({ ...structureData, objectType: 'structure' });
+    // Add structure info to the world module if needed for broader interactions/saving
+    if (World && typeof World.addEnvironmentObject === 'function') {
+        World.addEnvironmentObject({ ...structureData, objectType: 'structure' });
+    }
 
-     // Make mesh interactive if it's a station
-     if (structureData.isStation) {
-         actualMesh.userData.interact = (player) => {
-             UIManager.addLogMessage(`Using ${data.name}...`);
-             // TODO: Open the specific crafting station UI via UIManager
-             // UIManager.openCraftingStationUI(data.id); // Pass station type ID
-         };
-     }
+    // Make mesh interactive if it's a station
+    if (structureData.isStation) {
+        // Create a bound function to ensure 'this' context is preserved
+        const interactHandler = function(player) {
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`Using ${data.name}...`);
+            }
+            // TODO: Open the specific crafting station UI via UIManager
+            // UIManager.openCraftingStationUI(data.id); // Pass station type ID
+        };
+        
+        actualMesh.userData.interact = interactHandler;
+    }
 
-     return actualMesh;
+    return actualMesh;
 }
 
 // Function to recreate structure meshes when loading a saved game
 function placeStructureFromLoad(savedData) {
+    if (!savedData || !savedData.typeId) {
+        console.error("Invalid saved structure data", savedData);
+        return null;
+    }
+    
     const definition = buildables.find(b => b.id === savedData.typeId);
     if (!definition) {
         console.warn(`Could not find buildable definition for loaded structure type: ${savedData.typeId}`);
-        return;
+        return null;
+    }
+    
+    // Check if this structure already exists in our array (by ID)
+    const existingStructureIndex = placedStructures.findIndex(s => s.id === savedData.id);
+    if (existingStructureIndex >= 0) {
+        console.warn(`Structure with ID ${savedData.id} already exists, skipping`);
+        return placedStructures[existingStructureIndex];
     }
 
-    // Combine definition data with saved instance data
-    const fullData = { ...definition, ...savedData };
+    // Create position and rotation objects from saved data
+    const position = new THREE.Vector3(
+        savedData.position?.x || 0, 
+        savedData.position?.y || 0, 
+        savedData.position?.z || 0
+    );
+    
+    const rotation = new THREE.Euler(
+        savedData.rotation?.x || 0, 
+        savedData.rotation?.y || 0, 
+        savedData.rotation?.z || 0, 
+        savedData.rotation?.order || 'XYZ'
+    );
 
-    const position = new THREE.Vector3(savedData.position.x, savedData.position.y, savedData.position.z);
-    const rotation = new THREE.Euler(savedData.rotation.x, savedData.rotation.y, savedData.rotation.z, savedData.rotation.order);
-
-    // Call the same function that places a new structure
-    // This re-adds the mesh to the scene and the placedStructures array
-    placeActualStructure(fullData, position, rotation);
-    // Note: This duplicates the entry in placedStructures if not handled carefully.
-    // It might be better to have placeActualStructure check if the ID already exists
-    // or modify this function to just create mesh and add, not call placeActualStructure.
-     // Let's refine: recreate mesh directly
-    /*
-    const size = definition.size || { x: 1, y: 1, z: 1 };
-    const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
-    const material = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(position);
-    mesh.rotation.copy(rotation);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.name = `Structure_${definition.id}`;
-    sceneRef.add(mesh);
-
-    const structureData = { ...savedData, mesh: mesh }; // Add mesh reference back
-    placedStructures.push(structureData);
-    World.addEnvironmentObject({ ...structureData, objectType: 'structure' });
-    */
-
-    console.log(`Recreated structure: ${definition.name}`);
+    // Call placeActualStructure to create the mesh and add to placedStructures
+    const mesh = placeActualStructure(definition, position, rotation);
+    
+    if (mesh) {
+        console.log(`Recreated structure: ${definition.name}`);
+        return mesh;
+    }
+    
+    return null;
 }
 
 
@@ -400,7 +460,7 @@ export function getStationPlayerIsNear() {
     if (!playerMeshRef) return null;
     
     // Filter placed structures to just stations
-    const stations = placedStructures.filter(s => s.isStation);
+    const stations = placedStructures.filter(s => s.isStation && s.mesh);
     
     // Find closest station within interaction range
     const interactionRange = 3.0; // Maximum distance to interact
@@ -421,14 +481,22 @@ export function getStationPlayerIsNear() {
 // --- Persistence ---
 export function getState() {
     // Save data *without* the THREE.Mesh references
-    const savedStructures = placedStructures.map(s => ({
-        id: s.id,
-        typeId: s.typeId,
-        position: { x: s.position.x, y: s.position.y, z: s.position.z },
-        rotation: { x: s.rotation.x, y: s.rotation.y, z: s.rotation.z, order: s.rotation.order },
-        health: s.health,
-        // Save any other persistent state for the structure
-    }));
+    const savedStructures = placedStructures.map(s => {
+        if (!s || !s.position) {
+            console.error("Invalid structure data when saving state", s);
+            return null;
+        }
+        
+        return {
+            id: s.id,
+            typeId: s.typeId,
+            position: { x: s.position.x, y: s.position.y, z: s.position.z },
+            rotation: { x: s.rotation.x, y: s.rotation.y, z: s.rotation.z, order: s.rotation.order },
+            health: s.health,
+            // Save any other persistent state for the structure
+        };
+    }).filter(s => s !== null); // Filter out invalid structures
+    
     return {
         placedStructures: savedStructures
     };

@@ -1,6 +1,9 @@
 // game/ui.js
 // Handles updating HTML DOM elements to reflect game state.
 
+// --- Import Dependencies ---
+import * as Player from './player.js'; // Moved import to top to prevent circular dependencies
+
 // --- DOM Element References ---
 // Get references early, maybe in an init function
 let healthValue, staminaValue, fatigueValue, hungerValue, thirstValue;
@@ -65,8 +68,10 @@ export function updateWorldUI(worldState) {
     const minutes = Math.floor((worldState.gameTime % 3600) / 60);
     timeValue.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
      // Mist
-    mistStatus.textContent = worldState.isMistActive ? "ACTIVE" : "Clear";
-    mistStatus.style.color = worldState.isMistActive ? "red" : "lime";
+    if (mistStatus) {
+        mistStatus.textContent = worldState.isMistActive ? "ACTIVE" : "Clear";
+        mistStatus.style.color = worldState.isMistActive ? "red" : "lime";
+    }
 }
 
 export function updateBuildModeUI(isActive, currentBuildableName = '') {
@@ -85,8 +90,11 @@ export function updateCraftingProgress(progress) { // progress is 0.0 to 1.0
      if (!craftingProgressUI) return;
      if (progress > 0) {
          showElement(craftingProgressUI);
-         craftingProgressUI.style.width = `${progress * 100}%`; // Assuming it's a progress bar fill
-         craftingProgressUI.textContent = `${Math.round(progress*100)}%`;
+         const fillElement = document.getElementById('crafting-progress-fill');
+         if (fillElement) {
+             fillElement.style.width = `${progress * 100}%`; // Update the fill element, not the container
+             fillElement.textContent = `${Math.round(progress*100)}%`;
+         }
      } else {
          hideElement(craftingProgressUI);
      }
@@ -133,10 +141,14 @@ export function toggleInventoryUI(inventory) {
 function populateInventoryPanel(inventory) {
     if (!inventoryPanel) return;
     // Clear previous content
-    inventoryPanel.innerHTML = '<h2>Inventory</h2>';
+    const title = document.createElement('h2');
+    title.textContent = 'Inventory';
+    inventoryPanel.innerHTML = '';
+    inventoryPanel.appendChild(title);
+    
     // Create list items/grid for inventory items
     const list = document.createElement('ul');
-    if (inventory.length === 0) {
+    if (!inventory || inventory.length === 0) {
         list.innerHTML = '<li>Empty</li>';
     } else {
         inventory.forEach(item => {
@@ -146,14 +158,23 @@ function populateInventoryPanel(inventory) {
             const useButton = document.createElement('button');
             useButton.textContent = 'Use';
             useButton.onclick = () => {
-                 Player.consumeItem(item); // Assuming Player module is accessible or pass callback
-                 populateInventoryPanel(Player.getInventory()); // Refresh panel
+                 if (typeof Player.consumeItem === 'function') {
+                     Player.consumeItem(item);
+                     // Refresh panel with updated inventory
+                     if (typeof Player.getInventory === 'function') {
+                         populateInventoryPanel(Player.getInventory());
+                     }
+                 }
              };
              // Add equip button for tools/weapons
              if (item.type === 'tool' || item.type === 'weapon') {
                  const equipButton = document.createElement('button');
                  equipButton.textContent = 'Equip';
-                 equipButton.onclick = () => { Player.equipItem(item); };
+                 equipButton.onclick = () => { 
+                     if (typeof Player.equipItem === 'function') {
+                         Player.equipItem(item); 
+                     }
+                 };
                  li.appendChild(equipButton);
              }
 
@@ -180,14 +201,18 @@ export function toggleCraftingUI(availableRecipes, canCraftCheck) {
 
 function populateCraftingPanel(recipes, canCraftCheck) {
      if (!craftingPanel) return;
-     craftingPanel.innerHTML = '<h2>Crafting</h2>';
+     const title = document.createElement('h2');
+     title.textContent = 'Crafting';
+     craftingPanel.innerHTML = '';
+     craftingPanel.appendChild(title);
+     
      const list = document.createElement('ul');
-     if (recipes.length === 0) {
+     if (!recipes || recipes.length === 0) {
          list.innerHTML = '<li>No recipes available here.</li>';
      } else {
          recipes.forEach(recipe => {
              const li = document.createElement('li');
-             const canAfford = canCraftCheck(recipe.id); // Check if player has materials
+             const canAfford = typeof canCraftCheck === 'function' ? canCraftCheck(recipe.id) : false;
              li.innerHTML = `<b>${recipe.name}</b> (Output: ${recipe.output.quantity}x ${recipe.output.item})<br>Requires: ${recipe.requires.map(r => `${r.count}x ${r.item}`).join(', ')}`;
              li.style.color = canAfford ? 'white' : '#aaa'; // Dim if cannot craft
 
@@ -201,6 +226,8 @@ function populateCraftingPanel(recipes, canCraftCheck) {
                          // Optionally close UI after starting craft or update button state
                          // Refresh UI potentially after craft finishes? More complex.
                      }
+                 }).catch(err => {
+                     console.error("Failed to import Crafting module:", err);
                  });
              };
              li.appendChild(craftButton);
@@ -226,7 +253,11 @@ export function hideBuildUI() {
 
 function populateBuildPanel(categories) {
      if (!buildPanel) return;
-     buildPanel.innerHTML = '<h2>Build Menu</h2>';
+     const title = document.createElement('h2');
+     title.textContent = 'Build Menu';
+     buildPanel.innerHTML = '';
+     buildPanel.appendChild(title);
+     
      // Create UI elements based on categories and items
      for (const category in categories) {
          const catDiv = document.createElement('div');
@@ -238,7 +269,7 @@ function populateBuildPanel(categories) {
              // Check if player can afford it (visual only, placement checks later)
              let canAfford = true;
              for (const req of buildable.requires) {
-                 if (!Player.hasItem(req.item, req.count)) {
+                 if (typeof Player.hasItem === 'function' && !Player.hasItem(req.item, req.count)) {
                      canAfford = false;
                      break;
                  }
@@ -253,6 +284,8 @@ function populateBuildPanel(categories) {
                      Building.selectBuildable(buildable.id);
                      // Maybe hide the build menu after selection? Optional.
                      // hideBuildUI();
+                 }).catch(err => {
+                     console.error("Failed to import Building module:", err);
                  });
              };
              li.appendChild(selectButton);
@@ -277,6 +310,7 @@ function addCloseButton(panel, closeAction) {
      if (!panel) return;
      const closeButton = document.createElement('button');
      closeButton.textContent = 'Close (Esc)';
+     closeButton.className = 'close-button';
      closeButton.style.marginTop = '10px';
      closeButton.onclick = closeAction;
      panel.appendChild(closeButton);
@@ -287,7 +321,9 @@ export function showDamageIndicator() {
      if (!damageIndicatorUI) return;
      damageIndicatorUI.classList.add('active');
      setTimeout(() => {
-         damageIndicatorUI.classList.remove('active');
+         if (damageIndicatorUI) {
+             damageIndicatorUI.classList.remove('active');
+         }
      }, 300); // Duration of the effect
 }
 
@@ -382,6 +418,3 @@ export function updateInventoryUI(inventory) {
         populateInventoryPanel(inventory);
     }
 }
-
-// Add missing imports
-import * as Player from './player.js'; // For populateInventoryPanel

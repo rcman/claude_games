@@ -111,7 +111,9 @@ export function update(dt, inputState) {
             }
             vehicle.lastPosition = vehicle.mesh.position.clone();
             
-            UIManager.updateVehicleUI(vehicle.stats, speed);
+            if (UIManager && typeof UIManager.updateVehicleUI === 'function') {
+                UIManager.updateVehicleUI(vehicle.stats, speed);
+            }
         }
 
         // Update vehicle stats (fuel consumption if engine is on)
@@ -120,7 +122,9 @@ export function update(dt, inputState) {
             if (vehicle.stats.fuel <= 0) {
                 vehicle.stats.fuel = 0;
                 toggleEngine(vehicle); // Turn off engine
-                UIManager.addLogMessage(`${vehicle.name} ran out of fuel!`);
+                if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                    UIManager.addLogMessage(`${vehicle.name} ran out of fuel!`);
+                }
             }
         }
     });
@@ -184,7 +188,13 @@ export function spawnVehicle(typeId, position, rotationData = null, stats = null
         lastPosition: position.clone(), // For speed calculation
     };
     mesh.userData.vehicleId = vehicleData.id; // Link mesh back to data
-    mesh.userData.interact = tryEnterVehicle; // Assign interaction function
+    
+    // Store a reference to this function with the vehicle as context
+    const boundInteractFunction = function(playerMeshWhoInteracted) {
+        tryEnterVehicle(vehicleData, playerMeshWhoInteracted);
+    };
+    
+    mesh.userData.interact = boundInteractFunction; // Assign properly bound interaction function
 
     vehicles.push(vehicleData);
     return vehicleData;
@@ -219,7 +229,8 @@ function createVehiclePhysicsBody(mesh, definition) {
 }
 
 function updateMeshFromPhysics(mesh, body) {
-     if (!body || !physicsWorldRef) return; // Only run if using physics
+    if (!mesh || !body || !physicsWorldRef) return; // Only run if using physics
+    
     // In a real engine:
     // const transform = body.getWorldTransform(); // Get transform from physics body
     // mesh.position.copy(transform.getOrigin());
@@ -229,49 +240,55 @@ function updateMeshFromPhysics(mesh, body) {
 
 // --- Controls ---
 function applyVehicleControls(vehicle, inputState, dt) {
-    if (!vehicle.engineOn && !inputState.keys['KeyX']) { // Allow starting engine even if off
-         if (inputState.keys['KeyW'] || inputState.keys['KeyS'] || inputState.keys['KeyA'] || inputState.keys['KeyD'] || inputState.keys['Space']) {
-            UIManager.addLogMessage(`${vehicle.name} engine is off. Press 'X' to start.`);
-         }
+    if (!vehicle || !inputState) return;
+    
+    if (!vehicle.engineOn && inputState.keys && !inputState.keys['KeyX']) { // Allow starting engine even if off
+        if (inputState.keys['KeyW'] || inputState.keys['KeyS'] || inputState.keys['KeyA'] || inputState.keys['KeyD'] || inputState.keys['Space']) {
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`${vehicle.name} engine is off. Press 'X' to start.`);
+            }
+        }
         return; // Don't process controls if engine off
     }
-    if(!vehicle.engineOn && inputState.keys['KeyX']) {
+    
+    if(!vehicle.engineOn && inputState.keys && inputState.keys['KeyX']) {
         // Handled by toggleEngine called from key handler now
         return;
     }
 
-
     // --- Placeholder Movement (No Physics) ---
     if (!physicsWorldRef) {
-         const moveSpeed = 10.0; // units per second
-         const turnSpeed = 1.5;  // radians per second
-         let moving = false;
+        const moveSpeed = 10.0; // units per second
+        const turnSpeed = 1.5;  // radians per second
+        let moving = false;
 
-         if (inputState.keys['KeyW']) {
-             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(vehicle.mesh.quaternion);
-             vehicle.mesh.position.addScaledVector(forward, moveSpeed * dt);
-             moving = true;
-         }
-         if (inputState.keys['KeyS']) {
-             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(vehicle.mesh.quaternion);
-             vehicle.mesh.position.addScaledVector(forward, -moveSpeed * 0.5 * dt); // Slower reverse
-             moving = true;
-         }
-         if (inputState.keys['KeyA']) {
-             vehicle.mesh.rotation.y += turnSpeed * dt;
-             moving = true;
-         }
-         if (inputState.keys['KeyD']) {
-             vehicle.mesh.rotation.y -= turnSpeed * dt;
-             moving = true;
-         }
-         // Basic sound placeholder
-         // if (moving && !vehicle.moveSound?.isPlaying) vehicle.moveSound?.play();
-         // else if (!moving && vehicle.moveSound?.isPlaying) vehicle.moveSound?.stop();
+        if (inputState.keys && inputState.keys['KeyW']) {
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(vehicle.mesh.quaternion);
+            vehicle.mesh.position.addScaledVector(forward, moveSpeed * dt);
+            moving = true;
+        }
+        if (inputState.keys && inputState.keys['KeyS']) {
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(vehicle.mesh.quaternion);
+            vehicle.mesh.position.addScaledVector(forward, -moveSpeed * 0.5 * dt); // Slower reverse
+            moving = true;
+        }
+        if (inputState.keys && inputState.keys['KeyA']) {
+            vehicle.mesh.rotation.y += turnSpeed * dt;
+            moving = true;
+        }
+        if (inputState.keys && inputState.keys['KeyD']) {
+            vehicle.mesh.rotation.y -= turnSpeed * dt;
+            moving = true;
+        }
+        // Basic sound placeholder
+        // if (moving && !vehicle.moveSound?.isPlaying) vehicle.moveSound?.play();
+        // else if (!moving && vehicle.moveSound?.isPlaying) vehicle.moveSound?.stop();
 
     } else {
-         // --- TODO: Implement Realistic Vehicle Controls using Physics Engine ---
+        // --- TODO: Implement Realistic Vehicle Controls using Physics Engine ---
         const body = vehicle.physicsBody;
+        if (!body) return;
+        
         const maxSteerVal = 0.6;
         const maxForce = 1000; // Engine force (adjust per vehicle)
         const brakeForce = 100; // Adjust per vehicle
@@ -281,16 +298,16 @@ function applyVehicleControls(vehicle, inputState, dt) {
         let breakingForce = 0;
 
         // Acceleration/Reverse
-        if (inputState.keys['KeyW']) engineForce = maxForce;
-        else if (inputState.keys['KeyS']) engineForce = -maxForce / 2;
+        if (inputState.keys && inputState.keys['KeyW']) engineForce = maxForce;
+        else if (inputState.keys && inputState.keys['KeyS']) engineForce = -maxForce / 2;
 
         // Steering
-        if (inputState.keys['KeyA']) steeringValue = maxSteerVal;
-        else if (inputState.keys['KeyD']) steeringValue = -maxSteerVal;
+        if (inputState.keys && inputState.keys['KeyA']) steeringValue = maxSteerVal;
+        else if (inputState.keys && inputState.keys['KeyD']) steeringValue = -maxSteerVal;
         // TODO: Add gradual return to center for steering?
 
         // Braking (Spacebar)
-        if (inputState.keys['Space']) {
+        if (inputState.keys && inputState.keys['Space']) {
             breakingForce = brakeForce;
             engineForce = 0; // Don't accelerate while braking
         }
@@ -310,53 +327,54 @@ function applyVehicleControls(vehicle, inputState, dt) {
 }
 
 // --- Player Interaction ---
-function tryEnterVehicle(playerMeshWhoInteracted) {
+function tryEnterVehicle(vehicle, playerMeshWhoInteracted) {
+    if (!vehicle || !playerMeshWhoInteracted) {
+        console.error("Invalid parameters for tryEnterVehicle");
+        return;
+    }
+    
     if (playerInVehicle) {
-        UIManager.addLogMessage("Already in a vehicle.");
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage("Already in a vehicle.");
+        }
         return;
     }
     
-    // 'this' should be the vehicle mesh that was interacted with
-    const vehicleId = this.userData?.vehicleId;
-    if (vehicleId === undefined) {
-        console.error("Vehicle interaction without proper vehicleId in userData");
-        return;
-    }
-    
-    const vehicle = vehicles.find(v => v.id === vehicleId);
+    // Find nearest available seat
+    const playerPos = playerMeshWhoInteracted.position;
+    let bestSeat = -1;
+    let minDistSq = Infinity;
 
-    if (vehicle) {
-        // Find nearest available seat
-        const playerPos = playerMeshWhoInteracted.position;
-        let bestSeat = -1;
-        let minDistSq = Infinity;
+    for(let i = 0; i < vehicle.definition.seats.length; i++) {
+        if (!vehicle.passengers[i]) { // Check if seat is empty
+            const seatOffset = vehicle.definition.seats[i].pos;
+            // Convert local seat offset to world position
+            const seatWorldPos = new THREE.Vector3(seatOffset.x, seatOffset.y, seatOffset.z);
+            vehicle.mesh.localToWorld(seatWorldPos);
+            const distSq = playerPos.distanceToSquared(seatWorldPos);
 
-        for(let i = 0; i < vehicle.definition.seats.length; i++) {
-            if (!vehicle.passengers[i]) { // Check if seat is empty
-                const seatOffset = vehicle.definition.seats[i].pos;
-                // Convert local seat offset to world position
-                const seatWorldPos = new THREE.Vector3(seatOffset.x, seatOffset.y, seatOffset.z);
-                vehicle.mesh.localToWorld(seatWorldPos);
-                const distSq = playerPos.distanceToSquared(seatWorldPos);
-
-                if (distSq < minDistSq && distSq < 4*4) { // Must be reasonably close (e.g., 4 units)
-                    minDistSq = distSq;
-                    bestSeat = i;
-                }
+            if (distSq < minDistSq && distSq < 4*4) { // Must be reasonably close (e.g., 4 units)
+                minDistSq = distSq;
+                bestSeat = i;
             }
         }
+    }
 
-        if (bestSeat !== -1) {
-            enterVehicle(vehicle, playerMeshWhoInteracted, bestSeat);
-        } else {
+    if (bestSeat !== -1) {
+        enterVehicle(vehicle, playerMeshWhoInteracted, bestSeat);
+    } else {
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
             UIManager.addLogMessage("No available seats or too far.");
         }
-    } else {
-        console.error(`Vehicle with ID ${vehicleId} not found.`);
     }
 }
 
 export function enterVehicle(vehicle, playerMesh, seatIndex) {
+    if (!vehicle || !playerMesh) {
+        console.error("Cannot enter vehicle: Invalid parameters");
+        return;
+    }
+    
     const playerRef = Player.getPlayerReference(); // Assume Player module provides a reference or ID
     if (!playerRef) {
         console.error("Could not get player reference to enter vehicle.");
@@ -371,13 +389,17 @@ export function enterVehicle(vehicle, playerMesh, seatIndex) {
     playerMesh.visible = false;
     Player.setActive(false); // Tell Player module to disable its updates/physics
 
-
     // Attach camera? Or switch to vehicle camera? Depends on design.
     // Simplest: Keep camera logic in main loop, but it follows vehicle now.
     // OR: camera.position.set(...) // Set to a chase cam position relative to vehicle
 
-    UIManager.addLogMessage(`Entered ${vehicle.name}. Press 'F' to exit, 'X' to toggle engine.`);
-    UIManager.showVehicleUI(); // Show speed, fuel etc.
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Entered ${vehicle.name}. Press 'F' to exit, 'X' to toggle engine.`);
+    }
+    
+    if (UIManager && typeof UIManager.showVehicleUI === 'function') {
+        UIManager.showVehicleUI(); // Show speed, fuel etc.
+    }
 
     // Auto-start engine only if entering driver seat?
     if(seatIndex === vehicle.driverSeatIndex && !vehicle.engineOn) {
@@ -390,7 +412,16 @@ export function tryExitVehicle() {
 
     const vehicle = playerInVehicle;
     const playerMesh = Player.getPlayerMesh(); // Get player mesh reference
+    if (!playerMesh) {
+        console.error("Cannot exit vehicle: Player mesh not available");
+        return;
+    }
+    
     const playerRef = Player.getPlayerReference(); // Get player ID/ref
+    if (!playerRef) {
+        console.error("Cannot exit vehicle: Player reference not available");
+        return;
+    }
 
     // Find which seat the player is in
     const seatIndex = vehicle.passengers.findIndex(p => p === playerRef);
@@ -405,30 +436,39 @@ export function tryExitVehicle() {
     const exitPoints = vehicle.definition.exitPoints || [{ x: 1.5, y: 0, z: 0 }]; // Default exit point
 
     for (const point of exitPoints) {
-         const localExit = new THREE.Vector3(point.x, point.y, point.z);
-         const worldExit = vehicle.mesh.localToWorld(localExit.clone());
-         worldExit.y = Player.getPlayerHeight() / 2; // Set Y to player base height
+        const localExit = new THREE.Vector3(point.x, point.y, point.z);
+        const worldExit = localExit.clone();
+        vehicle.mesh.localToWorld(worldExit);
+        
+        const playerHeight = Player.getPlayerHeight ? Player.getPlayerHeight() : 1.8;
+        worldExit.y = playerHeight / 2; // Set Y to player base height
 
-         // --- TODO: Check if worldExit position is valid ---
-         // - Raycast down slightly from worldExit to confirm ground beneath.
-         // - Check for collisions at worldExit using a small bounding box/sphere against world objects.
-         // Example placeholder check:
-         const isValidExit = isPositionClear(worldExit);
+        // --- TODO: Check if worldExit position is valid ---
+        // - Raycast down slightly from worldExit to confirm ground beneath.
+        // - Check for collisions at worldExit using a small bounding box/sphere against world objects.
+        // Example placeholder check:
+        const isValidExit = isPositionClear(worldExit);
 
-         if (isValidExit) {
-             exitPos = worldExit;
-             break; // Found a valid spot
-         }
+        if (isValidExit) {
+            exitPos = worldExit;
+            break; // Found a valid spot
+        }
     }
 
     if (!exitPos) {
         // If no defined exit point is clear, try a default offset as fallback
         const fallbackOffset = new THREE.Vector3(1.5, 0, 0); // Default right side
-        exitPos = vehicle.mesh.localToWorld(fallbackOffset);
-        exitPos.y = Player.getPlayerHeight() / 2;
+        exitPos = fallbackOffset.clone();
+        vehicle.mesh.localToWorld(exitPos);
+        
+        const playerHeight = Player.getPlayerHeight ? Player.getPlayerHeight() : 1.8;
+        exitPos.y = playerHeight / 2;
+        
         if (!isPositionClear(exitPos)) {
-             UIManager.addLogMessage("Cannot exit vehicle: Exit blocked!");
-             return; // Completely blocked
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage("Cannot exit vehicle: Exit blocked!");
+            }
+            return; // Completely blocked
         }
     }
 
@@ -450,12 +490,19 @@ export function tryExitVehicle() {
     // Stop engine? Optional, maybe leave it running.
     // if (vehicle.engineOn) { toggleEngine(vehicle); }
 
-    UIManager.hideVehicleUI();
-    UIManager.addLogMessage(`Exited ${vehicle.name}.`);
+    if (UIManager && typeof UIManager.hideVehicleUI === 'function') {
+        UIManager.hideVehicleUI();
+    }
+    
+    if (UIManager && typeof UIManager.addLogMessage === 'function') {
+        UIManager.addLogMessage(`Exited ${vehicle.name}.`);
+    }
 }
 
 // Helper function to check if a position is clear (basic placeholder)
 function isPositionClear(pos) {
+    if (!pos) return false;
+    
     // TODO: Implement real collision check here using Physics engine or bounding box checks
     // Check against other vehicles, placed structures, world geometry etc.
     // For now, just check basic bounds
@@ -468,24 +515,29 @@ function isPositionClear(pos) {
     return true; // Assume clear for now
 }
 
-
 export function toggleEngine(vehicle = null) {
     const targetVehicle = vehicle || playerInVehicle; // Target current vehicle if null passed
     if (!targetVehicle) return;
 
     if (targetVehicle.engineOn) {
         targetVehicle.engineOn = false;
-        UIManager.addLogMessage(`${targetVehicle.name} engine OFF.`);
+        if (UIManager && typeof UIManager.addLogMessage === 'function') {
+            UIManager.addLogMessage(`${targetVehicle.name} engine OFF.`);
+        }
         // TODO: Stop engine sound
-         // if (targetVehicle.engineSound?.isPlaying) targetVehicle.engineSound.stop();
+        // if (targetVehicle.engineSound?.isPlaying) targetVehicle.engineSound.stop();
     } else {
         if (targetVehicle.stats.fuel > 0) {
             targetVehicle.engineOn = true;
-            UIManager.addLogMessage(`${targetVehicle.name} engine ON.`);
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`${targetVehicle.name} engine ON.`);
+            }
             // TODO: Play engine start/loop sound
-             // if (!targetVehicle.engineSound?.isPlaying) targetVehicle.engineSound.play();
+            // if (!targetVehicle.engineSound?.isPlaying) targetVehicle.engineSound.play();
         } else {
-             UIManager.addLogMessage(`${targetVehicle.name} is out of fuel!`);
+            if (UIManager && typeof UIManager.addLogMessage === 'function') {
+                UIManager.addLogMessage(`${targetVehicle.name} is out of fuel!`);
+            }
         }
     }
 }
@@ -496,19 +548,27 @@ export function getPlayerVehicle() {
 }
 
 export function getVehicles() {
-     return vehicles.map(v => ({ ...v })); // Return shallow copies of data
+    return vehicles.map(v => ({ ...v })); // Return shallow copies of data
 }
 
 // --- Persistence ---
 export function getState() {
     // Save data *without* THREE.Mesh or physicsBody references
-    return vehicles.map(v => ({
-        id: v.id, // Only needed if matching instances across saves is important
-        typeId: v.typeId,
-        position: { x: v.mesh.position.x, y: v.mesh.position.y, z: v.mesh.position.z },
-        rotation: { x: v.mesh.rotation.x, y: v.mesh.rotation.y, z: v.mesh.rotation.z, order: v.mesh.rotation.order },
-        stats: { ...v.stats },
-        engineOn: v.engineOn,
-        passengers: [...v.passengers], // Save who is in which seat (using Player IDs)
-    }));
+    return vehicles.map(v => {
+        // Check if vehicle has valid properties before accessing them
+        if (!v || !v.mesh) {
+            console.error("Invalid vehicle data when trying to save state", v);
+            return null;
+        }
+        
+        return {
+            id: v.id, // Only needed if matching instances across saves is important
+            typeId: v.typeId,
+            position: { x: v.mesh.position.x, y: v.mesh.position.y, z: v.mesh.position.z },
+            rotation: { x: v.mesh.rotation.x, y: v.mesh.rotation.y, z: v.mesh.rotation.z, order: v.mesh.rotation.order },
+            stats: { ...v.stats },
+            engineOn: v.engineOn,
+            passengers: [...v.passengers], // Save who is in which seat (using Player IDs)
+        };
+    }).filter(v => v !== null); // Filter out any null entries
 }

@@ -26,7 +26,15 @@ export function init(scene, loadData = null) {
     if (loadData && loadData.world) {
         gameTime = loadData.world.gameTime ?? gameTime;
         isMistActive = loadData.world.isMistActive ?? isMistActive;
-        // ... load other world state
+        mistTimer = loadData.world.mistTimer ?? mistTimer;
+        nextMistCheck = loadData.world.nextMistCheck ?? nextMistCheck;
+        currentMistDuration = loadData.world.currentMistDuration ?? currentMistDuration;
+        
+        // Load environment objects if they exist
+        if (Array.isArray(loadData.world.environmentObjects)) {
+            environmentObjects = loadData.world.environmentObjects.filter(obj => obj !== null);
+        }
+        
         console.log("World state loaded.");
     }
     // TODO: Load initial environment objects (trees, rocks, etc.)
@@ -40,6 +48,8 @@ export function init(scene, loadData = null) {
  * @param {object} scene The THREE.js scene object.
  */
 export function update(dt, scene) {
+    if (!dt || dt <= 0) return; // Protect against invalid delta time
+    
     // --- Update Game Time ---
     gameTime += dt * secondsPerTick;
     currentHour = (gameTime / 3600) % 24;
@@ -87,6 +97,10 @@ export function update(dt, scene) {
  * @returns {object} World state object with all relevant properties
  */
 export function getWorldState() {
+    const bgColor = new THREE.Color(
+        isMistActive ? 0x557788 : (nightRatio > 0.7 ? 0x111122 : 0x88aaff)
+    );
+    
     return {
         gameTime: gameTime,
         isMistActive: isMistActive,
@@ -96,9 +110,7 @@ export function getWorldState() {
         // Fog and lighting settings for renderer
         fogNear: isMistActive ? 10 : 50, // Shorter visibility in mist
         fogFar: isMistActive ? 40 : 150,
-        fogColor: new THREE.Color(
-            isMistActive ? 0x557788 : (nightRatio > 0.7 ? 0x111122 : 0x88aaff)
-        ),
+        fogColor: bgColor,
         ambientIntensity: dayRatio * 0.3 + 0.1, // 0.1 at night, 0.4 at day
         directionalIntensity: dayRatio * 0.8 + 0.1, // 0.1 at night, 0.9 at day
         // Could add sun position calculation here
@@ -111,7 +123,10 @@ export function getWorldState() {
  * @returns {THREE.Color} The new background color
  */
 export function updateSceneBackground(scene) {
-    if (!scene) return;
+    if (!scene || !scene.background) {
+        console.warn("Cannot update scene background - invalid scene provided");
+        return new THREE.Color(0x000000);
+    }
     
     // Update scene background based on time of day and mist
     let bgColor;
@@ -150,6 +165,7 @@ export function getHour() {
 export function getDayRatio() {
     return dayRatio;
 }
+
 export function getNightRatio() {
     return nightRatio;
 }
@@ -164,25 +180,78 @@ export function getEnvironmentObjects() {
 
 // --- Modifiers ---
 export function addEnvironmentObject(objData) {
-    // TODO: Add object to world, potentially with reference to its 3D mesh
-    environmentObjects.push(objData);
-    console.log("World: Added environment object", objData.id);
+    if (!objData) {
+        console.error("Cannot add null environment object");
+        return;
+    }
+    
+    // Generate a unique ID if none provided
+    if (!objData.id) {
+        objData.id = `env_obj_${Date.now()}_${environmentObjects.length}`;
+    }
+    
+    // Check for duplicate ID
+    const existingIndex = environmentObjects.findIndex(obj => obj.id === objData.id);
+    if (existingIndex >= 0) {
+        console.warn(`Environment object with ID ${objData.id} already exists, updating instead of adding`);
+        environmentObjects[existingIndex] = objData;
+    } else {
+        environmentObjects.push(objData);
+        console.log("World: Added environment object", objData.id);
+    }
 }
 
 export function removeEnvironmentObject(objectId) {
-    // TODO: Remove object from world, potentially remove its 3D mesh from scene
+    if (!objectId) {
+        console.error("Cannot remove object with null ID");
+        return false;
+    }
+    
+    const initialLength = environmentObjects.length;
     environmentObjects = environmentObjects.filter(obj => obj.id !== objectId);
-    console.log("World: Removed environment object", objectId);
+    
+    const removed = environmentObjects.length < initialLength;
+    if (removed) {
+        console.log("World: Removed environment object", objectId);
+    }
+    
+    return removed;
 }
 
 // --- Persistence ---
 export function getState() {
+    // Only save essential data for environment objects, not including THREE.js objects
+    const savedEnvironmentObjects = environmentObjects.map(obj => {
+        if (!obj) return null;
+        
+        // Create a clean copy without THREE.js objects or circular references
+        const cleanObj = {
+            id: obj.id,
+            objectType: obj.objectType,
+            typeId: obj.typeId,
+            // Clone position if it exists
+            position: obj.position ? {
+                x: obj.position.x,
+                y: obj.position.y,
+                z: obj.position.z
+            } : null,
+            // Clone other essential properties
+            health: obj.health,
+            // Add other properties as needed
+        };
+        
+        // Don't include properties that are null
+        return Object.fromEntries(
+            Object.entries(cleanObj).filter(([_, value]) => value !== null)
+        );
+    }).filter(obj => obj !== null && Object.keys(obj).length > 0);
+    
     return {
         gameTime,
         isMistActive,
         mistTimer,
         nextMistCheck,
         currentMistDuration,
-        environmentObjects // Note: Need a way to serialize/deserialize object state properly
+        environmentObjects: savedEnvironmentObjects
     };
 }
