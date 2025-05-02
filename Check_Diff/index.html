@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wilderness Survival (Babylon.js)</title> <!-- Changed title -->
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Add Babylon.js Core -->
+    <script src="babylon.js"></script> <!-- Or local file -->
+    <!-- Add Babylon.js Loaders -->
+    <script src="babylonjs.loaders.min.js"></script> <!-- Or local file -->
+    <!-- Optional: Add GUI for debugging -->
+    <!-- <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script> -->
+    <!-- Optional: Add Physics Engine -->
+    <!-- <script src="https://cdn.babylonjs.com/cannon.js"></script> -->
+    <!-- <script src="https://cdn.babylonjs.com/ammo.js"></script> -->
+
+</head>
+<body>
+    <!-- Settings Menu (Keep as is for now) -->
+    <div id="settings-menu" style="...">
+        <!-- ... existing settings menu content ... -->
+    </div>
+    <!-- End Settings Menu -->
+
+    <canvas id="game-canvas" touch-action="none"></canvas> <!-- Added touch-action -->
+
+    <!-- UI Container (Keep as is for now) -->
+    <div id="ui-container">
+        <!-- ... existing UI elements ... -->
+    </div>
+
+    <!-- Game Scripts (Keep order similar, adjust as needed) -->
+    <script src="js/Constants.js"></script>
+    <script src="js/Utils.js"></script> <!-- Needs review for THREE dependencies -->
+    <script src="js/ObjectPool.js"></script>
+    <script src="js/AssetLoader.js"></script> <!-- Will be modified -->
+    <script src="js/Terrain.js"></script> <!-- Will be modified -->
+    <script src="js/Inventory.js"></script> <!-- Less dependent, review later -->
+    <script src="js/CharacterStats.js"></script> <!-- Less dependent, review later -->
+    <script src="js/CraftingSystem.js"></script> <!-- Less dependent, review later -->
+    <script src="js/BuildingSystem.js"></script> <!-- Will be modified -->
+    <script src="js/Animal.js"></script> <!-- Will be modified -->
+    <script src="js/AIHunter.js"></script> <!-- Will be modified -->
+    <script src="js/EntityManager.js"></script> <!-- Less dependent, review later -->
+    <script src="js/ResourceManager.js"></script> <!-- Will be modified -->
+    <script src="js/Weather.js"></script> <!-- Needs modification for effects -->
+    <script src="js/NetworkManager.js"></script> <!-- Less dependent, review later -->
+    <!-- UI Components -->
+    <script src="js/InventoryUI.js"></script> <!-- Review later -->
+    <script src="js/BuildingUI.js"></script> <!-- Review later -->
+    <script src="js/UIManager.js"></script> <!-- Review later -->
+    <!-- PlayerController depends on many systems -->
+    <script src="js/PlayerController.js"></script> <!-- Will be modified -->
+    <script src="js/WorldGenerator.js"></script> <!-- Will be modified -->
+    <!-- Game depends on ALL system classes -->
+    <script src="js/Game.js"></script> <!-- Will be modified -->
+    <!-- main.js initializes Game -->
+    <script src="js/main.js"></script> <!-- Keep last -->
+
+</body>
+</html>
