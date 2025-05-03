@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Racer 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; color: white; font-family: 'Arial', sans-serif; }
+        canvas { display: block; }
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+        #startScreen h1 {
+            font-size: 72px;
+            color: yellow;
+            text-shadow: 4px 4px 0 #f00;
+            margin-bottom: 20px;
+        }
+        #startButton {
+            background-color: #ff0000;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            text-shadow: 2px 2px 0 #800000;
+            transition: background-color 0.2s;
+        }
+        #startButton:hover {
+            background-color: #cc0000;
+        }
+        #dashboard {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 18px;
+            min-width: 150px;
+             z-index: 5;
+        }
+         #dashboard div {
+             margin-bottom: 5px;
+         }
+        #minimapCanvas {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px; /* CSS width */
+            height: 200px; /* CSS height */
+            border-radius: 50%;
+            border: 3px solid #fff;
+            background-color: #222; /* Initial background */
+            z-index: 5;
+        }
+        /* Style for dynamically created elements (Game Over, Notifications) */
+        .gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            z-index: 20; /* Ensure it's on top */
+        }
+        .gameOverTitle {
+            font-size: 72px;
+            font-weight: bold;
+            margin-bottom: 40px;
+            color: yellow;
+            text-shadow: 4px 4px 0 #f00;
+        }
+        .gameOverText {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+         .gameOverButton {
+            background-color: #ff0000;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px; /* Added margin */
+        }
+        .notification {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #000;
+            opacity: 1;
+            transition: opacity 2s;
+            z-index: 15;
+            pointer-events: none;
+        }
+        .turboEffect {
+             position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 100, 255, 0.3);
+            pointer-events: none;
+            transition: opacity 2s;
+            z-index: 1; /* Behind UI but over canvas */
+        }
+        .shieldEffect {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 20px solid rgba(0, 255, 255, 0.5);
+            box-sizing: border-box;
+            pointer-events: none;
+             z-index: 1; /* Behind UI but over canvas */
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="startScreen">
+        <h1>Retro Racer 3D</h1>
+        <button id="startButton">START RACE</button>
+        <p style="margin-top: 30px; font-size: 16px;">
+            Controls:<br>
+            Arrow Up: Accelerate | Arrow Down: Brake/Reverse | Left/Right: Steer<br>
+            Shift: Boost Acceleration | Space: Hard Brake<br>
+            T: Turbo (when ready)
+        </p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="dashboard">
+        <div>Speed: <span id="speed">0 MPH</span></div>
+        <div>Time: <span id="timer">0:00.00</span></div>
+        <div>Lap: <span id="lap">1 / 3</span></div>
+        <div>Position: <span id="position">1ST</span></div>
+    </div>
+
+    <canvas id="minimapCanvas"></canvas> <!-- Actual canvas for minimap -->
+
+    <!-- Include Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // This is the complete script section to replace the current script in your HTML file
+
+        // Game variables
+        let canvas, ctx; // ctx is declared but not used for main rendering with Three.js
+        let game = {
+            isRunning: false,
+            speed: 0,
+            maxSpeed: 250,
+            acceleration: 0.2,
+            deceleration: 0.1,
+            handling: 0.05,
+            // position: 8, // This seemed unused for its initial purpose, removed redundant tracking
+            startTime: 0,
+            currentTime: 0,
+            lap: 1,
+            totalLaps: 3,
+            playerRank: 1 // Added to store calculated rank
+        };
+
+        // Player car controls
+        let controls = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            shift: false,
+            space: false,
+            turbo: false // Added for 't' key turbo activation
+        };
+
+        // 3D Game variables
+        let scene, camera, renderer;
+        let road, car, skybox;
+        let roadSegments = [];
+        let opponents = [];
+        let powerups = []; // Added to store powerup data
+        let roadWidth = 2000;
+        let segmentLength = 200;
+        let trackLength = 10000; // Shortened for quicker laps/testing if needed
+        let cameraHeight = 1000;
+        // let cameraDepth = 0.84; // This wasn't used directly in camera setup, commented out
+        let position = 0; // Player's progress along the track Z-axis
+        let playerX = 0; // Player's lateral position
+        let speedPercent = 0;
+
+        // Minimap variables
+        let minimapCanvas, minimapCtx;
+
+        // Turbo variables
+        let turboAvailable = true;
+        let turboTimer = null;
+        let activeTurboEffect = null; // To manage turbo visual effect element
+
+        // Shield variables
+        let activeShieldEffect = null; // To manage shield visual effect element
+
+        // Sound variables (keeping them simple for now)
+        let engineSound = null; // Will be initialized later
+
+        // Initialize the game
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            if (!canvas) {
+                console.error("FATAL: gameCanvas element not found!");
+                return;
+            }
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            // Set up the 3D scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x87CEEB, 2000, 8000); // Add some distance fog
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000); // Increased far plane
+            camera.position.set(0, cameraHeight, -1500); // Adjusted initial camera Z
+            camera.lookAt(0, 0, 0); // Look towards the start line initially
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x87CEEB); // Match fog/skybox
+
+            // Create the road
+            createRoad();
+
+            // Create the player car
+            createPlayerCar();
+
+            // Create the skybox
+            createSkybox();
+
+            // Create opponent cars
+            createOpponents();
+
+            // Create powerups
+            createPowerups(); // Call powerup creation
+
+            // Setup Minimap
+            setupMinimap(); // Call minimap setup
+
+            // Add event listeners for keyboard controls
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+
+            // Add event listener for the start button
+            const startButton = document.getElementById('startButton');
+            if (startButton) {
+                startButton.addEventListener('click', startGame);
+            } else {
+                 console.error("Start button not found!");
+            }
+
+            // Add window resize listener
+             window.addEventListener('resize', onWindowResize);
+
+            // Start rendering
+            animate();
+        }
+
+        function createRoad() {
+            // --- Road Segment Data ---
+            roadSegments = []; // Clear previous segments if any
+            const numSegments = trackLength / segmentLength;
+            const trackRadius = 4000; // Radius for the circular part of the track
+
+            for (let i = 0; i < numSegments; i++) {
+                const currentPos = i * segmentLength;
+                let segment = {
+                    index: i,
+                    p1: { world: { x: 0, y: 0, z: currentPos }, screen: {}, camera: {} },
+                    p2: { world: { x: 0, y: 0, z: currentPos + segmentLength }, screen: {}, camera: {} },
+                    curve: 0,
+                    y: 0 // Store explicit Y for hills here
+                };
+
+                 // Example Track Layout: Curve + Hill Section
+                 const curveStart = numSegments * 0.1;
+                 const curveEnd = numSegments * 0.4;
+                 const hillStart = numSegments * 0.5;
+                 const hillEnd = numSegments * 0.7;
+                 const finalCurveStart = numSegments * 0.8;
+
+
+                 if (i >= curveStart && i < curveEnd) {
+                    segment.curve = Math.sin(((i - curveStart) / (curveEnd - curveStart)) * Math.PI) * 4; // Smooth curve
+                 } else if (i >= finalCurveStart) {
+                     segment.curve = -Math.sin(((i - finalCurveStart) / (numSegments - finalCurveStart)) * Math.PI) * 3; // Final curve
+                 }
+
+
+                 if (i >= hillStart && i < hillEnd) {
+                     segment.y = Math.sin(((i - hillStart) / (hillEnd - hillStart)) * Math.PI) * 800; // Smooth hill
+                 }
+
+
+                // --- THIS PART IS THE FLAW ---
+                // The original code generates segment data (above)
+                // but then creates a SINGLE flat plane (below).
+                // It DOES NOT use the segment data to build a 3D mesh.
+                // Fixing this requires replacing the PlaneGeometry below
+                // with custom BufferGeometry generation based on roadSegments.
+                // We keep the flawed version to adhere to "don't remove features".
+                // --- END FLAW DESCRIPTION ---
+
+                 roadSegments.push(segment);
+            }
+
+            // --- Flawed Road Mesh Creation (as per original code) ---
+            if (!road) { // Only create the mesh once
+                const roadGeometry = new THREE.PlaneGeometry(roadWidth, trackLength, 1, numSegments / 10); // Add some segments for potential future displacement map
+                const roadMaterial = new THREE.MeshStandardMaterial({ // Use standard material for potential lighting
+                    color: 0x444444,
+                    side: THREE.DoubleSide,
+                    // map: roadTexture, // Add texture later if desired
+                    // roughness: 0.8,
+                    // metalness: 0.2
+                });
+                road = new THREE.Mesh(roadGeometry, roadMaterial);
+                road.rotation.x = -Math.PI / 2; // Lay flat
+                road.position.y = -1; // Slightly below car wheels
+                road.position.z = trackLength / 2; // Center the plane initially
+                scene.add(road);
+
+                // Add road markings (relative to the flat plane)
+                const markingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+                for (let i = 0; i < trackLength; i += segmentLength * 4) { // Less frequent markings
+                    const markingGeometry = new THREE.PlaneGeometry(30, 150);
+                    const marking = new THREE.Mesh(markingGeometry, markingMaterial);
+                    // Position markings relative to the road plane's center
+                    marking.position.set(0, 1, i - trackLength / 2); // Y slightly above road, Z relative to center
+                    marking.rotation.x = -Math.PI / 2;
+                    road.add(marking); // Add as child of the road plane
+                }
+
+                // Add side barriers (relative to the flat plane)
+                const barrierGeometry = new THREE.BoxGeometry(50, 100, trackLength); // Wider barriers
+                const barrierMaterial = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.7 }); // Red barriers
+
+                const leftBarrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
+                // Position relative to the road plane's center
+                leftBarrier.position.set(-roadWidth / 2 - 25, 50, 0);
+                road.add(leftBarrier); // Add as child
+
+                const rightBarrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
+                // Position relative to the road plane's center
+                rightBarrier.position.set(roadWidth / 2 + 25, 50, 0);
+                road.add(rightBarrier); // Add as child
+
+                // Add basic lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 1.5); // Soft ambient light
+                scene.add(ambientLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+                directionalLight.position.set(5, 10, 7.5);
+                scene.add(directionalLight);
+            }
+             // --- End Flawed Road Mesh Creation ---
+        }
+
+
+        function createPlayerCar() {
+            const carGeometry = new THREE.BoxGeometry(100, 60, 220); // Slightly longer
+            const carMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4, metalness: 0.1 });
+            car = new THREE.Mesh(carGeometry, carMaterial);
+            car.position.set(0, 30, 0); // Y=30 so bottom is at Y=0
+            scene.add(car);
+
+            // Add car details (windshield)
+            const windshieldGeometry = new THREE.BoxGeometry(80, 40, 5); // Thinner windshield
+            const windshieldMaterial = new THREE.MeshStandardMaterial({
+                color: 0x88ccff,
+                opacity: 0.5,
+                transparent: true,
+                roughness: 0.1
+            });
+            const windshield = new THREE.Mesh(windshieldGeometry, windshieldMaterial);
+            windshield.position.set(0, 35, -60); // Positioned better
+            windshield.rotation.x = 0.1; // Slight tilt
+            car.add(windshield);
+
+            // Add wheels
+            const wheelGeometry = new THREE.CylinderGeometry(30, 30, 30, 16); // Wider wheels
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+
+            const wheels = [
+                { x: -65, z: -70 }, // frontLeft
+                { x: 65, z: -70 },  // frontRight
+                { x: -65, z: 70 },  // rearLeft
+                { x: 65, z: 70 }   // rearRight
+            ];
+
+            wheels.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.rotation.z = Math.PI / 2; // Rotate to lie flat
+                // Position relative to car center, Y=-15 makes bottom align with car bottom
+                wheel.position.set(pos.x, -15, pos.z);
+                car.add(wheel);
+            });
+        }
+
+         function createSkybox() {
+            // Use a more convincing CubeTextureLoader for skybox
+            const loader = new THREE.CubeTextureLoader();
+            const texture = loader.setPath('https://threejsfundamentals.org/threejs/resources/images/cubemaps/computer-history-museum/')
+                                  .load([
+                                    'pos-x.jpg', 'neg-x.jpg',
+                                    'pos-y.jpg', 'neg-y.jpg',
+                                    'pos-z.jpg', 'neg-z.jpg'
+                                  ]);
+            scene.background = texture; // Set scene background directly
+
+            // Keep the distant mountains as simple geometry
+            const mountainMaterial = new THREE.MeshStandardMaterial({ color: 0x556B2F, roughness: 0.9 }); // Dark Olive Green
+            for (let i = 0; i < 10; i++) {
+                 const angle = (i / 10) * Math.PI * 2 + Math.random() * 0.5;
+                 const distance = 8000 + Math.random() * 4000;
+                 const height = 1000 + Math.random() * 2000;
+                 const radius = 500 + Math.random() * 1000;
+                 const mountainGeometry = new THREE.ConeGeometry(radius, height, 5 + Math.floor(Math.random() * 4)); // More varied cones
+                 const mountain = new THREE.Mesh(mountainGeometry, mountainMaterial);
+                 mountain.position.set(
+                     Math.sin(angle) * distance,
+                     height / 2 - 50, // Base on the ground
+                     Math.cos(angle) * distance
+                 );
+                 mountain.rotation.y = Math.random() * Math.PI; // Random rotation
+                 scene.add(mountain);
+            }
+         }
+
+        function createOpponents() {
+            opponents = []; // Clear existing opponents
+            const colors = [0x0000ff, 0x00ff00, 0xffff00, 0xff00ff, 0x00ffff, 0xffa500, 0x800080];
+
+            for (let i = 0; i < 7; i++) {
+                const carGeometry = new THREE.BoxGeometry(100, 60, 220);
+                const carMaterial = new THREE.MeshStandardMaterial({ color: colors[i % colors.length], roughness: 0.5 });
+                const opponentMesh = new THREE.Mesh(carGeometry, carMaterial);
+
+                 // Add windshield
+                 const windshieldGeometry = new THREE.BoxGeometry(80, 40, 5);
+                 const windshieldMaterial = new THREE.MeshStandardMaterial({ color: 0x88ccff, opacity: 0.5, transparent: true, roughness: 0.1 });
+                 const windshield = new THREE.Mesh(windshieldGeometry, windshieldMaterial);
+                 windshield.position.set(0, 35, -60);
+                 windshield.rotation.x = 0.1;
+                 opponentMesh.add(windshield);
+
+
+                 // Add wheels (using the same geometry/material as player)
+                 const wheelGeometry = new THREE.CylinderGeometry(30, 30, 30, 16);
+                 const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+                 const wheelPositions = [ { x: -65, z: -70 }, { x: 65, z: -70 }, { x: -65, z: 70 }, { x: 65, z: 70 } ];
+                 wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(pos.x, -15, pos.z);
+                    opponentMesh.add(wheel);
+                 });
+
+
+                const initialZ = 500 + (i * segmentLength * 8) + Math.random() * 500; // Spread out more
+                const initialX = (Math.random() - 0.5) * (roadWidth * 0.6); // Start within reasonable bounds
+                const initialSegmentIndex = Math.floor(initialZ / segmentLength) % roadSegments.length;
+                const initialY = roadSegments[initialSegmentIndex]?.y || 0; // Get starting height from segment data
+
+                opponentMesh.position.set(initialX, 30 + initialY, initialZ);
+                scene.add(opponentMesh);
+
+                opponents.push({
+                    mesh: opponentMesh,
+                    speed: game.maxSpeed * (0.6 + Math.random() * 0.2), // Base speed relative to player max
+                    position: initialZ, // Track progress
+                    x: initialX, // Lateral position
+                    targetX: initialX, // Target lateral position for lane changes
+                    laneChangeTimer: Math.random() * 5 // Timer for next potential lane change
+                });
+            }
+        }
+
+        function createPowerups() {
+            powerups = []; // Clear existing powerups
+            const powerupTypes = [
+                { type: 'speed', color: 0xffff00, iconGeometry: new THREE.TorusGeometry(25, 10, 8, 16) }, // Yellow Ring
+                { type: 'shield', color: 0x00ffff, iconGeometry: new THREE.OctahedronGeometry(35) },   // Cyan Octahedron
+                { type: 'repair', color: 0x00ff00, iconGeometry: new THREE.BoxGeometry(40, 40, 40) }     // Green Box (wrench icon is harder)
+            ];
+
+            const numPowerups = 10;
+            for (let i = 0; i < numPowerups; i++) {
+                const segmentIndex = Math.floor(Math.random() * (trackLength / segmentLength));
+                const segment = roadSegments[segmentIndex % roadSegments.length]; // Ensure index wraps around
+                if (!segment) continue; // Skip if segment somehow doesn't exist
+
+                const powerupType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+                const powerupMaterial = new THREE.MeshStandardMaterial({
+                    color: powerupType.color,
+                    emissive: powerupType.color, // Make it glow slightly
+                    emissiveIntensity: 0.5,
+                    roughness: 0.3
+                 });
+                const powerupMesh = new THREE.Mesh(powerupType.iconGeometry, powerupMaterial);
+
+                const powerupX = (Math.random() - 0.5) * (roadWidth * 0.7);
+                const powerupZ = segmentIndex * segmentLength;
+                const powerupY = 50 + segment.y; // Base height + hill height
+
+                powerupMesh.position.set(powerupX, powerupY, powerupZ);
+                scene.add(powerupMesh);
+
+                powerups.push({
+                    mesh: powerupMesh,
+                    type: powerupType.type,
+                    positionZ: powerupZ, // Store Z position for collision check
+                    positionX: powerupX, // Store X position
+                    collected: false
+                });
+            }
+        }
+
+
+        function startGame() {
+            const startScreen = document.getElementById('startScreen');
+            if (startScreen) startScreen.style.display = 'none';
+            game.isRunning = true;
+            game.startTime = Date.now();
+            game.currentTime = 0; // Reset timer
+
+            // Play engine sound (ensure it's created/resumed)
+            if (!engineSound) {
+                // Use a slightly more engine-like sound if possible, or keep the original
+                // Note: Base64 sounds can be large and inefficient. Consider external files.
+                engineSound = new Audio('data:audio/wav;base64,UklGRvxHBABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YdhHBAABAAIA/f8DAP3/AgD+/wEA/////wAAAAABAAAA//8AAP//AAABAP//AAD+/wIA//8AAAAA///+/wIA//8AAP7/AQD//wEA//8BAAAAAAD//wAAAQD//wAA//8BAP//AAABAP//AAABAP7/AgD9/wMA/P8DAP3/AgD9/wMA/P8EAPv/BAD7/wUA+v8FAPr/BgD5/wYA+f8GAPn/BwD4/wcA+P8HAPj/CAD3/wgA9/8IAPf/CAD3/wkA9v8JAPb/CQD2/wkA9v8KAPb/CAD4/wcA+f8FAPv/BAD8/wMA/f8CAP7/AQD//wAA/////wEA/v8CAP3/AgD9/wMA/f8CAP7/AQD+/wMA/P8EAPv/BAD7/wUA+v8FAPr/BQD7/wQA+/8EAPz/AwD9/wIA/f8CAP7/AQD//wAAAAAAAP//AAD//wEA/v8CAP3/AgD9/wMA/P8EAPv/BAD7/wQA+/8FAPr/BQD6/wUA+v8FAPv/BAD7/wQA+/8EAPz/AwD8/wMA/f8CAP7/AQD+/wEA//8AAP//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA/v8CAP3/AgD+/wEA//8AAP//AQD+/wIA/f8DAP3/AgD9/wMA/P8DAP3/AgD+/wEA//8AAAAA//8BAP7/AgD+/wEA//8AAP//AAABAP7/AgD9/wMA/f8CAP7/AgD9/wMA/P8DAP3/AgD+/wEA//8BAP7/AgD+/wEA//8AAP//AQAAAP//AAD//wEA//8BAP//AAAAAAAAAQD+/wIA/v8BAAAAAAAAAAAAAAD//wEA//8BAP//AAABAP//AAD//wEA/v8DAP3/AgD+/wEA//8CAP3/AgD+/wEA//8BAP//AQAAAP//AAD//wEA//8BAAAA//8AAP//AQAAAP//AAD//wEAAAD//wAA//8BAP//AQAAAP7/AwD9/wIA/v8BAP//AAABAP//AAD//wAAAQD//wEA/v8CAP7/AgD9/wIA/v8CAP7/AQD//wEA//8AAAEA//8AAAEA/v8CAP7/AQAAAP//AAAAAAEA/v8CAP7/AQAAAP//AAABAP//AAD//wEA//8BAP//AQD//wAAAQD//wAAAQD+/wMA/f8CAP7/AgD+/wEA//8BAP//AQAAAP//AAABAP7/AwD9/wIA/v8BAP//AQAAAP//AAABAP//AAD//wIA/f8DAP3/AgD+/wEA//8CAP3/AgD+/wIa');
+                engineSound.loop = true;
+                engineSound.volume = 0.3; // Start quieter
+            }
+             // Use try-catch for play() as it can fail if user hasn't interacted
+             try {
+                engineSound.play();
+             } catch (e) {
+                console.warn("Could not play engine sound:", e);
+             }
+        }
+
+        function handleKeyDown(e) {
+            if (!game.isRunning && e.key !== 'Enter') return; // Allow Enter to potentially start/restart
+
+            switch (e.key) {
+                case 'ArrowUp': controls.up = true; break;
+                case 'ArrowDown': controls.down = true; break;
+                case 'ArrowLeft': controls.left = true; break;
+                case 'ArrowRight': controls.right = true; break;
+                case 'Shift': controls.shift = true; break;
+                case ' ': controls.space = true; break; // Spacebar
+                 case 't': case 'T': controls.turbo = true; activateTurbo(); break; // Turbo key
+                 case 'Enter': // Handle start/restart maybe?
+                    if (!game.isRunning && document.getElementById('startScreen').style.display !== 'none') {
+                        startGame();
+                    } else if (!game.isRunning && document.querySelector('.gameOverScreen')) {
+                         // Find the restart button on game over screen and click it
+                        const restartButton = document.querySelector('.gameOverButton');
+                        if (restartButton) restartButton.click();
+                    }
+                    break;
+            }
+        }
+
+        function handleKeyUp(e) {
+             switch (e.key) {
+                case 'ArrowUp': controls.up = false; break;
+                case 'ArrowDown': controls.down = false; break;
+                case 'ArrowLeft': controls.left = false; break;
+                case 'ArrowRight': controls.right = false; break;
+                case 'Shift': controls.shift = false; break;
+                case ' ': controls.space = false; break; // Spacebar
+                 case 't': case 'T': controls.turbo = false; break; // Release turbo key
+            }
+        }
+
+        let lastTime = 0;
+        function updateGame(timestamp) {
+            if (!game.isRunning) return;
+
+            const deltaTime = (timestamp - lastTime) / 1000 || 0.016; // Time since last frame in seconds
+            lastTime = timestamp;
+
+            // --- Timer ---
+            game.currentTime = Date.now() - game.startTime;
+
+            // --- Speed / Acceleration ---
+            let currentMaxSpeed = game.maxSpeed; // Base max speed
+            const accelerationRate = (controls.shift ? game.acceleration * 1.5 : game.acceleration) * 60 * deltaTime; // Scale by delta time
+            const decelerationRate = game.deceleration * 60 * deltaTime;
+            const brakingRate = game.acceleration * 2 * 60 * deltaTime;
+            const hardBrakingRate = game.acceleration * 4 * 60 * deltaTime; // Increased hard brake power
+
+            if (controls.up) {
+                game.speed += accelerationRate;
+            } else if (controls.down) {
+                game.speed -= brakingRate;
+            } else {
+                game.speed -= decelerationRate; // Natural deceleration
+            }
+
+            if (controls.space) {
+                game.speed -= hardBrakingRate; // Apply hard brake
+            }
+
+            // Clamp speed
+            game.speed = Math.max(0, Math.min(game.speed, currentMaxSpeed));
+
+            // Update speed percentage (used for effects, maybe road rendering in pseudo-3D)
+            speedPercent = game.speed / game.maxSpeed;
+
+            // --- Track Position ---
+            const speedMultiplier = 20; // Adjust this to scale game speed to track units
+            position += game.speed * speedMultiplier * deltaTime; // Move along track Z
+
+            // --- Laps ---
+            if (position >= trackLength) {
+                position -= trackLength; // Wrap around
+                game.lap++;
+
+                // Play lap notification sound
+                if (game.lap <= game.totalLaps) {
+                     // Simple beep/chime sound
+                     playSound('data:audio/wav;base64,UklGRigCAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQCAABt/5X/2v///zkAWQB0AIQAiACDAHQAVQAsAPb/wv+Q/17/M/8P/+/+1v7E/rX+r/6v/rX+wf7T/uv+Cf8q/07/dP+c/8b/8f8dAEgAcQCaAMEA5QAHASYBQQFSAWEBbAFsAWwBZgFWAUQBLAEOAfAA0ACvAI0AaABCABoA8P/F/5r/cf9G/xz/9v7Q/q3+jf5v/lX+P/4t/iP+F/4R/hH+Ff4e/ir+OP5K/mD+eP6T/rD+0P7z/hj/QP9r/5f/xf/z/yIAUgCBALIAGgHHARkCYAKoAvMCPwOKA9IDFgRYBJkE2AQVBVAFiQXBBfUFJQZSBnwGngbCBuIGAAcaBy0HPAdKB1MHWgddB1wHWAdSB0gHOgcqBxcHAgfoBssGrAaNBmQGPAYPBt8FrAV5BUMFCwXSBJgEWgQZBNcDlANMA/4CrgJfAhACugFoARkBxgB1ACQA0/+C/zL/4/6U/kT+9v2q/WD9GP3P/In8RPz/+7r7efsz+/D6rvps+ir67PmtiWl0cGF0YTZgAABydWNrACsdtUgqDIcAEpzf1DEAABbcrGgYAATvvRQMAAdN1lcpFwC7DGCOYKwBVQK7BqDiHQQgNm7K1TwAs9QDXyYABpgBDgCk3QHzn1lsYW5nACodRE9TIFdJTkwCADg0NGNodW5rBTyABABEYXRhQQAFMTEyNDIB');
+                }
+
+                // Check if race is finished
+                if (game.lap > game.totalLaps) {
+                    gameOver();
+                    return; // Stop further updates this frame
+                }
+            }
+
+            // --- Player Lateral Movement (Handling) ---
+            const handlingFactor = game.handling * 60 * deltaTime; // Scale by delta time
+            const speedInfluence = (game.speed / game.maxSpeed) * 0.5 + 0.5; // More control at lower speeds
+            if (controls.left) {
+                 playerX -= handlingFactor * game.speed * speedInfluence;
+            }
+            if (controls.right) {
+                 playerX += handlingFactor * game.speed * speedInfluence;
+            }
+
+            // --- Road Limits & Off-Road Penalty ---
+            const halfRoadWidth = roadWidth / 2;
+            const edgeMargin = 100; // Car width approximation
+            if (playerX < -halfRoadWidth + edgeMargin || playerX > halfRoadWidth - edgeMargin) {
+                // Off-road: reduce speed drastically
+                 game.speed *= (1.0 - (2.0 * deltaTime)); // Lose speed quickly off-road
+                 playerX = Math.max(-halfRoadWidth + edgeMargin, Math.min(halfRoadWidth - edgeMargin, playerX)); // Clamp position
+                 // Optional: Add vibration/sound effect
+            } else {
+                // On-road friction/drag (can be simulated by the general deceleration)
+            }
+             playerX = Math.max(-halfRoadWidth, Math.min(halfRoadWidth, playerX)); // Hard limit
+
+
+             // --- Centrifugal Force (Simulated) ---
+             // Find current segment based on player's absolute position 'position'
+             const currentSegmentIndex = Math.floor(position / segmentLength);
+             const currentSegment = roadSegments[currentSegmentIndex % roadSegments.length];
+             if (currentSegment) {
+                 const curveForce = currentSegment.curve * (game.speed * game.speed) * 0.000005 * deltaTime; // Force increases with square of speed
+                 playerX -= curveForce; // Apply force pushing car outwards on curves
+             }
+
+
+             // --- Opponent AI & Movement ---
+             updateOpponents(deltaTime);
+
+             // --- Collision Detection ---
+             checkCollisions(); // Check player vs opponent collisions
+
+             // --- Powerup Check ---
+             checkPowerupCollection(); // Moved from its own loop
+
+             // --- Update Dashboard ---
+             updateDashboard();
+
+             // --- Update Engine Sound Pitch/Volume ---
+             if (engineSound) {
+                 const pitch = 0.5 + (game.speed / game.maxSpeed) * 1.5; // Adjust pitch based on speed
+                 engineSound.playbackRate = pitch;
+                 engineSound.volume = 0.2 + (game.speed / game.maxSpeed) * 0.6; // Louder at higher speeds
+             }
+        }
+
+        function updateOpponents(deltaTime) {
+             const playerSegmentIndex = Math.floor(position / segmentLength);
+
+             for (let i = 0; i < opponents.length; i++) {
+                 const opp = opponents[i];
+
+                 // Basic AI: Try to maintain speed and change lanes occasionally or to avoid player/other cars
+                 opp.laneChangeTimer -= deltaTime;
+                 if (opp.laneChangeTimer <= 0) {
+                     // Random lane change or avoidance logic
+                     let desiredLane = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+                     opp.targetX = desiredLane * roadWidth / 3.5; // Target X for the lane
+                     opp.laneChangeTimer = 2 + Math.random() * 4; // Reset timer
+                 }
+
+                 // Simple obstacle avoidance (check segment ahead) - very basic
+                 const checkAheadDist = segmentLength * 3;
+                 const oppFuturePos = opp.position + checkAheadDist;
+                 const oppFutureSegmentIdx = Math.floor(oppFuturePos / segmentLength);
+
+                 // Check against player
+                 const playerDist = position - opp.position;
+                 if (playerDist > 0 && playerDist < checkAheadDist && Math.abs(playerX - opp.x) < roadWidth / 4) {
+                    // Player is ahead in same lane, try to move
+                    opp.targetX += (playerX > opp.x ? -1 : 1) * roadWidth / 3;
+                    opp.targetX = Math.max(-roadWidth/2.5, Math.min(roadWidth/2.5, opp.targetX)); // Clamp target
+                 }
+                 // (Could add checks against other opponents too)
+
+
+                 // Move towards target X (smooth lane change)
+                 opp.x += (opp.targetX - opp.x) * 0.05; // Adjust speed of lane change
+
+                 // Move opponent forward
+                 opp.position += opp.speed * 20 * deltaTime; // Use same multiplier as player for consistency
+                 if (opp.position >= trackLength) {
+                     opp.position -= trackLength; // Wrap around track
+                 }
+
+                 // Update opponent mesh position based on its own progress ('opp.position')
+                 const oppSegmentIndex = Math.floor(opp.position / segmentLength);
+                 const oppSegment = roadSegments[oppSegmentIndex % roadSegments.length];
+                 const oppY = oppSegment ? oppSegment.y : 0; // Get Y from segment data
+
+                 opp.mesh.position.set(
+                     opp.x,
+                     30 + oppY, // Base height + hill height
+                     opp.position // Use opponent's absolute Z position
+                 );
+
+                 // Apply centrifugal force to opponents too
+                 if (oppSegment) {
+                    const oppCurveForce = oppSegment.curve * (opp.speed * opp.speed) * 0.000005 * deltaTime;
+                    opp.x -= oppCurveForce;
+                 }
+                 opp.x = Math.max(-roadWidth/2, Math.min(roadWidth/2, opp.x)); // Clamp opponent X
+
+                 // Make opponent mesh face forward (simple rotation)
+                 // This assumes Z is forward, might need adjustment if track curves significantly
+                 opp.mesh.lookAt(opp.mesh.position.x, opp.mesh.position.y, opp.mesh.position.z + 100);
+             }
+         }
+
+         function checkCollisions() {
+            const playerWorldPos = car.position; // Player car's world position
+            const playerHitRadius = 100; // Approximate radius for player collision
+
+            for (let i = 0; i < opponents.length; i++) {
+                const opp = opponents[i];
+                const oppWorldPos = opp.mesh.position;
+
+                const dx = playerWorldPos.x - oppWorldPos.x;
+                const dz = (position % trackLength) - (opp.position % trackLength); // Use wrapped Z for distance check
+                const distSq = dx * dx + dz * dz; // Using Z distance on the track path
+
+                // Check if they are close on the track Z and X axes
+                 if (Math.abs(dz) < 200 && Math.abs(dx) < 120) { // Check Z distance along track and X distance
+                     // More precise check using bounding boxes or spheres if needed
+                     // Simple collision effect:
+                     game.speed *= 0.6; // Slow down player significantly
+                     opp.speed *= 0.8;   // Slow down opponent slightly
+
+                     // Push cars apart slightly (very basic)
+                     const pushFactor = 5;
+                     playerX += (dx > 0 ? 1 : -1) * pushFactor;
+                     opp.x -= (dx > 0 ? 1 : -1) * pushFactor;
+
+                     // Play crash sound
+                     playSound('data:audio/wav;base64,UklGRigCAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQCAABb/0v/JP/y/rb+cP4q/un9qf1s/TL9AP3T/Kj8hPxn/E38PPwv/Cb8IPwd/B38Jfwx/D/8UPxk/Hn8kvy1/Nj8//wn/U/9d/2f/cf97P0T/jr+Y/6K/rH+1/7+/iX/S/9w/5T/t//Y//j/FwA1AFEAagCCAJcAqwC9AM4A3ADnAPAA9gD6AP0A/gD+AP0A+wD4APUA8QDsAOcA4QDbANMAywDDALsAswCrAKMAuwB1AGwAYwBaAFIASQBBADkAMQApACIAGwAUAA4ACAADAAAAvvx9+X/2hvOJ8JPtluql5yziTeHc4cGlIKcArQOzCLkPvxrFJcs0002HBVEO4BbaHxgpKTIQOkxBMEcwTfJRwlXEWIRboF06XpRdiVvkWOhU+k/OSZ9BYTE1KwIf5hpqDx0Zf6oF0OLgSAQpGxkraAUTA/XqxurS5fbNRNXc8nIFuQqKFLgepAluDvsWzB+LJIwahw5l/hLuBNDcuLKeqZObXI1uf2d1aW9xeeD0TvxIYV4CBgmYKYI6tUWlTdZQXE6SS+tFUz6EN9Qw+ilgI54czRVpDvwGdf8r+AnxCOpM49LcONaC0AbLqs');
+                     break; // Only handle one collision per frame for simplicity
+                 }
+            }
+        }
+
+        // Function to update the dashboard display
+        function updateDashboard() {
+            // Update speed display
+            const speedElement = document.getElementById('speed');
+            if (speedElement) speedElement.textContent = Math.round(game.speed * 0.621371) + ' MPH'; // Convert pseudo-units to MPH
+
+            // Update timer display
+            const timerElement = document.getElementById('timer');
+            if (timerElement) {
+                const totalSeconds = game.currentTime / 1000;
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = Math.floor(totalSeconds % 60);
+                const milliseconds = Math.floor((totalSeconds * 100) % 100); // Corrected ms calculation
+                const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+                timerElement.textContent = formattedTime;
+            }
+
+             // Update Lap display
+             const lapElement = document.getElementById('lap');
+             if (lapElement) lapElement.textContent = `${Math.min(game.lap, game.totalLaps)} / ${game.totalLaps}`;
+
+
+            // --- Calculate Player Position/Rank ---
+            let playerProgress = (position % trackLength) + (game.lap - 1) * trackLength;
+            let rank = 1; // Start assuming player is 1st
+
+            for (let i = 0; i < opponents.length; i++) {
+                const opp = opponents[i];
+                // Calculate opponent's total progress (considering laps implicitly by comparing absolute position)
+                // A simple way: If opponent Z is further ahead *on the same lap* or is on a *later lap*
+                 const oppLap = Math.floor(opp.position / trackLength);
+                 const playerEffectiveLap = game.lap -1;
+
+                 // Opponent is effectively ahead if on a later lap, OR on same lap but further along Z
+                 if (oppLap > playerEffectiveLap || (oppLap === playerEffectiveLap && (opp.position % trackLength) > (position % trackLength))) {
+                    rank++;
+                 }
+            }
+            game.playerRank = rank; // Store the calculated rank
+
+            // Update position display
+            const positionElement = document.getElementById('position');
+            if (positionElement) {
+                const positionSuffix = getPositionSuffix(game.playerRank);
+                positionElement.textContent = game.playerRank + positionSuffix;
+            }
+        }
+
+        // Helper function to get position suffix (1ST, 2ND, 3RD, 4TH...)
+        function getPositionSuffix(position) {
+             if (position % 10 === 1 && position % 100 !== 11) return 'ST';
+             if (position % 10 === 2 && position % 100 !== 12) return 'ND';
+             if (position % 10 === 3 && position % 100 !== 13) return 'RD';
+             return 'TH';
+        }
+
+        // Function for game over
+        function gameOver() {
+            if (!game.isRunning) return; // Prevent multiple calls
+            game.isRunning = false;
+            if (engineSound) engineSound.pause();
+             clearTimeout(turboTimer); // Stop turbo recharge timer
+             if (activeTurboEffect) document.body.removeChild(activeTurboEffect);
+             if (activeShieldEffect) document.body.removeChild(activeShieldEffect);
+
+
+            // Create a game over screen
+            const gameOverScreen = document.createElement('div');
+             gameOverScreen.className = 'gameOverScreen'; // Use CSS class
+
+
+            // Calculate final time
+            const totalSeconds = game.currentTime / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            const milliseconds = Math.floor((totalSeconds * 100) % 100);
+            const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+
+            // Create title
+            const title = document.createElement('div');
+            title.textContent = 'RACE FINISHED!';
+             title.className = 'gameOverTitle'; // Use CSS class
+
+            // Create final time display
+            const timeDisplay = document.createElement('div');
+            timeDisplay.textContent = `Final Time: ${formattedTime}`;
+             timeDisplay.className = 'gameOverText'; // Use CSS class
+
+            // Create position display - Use the *last calculated rank*
+            const positionDisplay = document.createElement('div');
+            // Recalculate rank one last time to be sure
+             updateDashboard(); // Ensure rank is up-to-date
+             const positionSuffix = getPositionSuffix(game.playerRank); // Use game.playerRank
+             positionDisplay.textContent = `Final Position: ${game.playerRank}${positionSuffix}`;
+             positionDisplay.className = 'gameOverText'; // Use CSS class
+
+            // Create restart button
+            const restartButton = document.createElement('button');
+            restartButton.textContent = 'PLAY AGAIN';
+             restartButton.className = 'gameOverButton'; // Use CSS class
+            restartButton.addEventListener('click', function() {
+                if (document.body.contains(gameOverScreen)) {
+                     document.body.removeChild(gameOverScreen);
+                }
+                resetGame();
+            });
+
+            // Add elements to game over screen
+            gameOverScreen.appendChild(title);
+            gameOverScreen.appendChild(timeDisplay);
+            gameOverScreen.appendChild(positionDisplay);
+            gameOverScreen.appendChild(restartButton);
+
+            // Add game over screen to document body
+            document.body.appendChild(gameOverScreen);
+
+            // Play victory/finish sound
+            playSound('data:audio/wav;base64,UklGRigCAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQCAACOALsBDAJTAp0C4QImA2QDnQPTA/4DHAQ9BFYEaQR4BIIEhgSHBIQEfQRyBGQETgQ0BBcE+APaA7YDjwNlAzgDCQPZAqYCcAI4Av8BwwGFAUQBAwHFAIUARQAFAMb/if9L/w7/0f6W/l7+J/7z/cL9k/1l/Tj9Dv3n/ML8nvx9/F38P/wj/Az89vvk+9T7x/u8+7T7r/uw+7T7u/vF+9T75fv4+w78JvxD/GL8iPS9+/z3FfZn9FLy6e8v7qPs3uqA6XfrCu1C7trvovGh89j1K/jH+pj9fgBAA/oFsQhfC/oNchDFEv8UTBeTGbUb2R0LHwQg/iDNIY8iOCPNIz0kkCTHJN0k2STCJJQkVSQEJKEjMSOnIhYihCHkIEggkB8EH2oexB0XHVocjxvBGuccvB6EH08=');
+        }
+
+        // Function to reset the game state for a new race
+        function resetGame() {
+            game.isRunning = false;
+            game.speed = 0;
+            game.startTime = 0;
+            game.currentTime = 0;
+            game.lap = 1;
+            game.playerRank = 1; // Reset rank
+            position = 0; // Reset track progress
+            playerX = 0; // Reset lateral position
+
+            // Reset car position
+            car.position.set(0, 30, 0);
+            camera.position.set(0, cameraHeight, -1500); // Reset camera
+            camera.lookAt(0, 0, 0);
+
+
+            // Reset opponents
+            opponents.forEach(opp => scene.remove(opp.mesh)); // Remove old meshes
+            createOpponents(); // Recreate opponents at starting positions
+
+            // Reset powerups
+            powerups.forEach(p => {
+                if(p.mesh) scene.remove(p.mesh)
+            });
+            createPowerups(); // Recreate powerups
+
+             // Reset turbo state
+             turboAvailable = true;
+             clearTimeout(turboTimer);
+             controls.turbo = false;
+             if (activeTurboEffect && document.body.contains(activeTurboEffect)) {
+                document.body.removeChild(activeTurboEffect);
+                activeTurboEffect = null;
+             }
+             if (activeShieldEffect && document.body.contains(activeShieldEffect)) {
+                 document.body.removeChild(activeShieldEffect);
+                 activeShieldEffect = null;
+             }
+
+
+            // Reset UI
+            updateDashboard(); // Update dashboard to show initial state
+            if (minimapCtx) { // Clear minimap
+                 minimapCtx.fillStyle = '#222';
+                 minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            }
+
+            // Show start screen
+            const startScreen = document.getElementById('startScreen');
+            if (startScreen) startScreen.style.display = 'flex';
+        }
+
+
+        function animate(timestamp) {
+            requestAnimationFrame(animate); // Loop animation
+
+             if (game.isRunning) {
+                 updateGame(timestamp || 0); // Pass timestamp to updateGame for deltaTime calculation
+
+                 // --- Update Player Car 3D Position ---
+                 // Get the current segment's Y position for hills
+                 const currentSegmentIndex = Math.floor(position / segmentLength);
+                 const currentSegment = roadSegments[currentSegmentIndex % roadSegments.length];
+                 const currentY = currentSegment ? currentSegment.y : 0;
+                 car.position.set(playerX, 30 + currentY, position); // Car's Z position IS the progress
+
+                 // --- Update Camera ---
+                 // Camera follows behind and slightly above the car
+                 // It should look towards a point slightly ahead of the car to show the road ahead
+                 const lookAheadDist = 1500;
+                 const cameraDistBehind = 800; // How far behind the car
+                 const cameraHeightAboveCar = 400; // How high above the car
+
+                 const cameraX = playerX * 0.3; // Camera follows lateral movement less intensely
+                 const cameraY = 30 + currentY + cameraHeightAboveCar + Math.abs(playerX) * 0.1; // Base car height + hill + raise + tilt effect
+                 const cameraZ = position - cameraDistBehind; // Position camera behind car
+
+                 camera.position.set(cameraX, cameraY, cameraZ);
+
+                 // Look-at point: slightly ahead of the car, influenced by lateral position
+                 const lookAtX = playerX * 0.1;
+                 const lookAtY = 30 + currentY; // Look towards car height level
+                 const lookAtZ = position + lookAheadDist; // Look far ahead
+
+                 camera.lookAt(lookAtX, lookAtY, lookAtZ);
+
+
+                 // --- Road Rendering Simulation (Flawed Original Approach) ---
+                 // The original code tried to simulate curves/hills by moving/rotating the *entire flat plane*
+                 // This does NOT create a visually correct 3D track.
+                 if (road && currentSegment) {
+                     // 1. Move the entire plane so the player *seems* to be at Z=0 relative to it.
+                     // This creates the scrolling effect.
+                     road.position.z = position;
+
+                     // 2. Rotate the *entire plane* based on the current segment's curve.
+                     // This is a very poor way to simulate curves. It tilts the whole world.
+                     const maxRotation = 0.1; // Limit the unrealistic tilting
+                     road.rotation.y = -currentSegment.curve * speedPercent * 0.005; // Small rotation based on curve and speed
+                     road.rotation.y = Math.max(-maxRotation, Math.min(maxRotation, road.rotation.y));
+
+
+                     // 3. Adjusting camera height (already done above) partially simulates hills.
+                 }
+                 // --- End Flawed Road Rendering ---
+
+                // Update powerup animations (e.g., rotation)
+                powerups.forEach(p => {
+                    if (p.mesh && p.mesh.visible) {
+                        p.mesh.rotation.y += 0.05; // Simple rotation
+                        p.mesh.rotation.x += 0.02;
+                    }
+                });
+
+                 // Update Minimap (Moved from its own loop)
+                 updateMinimap();
+            }
+
+
+            // Render scene regardless of game state (shows initial state/game over)
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        function onWindowResize() {
+            if (!camera || !renderer || !canvas) return;
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Minimap Functionality ---
+        function setupMinimap() {
+            minimapCanvas = document.getElementById('minimapCanvas');
+             if (!minimapCanvas) {
+                 console.warn("minimapCanvas element not found. Creating one.");
+                 minimapCanvas = document.createElement('canvas');
+                 minimapCanvas.id = 'minimapCanvas';
+                 // Apply styles via JS - less ideal than CSS but works if element missing
+                 minimapCanvas.style.position = 'absolute';
+                 minimapCanvas.style.bottom = '20px';
+                 minimapCanvas.style.right = '20px';
+                 minimapCanvas.style.width = '200px';
+                 minimapCanvas.style.height = '200px';
+                 minimapCanvas.style.borderRadius = '50%';
+                 minimapCanvas.style.border = '3px solid #fff';
+                 minimapCanvas.style.backgroundColor = '#222';
+                 minimapCanvas.style.zIndex = '5';
+                 document.body.appendChild(minimapCanvas);
+            }
+            // Set the actual drawing buffer size
+             minimapCanvas.width = 200;
+             minimapCanvas.height = 200;
+             minimapCtx = minimapCanvas.getContext('2d');
+        }
+
+        function updateMinimap() {
+            if (!minimapCtx || !game.isRunning) return;
+
+            const width = minimapCanvas.width;
+            const height = minimapCanvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const trackRadius = width * 0.4; // Radius on the minimap
+
+            // Clear minimap
+            minimapCtx.fillStyle = 'rgba(34, 34, 34, 0.8)'; // Semi-transparent background
+            minimapCtx.clearRect(0, 0, width, height); // Clear previous frame
+             minimapCtx.fillRect(0, 0, width, height); // Redraw background
+
+
+            // Draw track outline (simple circle for representation)
+            minimapCtx.strokeStyle = '#ccc';
+            minimapCtx.lineWidth = 4;
+            minimapCtx.beginPath();
+            minimapCtx.arc(centerX, centerY, trackRadius, 0, Math.PI * 2);
+            minimapCtx.stroke();
+
+            // --- Draw Player ---
+            const playerPercent = (position % trackLength) / trackLength;
+            const playerAngle = playerPercent * Math.PI * 2 - Math.PI / 2; // Offset by -PI/2 to start at top
+            const playerMapX = centerX + Math.cos(playerAngle) * trackRadius;
+            const playerMapY = centerY + Math.sin(playerAngle) * trackRadius;
+
+            minimapCtx.fillStyle = '#f00'; // Red for player
+            minimapCtx.beginPath();
+            minimapCtx.arc(playerMapX, playerMapY, 5, 0, Math.PI * 2);
+            minimapCtx.fill();
+
+            // --- Draw Opponents ---
+            minimapCtx.fillStyle = '#0f0'; // Green for opponents
+            for (let i = 0; i < opponents.length; i++) {
+                const opp = opponents[i];
+                const oppPercent = (opp.position % trackLength) / trackLength;
+                const oppAngle = oppPercent * Math.PI * 2 - Math.PI / 2;
+                const oppMapX = centerX + Math.cos(oppAngle) * trackRadius;
+                const oppMapY = centerY + Math.sin(oppAngle) * trackRadius;
+
+                minimapCtx.beginPath();
+                minimapCtx.arc(oppMapX, oppMapY, 3, 0, Math.PI * 2);
+                minimapCtx.fill();
+            }
+        }
+
+        // --- Turbo Boost Functionality ---
+        function activateTurbo() {
+             if (!turboAvailable || !game.isRunning) return;
+
+             game.speed = Math.min(game.maxSpeed * 1.6, game.speed + 150); // Big speed increase, but cap increase too
+             turboAvailable = false;
+
+             // Add turbo visual effect
+             if (activeTurboEffect && document.body.contains(activeTurboEffect)) {
+                 document.body.removeChild(activeTurboEffect); // Remove previous if any
+             }
+             activeTurboEffect = document.createElement('div');
+             activeTurboEffect.className = 'turboEffect'; // Use CSS class
+             activeTurboEffect.style.opacity = '1'; // Start visible
+             document.body.appendChild(activeTurboEffect);
+
+             // Play turbo sound
+             playSound('data:audio/wav;base64,UklGRigCAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQCAABt/5X/2v///zkAWQB0AIQAiACDAHQAVQAsAPb/wv+Q/17/M/8P/+/+1v7E/rX+r/6v/rX+wf7T/uv+Cf8q/07/dP+c/8b/8f8dAEgAcQCaAMEA5QAHASYBQQFSAWEBbAFsAWwBZgFWAUQBLAEOAfAA0A==');
+
+             // Fade out effect after duration
+             setTimeout(() => {
+                 if (activeTurboEffect && document.body.contains(activeTurboEffect)) {
+                     activeTurboEffect.style.opacity = '0';
+                     // Remove from DOM after fade out
+                     setTimeout(() => {
+                         if (activeTurboEffect && document.body.contains(activeTurboEffect)) {
+                              document.body.removeChild(activeTurboEffect);
+                         }
+                         activeTurboEffect = null;
+                     }, 2000); // Match CSS transition duration
+                 }
+             }, 1500); // Turbo effect visual duration
+
+             // Cooldown timer to re-enable turbo
+             clearTimeout(turboTimer); // Clear previous timer if any
+             turboTimer = setTimeout(() => {
+                 turboAvailable = true;
+                 showNotification('TURBO READY!', '#00f'); // Blue for turbo ready
+             }, 10000); // 10 second cooldown
+         }
+
+
+        // --- Powerup Collection and Effects ---
+        function checkPowerupCollection() {
+            if (!game.isRunning) return;
+
+            const playerZ = position % trackLength; // Player's current Z on this lap segment
+
+            for (let i = powerups.length - 1; i >= 0; i--) { // Iterate backwards for safe removal
+                const powerup = powerups[i];
+                if (powerup.collected || !powerup.mesh || !powerup.mesh.visible) continue;
+
+                const powerupZ = powerup.positionZ % trackLength; // Powerup's Z on lap segment
+                const distanceZ = Math.abs(playerZ - powerupZ);
+                const distanceX = Math.abs(playerX - powerup.positionX);
+
+                // Collision check (adjust thresholds as needed)
+                 if (distanceZ < 100 && distanceX < 70) {
+                     // Collect powerup
+                     powerup.collected = true;
+                     scene.remove(powerup.mesh); // Remove mesh from scene
+                     // Optional: could pool meshes instead of removing/recreating
+
+                     // Apply effect
+                     applyPowerupEffect(powerup.type);
+
+                     // Play sound
+                     playSound('data:audio/wav;base64,UklGRigCAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQCAABb/0v/JP/y/rb+cP4q/un9qf1s/TL9AP3T/Kj8hPxn/E38PPwv/Cb8IPwd/B38Jfwx/D/8UPxk/Hn8kvy1/Nj8//wn/U/9d/2f/cf97P0T/jr+Y/6K/rH+1/7+/iX/');
+
+                     // Remove from array or mark for removal later if pooling
+                     // For simplicity here, we just rely on the collected flag
+                 }
+             }
+         }
+
+        function applyPowerupEffect(type) {
+            switch(type) {
+                case 'speed':
+                    // Temporary speed boost (less intense than turbo)
+                    const speedBoost = 50;
+                    const boostDuration = 3000; // 3 seconds
+                    game.speed = Math.min(game.maxSpeed * 1.2, game.speed + speedBoost); // Add boost, cap
+                    showNotification('SPEED BOOST!', '#ff0'); // Yellow
+
+                    // Optional: Make max speed temporarily higher?
+                    // Or just decay the boost over time? (Simpler: just immediate boost)
+                    break;
+
+                case 'shield':
+                    // Add shield visual effect
+                    if (activeShieldEffect && document.body.contains(activeShieldEffect)) {
+                         document.body.removeChild(activeShieldEffect); // Remove old one
+                     }
+                     activeShieldEffect = document.createElement('div');
+                     activeShieldEffect.className = 'shieldEffect'; // Use CSS
+                     document.body.appendChild(activeShieldEffect);
+                     showNotification('SHIELD ACTIVATED!', '#0ff'); // Cyan
+
+                     // TODO: Add actual shield logic (e.g., ignore next collision)
+                     // For now, it's just visual
+
+                     // Remove shield after duration
+                     setTimeout(() => {
+                         if (activeShieldEffect && document.body.contains(activeShieldEffect)) {
+                             document.body.removeChild(activeShieldEffect);
+                         }
+                         activeShieldEffect = null;
+                     }, 5000); // 5 second duration
+                    break;
+
+                case 'repair':
+                     // Simple effect: Instantly boost to max speed (like catching up)
+                     // Or could permanently increase maxSpeed slightly
+                     game.speed = Math.max(game.speed, game.maxSpeed * 0.8); // Boost up to 80% max speed instantly
+                     game.maxSpeed += 5; // Small permanent max speed increase
+                     showNotification('CAR UPGRADED!', '#0f0'); // Green
+                    break;
+            }
+        }
+
+        // --- Utility Functions ---
+
+        // Utility function to show notifications
+        function showNotification(text, color) {
+             const notification = document.createElement('div');
+             notification.textContent = text;
+             notification.className = 'notification'; // Use CSS class
+             notification.style.color = color; // Apply specific color
+             document.body.appendChild(notification);
+
+             // Fade out and remove
+             setTimeout(() => {
+                 notification.style.opacity = '0';
+                 setTimeout(() => {
+                     if (document.body.contains(notification)) {
+                          document.body.removeChild(notification);
+                     }
+                 }, 2000); // Match transition duration
+             }, 2000); // Time visible before fade
+        }
+
+        // Utility function to play short sounds (prevents piling up listeners)
+        function playSound(base64Data) {
+            try {
+                 const sound = new Audio(base64Data);
+                 sound.volume = 0.6; // Adjust volume for effects
+                 sound.play();
+            } catch (e) {
+                console.warn("Could not play sound effect:", e);
+            }
+        }
+
+
+        // --- Initialize game when the window loads ---
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+</html>
