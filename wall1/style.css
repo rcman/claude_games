@@ -1,0 +1,67 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: sans-serif;
+    background-color: #333;
+    color: white;
+}
+
+canvas {
+    display: block; /* Remove annoying space below canvas */
+}
+
+#build-menu {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 15px;
+    border-radius: 5px;
+    border: 1px solid #555;
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Spacing between buttons */
+}
+
+#build-menu.hidden {
+    display: none;
+}
+
+#build-menu h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    text-align: center;
+    color: #eee;
+}
+
+#build-menu button {
+    padding: 8px 12px;
+    cursor: pointer;
+    background-color: #444;
+    color: #eee;
+    border: 1px solid #666;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+#build-menu button:hover {
+    background-color: #555;
+}
+
+#build-menu button.cancel {
+    background-color: #633;
+}
+#build-menu button.cancel:hover {
+    background-color: #844;
+}
+
+
+#info {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}

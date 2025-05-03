@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML5 3D Building Concept</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="build-menu" class="hidden">
+        <h3>Build Menu (B to close)</h3>
+        <button data-type="foundation">Foundation</button>
+        <button data-type="wall">Wall</button>
+        <button data-type="wall_window">Wall (Window)</button>
+        <button data-type="wall_doorway">Wall (Doorway)</button>
+        <button data-type="door">Door</button> <!-- Simple placement like wall -->
+        <button data-type="ceiling">Ceiling</button>
+        <button data-type="cancel" class="cancel">Cancel</button>
+    </div>
+
+    <div id="info">
+        'B' to toggle Build Menu | Click to Place | Right-Click/ESC to Cancel Placement
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="script.js"></script>
+</body>
+</html>
