@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BabylonJS Survival Build</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Babylon.js -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <!-- Optional: Loaders for models if you use them later -->
+    <!-- <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script> -->
+    <!-- Optional: GUI for more advanced menus -->
+    <!-- <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script> -->
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="buildMenu" style="display: none;">
+        <h3>Build Menu (B to close)</h3>
+        <button data-item="foundation">Foundation</button>
+        <button data-item="wall">Wall</button>
+        <button data-item="wall_window">Wall (Window)</button> <!-- Placeholder -->
+        <button data-item="wall_doorway">Wall (Doorway)</button> <!-- Placeholder -->
+        <button data-item="door">Door</button> <!-- Placeholder -->
+        <button data-item="ceiling">Ceiling</button>
+        <button data-item="cancel">Cancel</button>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
