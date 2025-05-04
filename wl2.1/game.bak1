@@ -44,19 +44,9 @@ const createScene = () => {
     if (!engine) return null;
 
     const scene = new BABYLON.Scene(engine);
-    const skyColor = new BABYLON.Color3(0.5, 0.8, 0.9); // Store sky color for reuse
-    scene.clearColor = skyColor; // Pleasant sky blue
+    scene.clearColor = new BABYLON.Color3(0.5, 0.8, 0.9); // Pleasant sky blue
     scene.collisionsEnabled = true; // Enable collision detection system
     scene.gravity = new BABYLON.Vector3(0, -9.81 / 60, 0); // Apply gravity (adjust factor for desired effect)
-
-    // --- Fog ---
-    scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR; // Linear fog for clear start/end points
-    scene.fogColor = skyColor.clone();           // Fog color matches the sky
-    scene.fogStart = 40.0;                       // Distance where fog starts becoming visible
-    scene.fogEnd = 150.0;                        // Distance where fog is fully opaque
-    // Optional: for exponential fog modes:
-    // scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
-    // scene.fogDensity = 0.01; // Adjust density (lower is less dense)
 
     // --- Camera (Third Person Arc Rotate) ---
     const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 3, 10, BABYLON.Vector3.Zero(), scene);
@@ -82,8 +72,7 @@ const createScene = () => {
     groundMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1); // Reduce shininess
     ground.material = groundMat;
     ground.checkCollisions = true; // Ground is collidable
-    ground.material.applyFog = true; // Make sure ground material is affected by fog
-
+    
     // --- Environment Creation ---
     createEnvironment(scene);
 
@@ -96,7 +85,6 @@ const createScene = () => {
     const playerMat = new BABYLON.StandardMaterial("playerMat", scene);
     playerMat.diffuseColor = new BABYLON.Color3(0.8, 0.2, 0.2); // Red player
     player.material = playerMat;
-    player.material.applyFog = true; // Player material affected by fog
     // Player collision ellipsoid - slightly smaller than visual mesh can help prevent snagging
     player.ellipsoid = new BABYLON.Vector3(PLAYER_RADIUS * 0.9, PLAYER_HEIGHT / 2, PLAYER_RADIUS * 0.9);
     player.checkCollisions = true; // Player collides with environment
@@ -169,36 +157,33 @@ const createScene = () => {
         // Create materials for environment objects
         const treeTrunkMat = new BABYLON.StandardMaterial("treeTrunkMat", scene);
         treeTrunkMat.diffuseColor = new BABYLON.Color3(0.5, 0.3, 0.1); // Brown trunk
-        treeTrunkMat.applyFog = true; // Apply fog to tree trunks
-
+        
         const treeLeavesMat = new BABYLON.StandardMaterial("treeLeavesMat", scene);
         treeLeavesMat.diffuseColor = new BABYLON.Color3(0.1, 0.5, 0.1); // Green leaves
-        treeLeavesMat.applyFog = true; // Apply fog to tree leaves
-
+        
         const rockMat = new BABYLON.StandardMaterial("rockMat", scene);
         rockMat.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6); // Grey rocks
-        rockMat.applyFog = true; // Apply fog to rocks
-
+        
         // Function to create a random position within the world bounds
         // but away from the center starting area
         function getRandomPosition() {
             const minDistFromCenter = 20; // Minimum distance from center
             const maxDist = WORLD_SIZE / 2 - 10; // Stay away from edges
-
+            
             let x, z;
             do {
                 x = Math.random() * WORLD_SIZE - WORLD_SIZE / 2;
                 z = Math.random() * WORLD_SIZE - WORLD_SIZE / 2;
             } while (Math.sqrt(x*x + z*z) < minDistFromCenter);
-
+            
             return new BABYLON.Vector3(x, 0, z);
         }
-
+        
         // Create trees
         for (let i = 0; i < TREE_COUNT; i++) {
             const position = getRandomPosition();
             const scale = 0.5 + Math.random() * 1.5; // Random tree size
-
+            
             // Create trunk (cylinder)
             const trunkHeight = 3 * scale;
             const trunkRadius = 0.3 * scale;
@@ -210,11 +195,11 @@ const createScene = () => {
             trunk.position = new BABYLON.Vector3(position.x, trunkHeight / 2, position.z);
             trunk.material = treeTrunkMat;
             trunk.checkCollisions = true;
-
+            
             // Create foliage (cone or sphere based on random choice)
             const foliageType = Math.random() > 0.5 ? "cone" : "sphere";
             let foliage;
-
+            
             if (foliageType === "cone") {
                 // Coniferous tree (pine)
                 foliage = BABYLON.MeshBuilder.CreateCylinder("treeTop_" + i, {
@@ -232,27 +217,27 @@ const createScene = () => {
                 }, scene);
                 foliage.position = new BABYLON.Vector3(position.x, trunkHeight + (2 * scale), position.z);
             }
-
+            
             foliage.material = treeLeavesMat;
             foliage.checkCollisions = true;
-
+            
             // Add slight random rotation to trees
             trunk.rotation.y = Math.random() * Math.PI * 2;
-
+            
             // Add to environment objects array
             environmentObjects.push(trunk);
             environmentObjects.push(foliage);
         }
-
+        
         // Create rocks
         for (let i = 0; i < ROCK_COUNT; i++) {
             const position = getRandomPosition();
             const scale = 0.3 + Math.random() * 1.0; // Random rock size
-
+            
             // Create rock (use a polyhedron with noise for natural look)
             const rockType = Math.floor(Math.random() * 3); // 3 types of rocks
             let rock;
-
+            
             switch (rockType) {
                 case 0:
                     // Boulder (sphere with scaling)
@@ -262,8 +247,8 @@ const createScene = () => {
                     }, scene);
                     // Make it less perfectly round
                     rock.scaling = new BABYLON.Vector3(
-                        1 + Math.random() * 0.4,
-                        0.7 + Math.random() * 0.4,
+                        1 + Math.random() * 0.4, 
+                        0.7 + Math.random() * 0.4, 
                         1 + Math.random() * 0.4
                     );
                     break;
@@ -285,24 +270,24 @@ const createScene = () => {
                     }, scene);
                     break;
             }
-
+            
             // Position on ground with slight randomization to y position
             rock.position = new BABYLON.Vector3(
-                position.x,
+                position.x, 
                 scale * 0.5, // Half height above ground
                 position.z
             );
-
+            
             rock.material = rockMat;
             rock.checkCollisions = true;
-
+            
             // Add random rotation for natural appearance
             rock.rotation = new BABYLON.Vector3(
                 Math.random() * 0.3,
                 Math.random() * Math.PI * 2,
                 Math.random() * 0.3
             );
-
+            
             // Add to environment objects array
             environmentObjects.push(rock);
         }
@@ -375,8 +360,6 @@ const createScene = () => {
         ghostMat.diffuseColor = new BABYLON.Color3(0.5, 1, 0.5); // Default to green (valid)
         ghostMat.alpha = 0.45; // Transparency
         ghostMat.wireframe = true; // See edges clearly
-        ghostMat.disableLighting = true; // Ghost shouldn't be affected by lights
-        ghostMat.applyFog = false; // Ghost shouldn't be affected by fog
 
         // Create the basic shape based on the selected item
         switch (selectedBuildItem) {
@@ -542,7 +525,6 @@ const createScene = () => {
         const placedMat = new BABYLON.StandardMaterial("placedMat_" + selectedBuildItem + "_" + builtItems.length, scene);
         placedMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
         placedMat.backFaceCulling = false; // For CSG results
-        placedMat.applyFog = true; // Ensure placed items are affected by fog
 
         // Use ghost mesh's transform for positioning the final object initially
         const ghostPosition = ghostMesh.position.clone();
@@ -691,31 +673,29 @@ const createScene = () => {
         // Create animation for rotation
         const doorAnimation = new BABYLON.Animation(
             "doorSwing",
-            "rotation.y", // Animate rotation.y because we used setPivotPoint which affects rotation axis
+            "rotation.y",
             framerate,
             BABYLON.Animation.ANIMATIONTYPE_FLOAT,
             BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
         );
 
         // Add keyframes
-        // We are animating around the pivot, so the target is relative to the original rotation
+        // We add the original rotation as an offset to maintain proper orientation
         const keyFrames = [
-            { frame: 0, value: door.rotation.y }, // Start from current actual rotation
-            { frame: framerate * duration, value: door.originalRotation + targetAngle } // End at original + target offset
+            { frame: 0, value: door.rotation.y },
+            { frame: framerate * duration, value: door.originalRotation + targetAngle }
         ];
         doorAnimation.setKeys(keyFrames);
 
-        // Stop any existing animations on the door's rotation.y property
-        scene.stopAnimation(door, "doorSwing");
+        // Stop any existing animations
+        scene.stopAnimation(door);
 
-
-        // Run the animation directly on the mesh
+        // Run the animation
         scene.beginDirectAnimation(door, [doorAnimation], 0, framerate * duration, false);
 
         // Play sound effect if we had one
         // if (doorSound) doorSound.play();
     }
-
 
     // --- Movement System (runs every frame) ---
     const movePlayer = () => {
