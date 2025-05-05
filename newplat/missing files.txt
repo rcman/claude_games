@@ -1,0 +1,47 @@
+interactive-examples.mdn.mozilla.net/media/cc0-audio/qubodup-crash.ogg:1 
+index2.html:299 Error loading sound 'hit' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/qubodup-crash.ogg: Error: HTTP error! status: 404
+interactive-examples.mdn.mozilla.net/media/cc0-audio/explosion.wav:1 
+index2.html:299 Error loading sound 'explosion' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/explosion.wav: Error: HTTP error! status: 404
+interactive-examples.mdn.mozilla.net/media/cc0-audio/jump.wav:1 
+index2.html:299 Error loading sound 'jump' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/jump.wav: Error: HTTP error! status: 404
+interactive-examples.mdn.mozilla.net/media/cc0-audio/swoosh.wav:1 
+interactive-examples.mdn.mozilla.net/media/cc0-audio/door-open.wav:1 
+interactive-examples.mdn.mozilla.net/media/cc0-audio/game-over.wav:1 
+index2.html:299 Error loading sound 'gameover' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/game-over.wav: Error: HTTP error! status: 404
+    at index2.html:291:45
+(anonymous) @ index2.html:299
+interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-shot.wav:1 
+            
+            
+           Failed to load resource: the server responded with a status of 404 ()
+index2.html:299 Error loading sound 'boss' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-shot.wav: Error: HTTP error! status: 404
+    at index2.html:291:45
+(anonymous) @ index2.html:299
+interactive-examples.mdn.mozilla.net/media/cc0-audio/laser.wav:1 
+            
+            
+           Failed to load resource: the server responded with a status of 404 ()
+index2.html:299 Error loading sound 'shoot' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/laser.wav: Error: HTTP error! status: 404
+    at index2.html:291:45
+(anonymous) @ index2.html:299
+interactive-examples.mdn.mozilla.net/media/cc0-audio/power-up.wav:1 
+            
+            
+           Failed to load resource: the server responded with a status of 404 ()
+index2.html:299 Error loading sound 'powerup' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/power-up.wav: Error: HTTP error! status: 404
+    at index2.html:291:45
+(anonymous) @ index2.html:299
+interactive-examples.mdn.mozilla.net/media/cc0-audio/collect-point.wav:1 
+            
+            
+           Failed to load resource: the server responded with a status of 404 ()
+index2.html:299 Error loading sound 'pickup' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/collect-point.wav: Error: HTTP error! status: 404
+    at index2.html:291:45
+(anonymous) @ index2.html:299
+interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-laser.wav:1 
+            
+            
+           Failed to load resource: the server responded with a status of 404 ()
+index2.html:299 Error loading sound 'enemyShoot' from https://interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-laser.wav: Error: HTTP error! status: 404
+    at index2.html:291:45
+(anonymous) @ index2.html:299

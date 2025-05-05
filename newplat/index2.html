@@ -1,0 +1,2174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced 2D Scrolling Platform Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #000;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            background-color: #333; /* Fallback background */
+        }
+        /* Keep UI div for now, although canvas HUD is primary */
+        #gameUI {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            text-shadow: 1px 1px 1px black;
+            pointer-events: none;
+            opacity: 0.7; /* Make it less prominent */
+        }
+        #gameOverScreen, #levelCompleteScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 32px;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 10px;
+            display: none;
+            border: 2px solid white;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 18px;
+            margin: 15px 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #loadingScreen {
+             position: absolute;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             color: white;
+             font-family: Arial, sans-serif;
+             font-size: 24px;
+             text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="loadingScreen">Loading Assets...</div>
+    <!-- Game UI div remains for basic stats, canvas HUD is richer -->
+    <div id="gameUI">
+        <div>Health: <span id="healthDisplay">100</span></div>
+        <div>Ammo: <span id="ammoDisplay">50</span></div>
+        <div>Armor: <span id="armorDisplay">0</span>/10</div>
+        <div>Keys: <span id="keysDisplay">0</span></div>
+        <div>Level: <span id="levelDisplay">1</span></div>
+    </div>
+    <div id="gameOverScreen">
+        <h2>Game Over</h2>
+        <p>You were defeated!</p>
+        <button id="restartButton">Restart Level</button>
+    </div>
+    <div id="levelCompleteScreen">
+        <h2>Level Complete!</h2>
+        <p>Boss defeated!</p>
+        <button id="nextLevelButton">Next Level</button>
+    </div>
+
+    <script>
+        // Game Constants and Variables
+        const CANVAS_WIDTH = 1920;
+        const CANVAS_HEIGHT = 1080;
+        const GRAVITY = 0.6;
+        const FRICTION = 0.8;
+        const PLATFORM_SPEED = 2; // Base scroll speed
+        const PLAYER_SPEED = 6; // Enhanced speed
+        const JUMP_FORCE = 16; // Enhanced jump
+        const BULLET_SPEED = 12; // Enhanced bullet speed
+        const ENEMY_BULLET_SPEED = 8;
+
+        let canvas, ctx;
+        let gameActive = true;
+        let platformScroll = 0;
+        let backgroundImage = new Image();
+        let playerSprite = new Image();
+        let enemySprite = new Image();
+        let crateSprite = new Image();
+        let lockerSprite = new Image();
+        let doorSprite = new Image();
+        let bossSprite = new Image();
+        let bulletSprite = new Image();
+        let enemyBulletSprite = new Image();
+        let explosionSprite = new Image(); // For particle effects
+
+        let levelConfig = {
+            currentLevel: 1,
+            totalLevels: 3,
+        };
+
+        let player = {
+            x: 200,
+            y: 300,
+            width: 40, // Base width, animation frame might differ
+            height: 80, // Base height
+            velocityX: 0,
+            velocityY: 0,
+            isJumping: false,
+            jumpCount: 0, // For double jump
+            isCrouching: false,
+            isShooting: false,
+            shootTimer: 0, // Cooldown/duration for shoot animation
+            direction: 1, // 1 for right, -1 for left
+            health: 100,
+            maxHealth: 100,
+            ammo: 50,
+            maxAmmo: 100,
+            armor: 0,
+            maxArmor: 10,
+            keys: 0,
+            isHit: false,
+            hitTimer: 0,
+            invulnerable: false, // For dash/hit recovery
+            invulnerableTimer: 0,
+            isDashing: false,
+            dashTimer: 0,
+            dashCooldown: 0,
+            powerUpTimer: 0,
+            powerUpActive: false,
+            powerUpType: null, // e.g., POWERUPS.SPEED
+            speedMultiplier: 1,
+            damageMultiplier: 1,
+            shield: false,
+            moveLeft: false, // Input flags
+            moveRight: false,
+            isHidden: false // Hiding behind crates
+        };
+
+        let bullets = [];
+        let enemyBullets = [];
+        let platforms = [];
+        let enemies = [];
+        let crates = [];
+        let lockers = [];
+        let doors = [];
+        let boss = null;
+        let particles = []; // Particle system array
+
+        // Player animations (will be initialized later)
+        let playerAnimations = {
+            idle: null,
+            run: null,
+            jump: null,
+            crouch: null,
+            shoot: null
+        };
+
+        // Sound system variables
+        let audioContext = null;
+        let sounds = {};
+
+        // Power-up enum
+        const POWERUPS = {
+            SPEED: 0,
+            DAMAGE: 1,
+            SHIELD: 2
+        };
+
+        // Initialize the game (starts asset loading)
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+            ctx = canvas.getContext('2d');
+            
+            document.getElementById('loadingScreen').style.display = 'block';
+
+            initAudio(); // Initialize Audio Context first
+            loadGameAssets(); // Start loading assets
+        }
+
+        // ==========================================
+        // IMAGE LOADING IMPROVEMENTS
+        // ==========================================
+        function loadGameAssets() {
+            let assetsToLoad = 9; // Update count based on actual assets used
+            let assetsLoaded = 0;
+
+            function assetLoaded(assetName) {
+                // console.log(`Asset loaded: ${assetName}`); // Optional: log loading progress
+                assetsLoaded++;
+                document.getElementById('loadingScreen').textContent = `Loading Assets... (${assetsLoaded}/${assetsToLoad})`;
+                if (assetsLoaded === assetsToLoad) {
+                    console.log('All assets loaded!');
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    startGame(); // All assets loaded, proceed to game setup
+                }
+            }
+
+            // Replace placeholder images with actual game sprites/paths
+            backgroundImage.src = '/api/placeholder/1920/1080'; // Replace with actual background path
+            backgroundImage.onload = () => assetLoaded('Background');
+
+            playerSprite.src = '/api/placeholder/160/80'; // Example: 4 frames of 40x80
+            playerSprite.onload = () => assetLoaded('Player Sprite');
+
+            enemySprite.src = '/api/placeholder/40/80'; // Replace with actual enemy sprite path
+            enemySprite.onload = () => assetLoaded('Enemy Sprite');
+
+            crateSprite.src = '/api/placeholder/60/60'; // Replace with actual crate sprite path
+            crateSprite.onload = () => assetLoaded('Crate Sprite');
+
+            lockerSprite.src = '/api/placeholder/100/80'; // Example: 2 frames (closed/open) of 50x80
+            lockerSprite.onload = () => assetLoaded('Locker Sprite');
+
+            doorSprite.src = '/api/placeholder/160/120'; // Example: 2 frames (closed/open) of 80x120
+            doorSprite.onload = () => assetLoaded('Door Sprite');
+
+            bossSprite.src = '/api/placeholder/80/120'; // Replace with actual boss sprite path
+            bossSprite.onload = () => assetLoaded('Boss Sprite');
+
+            bulletSprite.src = '/api/placeholder/10/5'; // Replace with actual bullet sprite path
+            bulletSprite.onload = () => assetLoaded('Bullet Sprite');
+
+            enemyBulletSprite.src = '/api/placeholder/8/4'; // Replace with actual enemy bullet sprite path
+            enemyBulletSprite.onload = () => assetLoaded('Enemy Bullet Sprite');
+
+            // Note: explosionSprite is used for particle colors, doesn't need loading unless used as image
+        }
+
+        // ==========================================
+        // SOUND SYSTEM
+        // ==========================================
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                // Load sounds (replace placeholders with actual sound file URLs)
+                loadSound('shoot', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/laser.wav'); // Placeholder URL
+                loadSound('hit', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/qubodup-crash.ogg'); // Placeholder URL
+                loadSound('jump', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/jump.wav'); // Placeholder URL
+                loadSound('pickup', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/collect-point.wav'); // Placeholder URL
+                loadSound('door', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/door-open.wav'); // Placeholder URL
+                loadSound('explosion', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/explosion.wav'); // Placeholder URL
+                loadSound('boss', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-shot.wav');   // Placeholder URL
+                loadSound('powerup', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/power-up.wav'); // Placeholder URL
+                loadSound('gameover', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/game-over.wav'); // Placeholder URL
+                loadSound('enemyShoot', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-laser.wav'); // Placeholder URL
+                loadSound('dash', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/swoosh.wav'); // Placeholder URL
+            } catch (e) {
+                console.error('Web Audio API not supported or context failed to initialize:', e);
+                audioContext = null; // Ensure audioContext is null if it failed
+            }
+        }
+
+        function loadSound(name, url) {
+            if (!audioContext) return; // Don't load if context failed
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return response.arrayBuffer();
+                })
+                .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+                .then(audioBuffer => {
+                    sounds[name] = audioBuffer;
+                    console.log(`Sound loaded: ${name}`);
+                })
+                .catch(error => console.error(`Error loading sound '${name}' from ${url}:`, error));
+        }
+
+        function playSound(name, volume = 1.0, playbackRate = 1.0) {
+            if (!audioContext || !sounds[name]) {
+                 // console.warn(`Sound not found or audio context error: ${name}`);
+                 return;
+            }
+            // Resume context if suspended (required by Chrome interaction policy)
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            const source = audioContext.createBufferSource();
+            source.buffer = sounds[name];
+            source.playbackRate.value = playbackRate;
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = volume;
+
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            source.start(0);
+            return source;
+        }
+
+        // ==========================================
+        // PARTICLE EFFECTS SYSTEM
+        // ==========================================
+        class Particle {
+            constructor(x, y, color, size, velocityX, velocityY, life, gravityFactor = 0.1) {
+                this.x = x;
+                this.y = y;
+                this.color = color; // Array [r, g, b]
+                this.size = size;
+                this.velocityX = velocityX;
+                this.velocityY = velocityY;
+                this.life = life;
+                this.maxLife = life;
+                this.gravityFactor = gravityFactor;
+            }
+
+            update() {
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+                this.velocityY += this.gravityFactor; // Apply gravity
+                this.life--;
+                // Fade size and check life
+                this.size = Math.max(0, this.size * (this.life / this.maxLife));
+                return this.life > 0 && this.size > 0.1;
+            }
+
+            draw(ctx) {
+                const alpha = Math.max(0, Math.min(1, this.life / this.maxLife));
+                ctx.fillStyle = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${alpha})`;
+                ctx.beginPath();
+                // Use arc for circular particles, adjust x/y for scroll
+                ctx.arc(this.x - platformScroll, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function createExplosion(x, y, color, count = 20, size = 5, speedRange = [1, 4], lifeRange = [30, 60], gravity = 0.1) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = speedRange[0] + Math.random() * (speedRange[1] - speedRange[0]);
+                const velocityX = Math.cos(angle) * speed;
+                const velocityY = Math.sin(angle) * speed - Math.random() * speed * 0.5; // Slight upward bias initially
+                const life = lifeRange[0] + Math.random() * (lifeRange[1] - lifeRange[0]);
+                const particleSize = size * (0.7 + Math.random() * 0.6);
+
+                particles.push(new Particle(
+                    x, // Use world coordinates
+                    y,
+                    color,
+                    particleSize,
+                    velocityX,
+                    velocityY,
+                    life,
+                    gravity
+                ));
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                if (!particles[i].update()) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawParticles(ctx) { // Pass ctx
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].draw(ctx); // Draw handles scroll offset
+            }
+        }
+
+        // ==========================================
+        // IMPROVED ANIMATION SYSTEM
+        // ==========================================
+        class SpriteAnimation {
+             constructor(sprite, frameWidth, frameHeight, numFrames, frameRate, loop = true) {
+                this.sprite = sprite;
+                this.frameWidth = frameWidth;
+                this.frameHeight = frameHeight;
+                this.numFrames = numFrames;
+                this.frameRate = Math.max(1, frameRate); // Ensure frameRate is at least 1
+                this.loop = loop;
+                this.currentFrame = 0;
+                this.frameCounter = 0;
+                this.done = false; // For non-looping animations
+            }
+
+            update() {
+                if (this.done) return;
+
+                this.frameCounter++;
+                if (this.frameCounter >= this.frameRate) {
+                    this.frameCounter = 0;
+                    this.currentFrame++;
+                    if (this.currentFrame >= this.numFrames) {
+                        if (this.loop) {
+                            this.currentFrame = 0;
+                        } else {
+                            this.currentFrame = this.numFrames - 1; // Hold last frame
+                            this.done = true;
+                        }
+                    }
+                }
+            }
+            
+            reset() {
+                this.currentFrame = 0;
+                this.frameCounter = 0;
+                this.done = false;
+            }
+
+            draw(ctx, x, y, width, height, direction = 1) {
+                // Ensure sprite is loaded and dimensions are valid
+                if (!this.sprite || !this.sprite.complete || this.sprite.naturalWidth === 0 || this.frameWidth <= 0 || this.frameHeight <= 0) {
+                     // Optionally draw a placeholder if sprite not ready
+                     // ctx.fillStyle = 'magenta';
+                     // ctx.fillRect(x, y, width, height);
+                    return; 
+                }
+
+                const sourceX = this.currentFrame * this.frameWidth;
+                const sourceY = 0; // Assuming single row sprite sheet
+
+                ctx.save();
+                if (direction < 0) {
+                    // Flip horizontally
+                    ctx.translate(x + width, y);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(
+                        this.sprite,
+                        sourceX, sourceY, this.frameWidth, this.frameHeight,
+                        0, 0, width, height // Draw at translated (0,0)
+                    );
+                } else {
+                     ctx.drawImage(
+                        this.sprite,
+                        sourceX, sourceY, this.frameWidth, this.frameHeight,
+                        x, y, width, height // Draw at original x, y
+                    );
+                }
+                ctx.restore();
+            }
+        }
+
+        function initPlayerAnimations() {
+            // Replace with actual frame counts and rates based on your player sprite sheet
+            // Example: Player sprite sheet is 160x80, containing 4 frames of 40x80
+            const frameW = 40;
+            const frameH = 80;
+            playerAnimations.idle = new SpriteAnimation(playerSprite, frameW, frameH, 1, 60); // 1 frame idle
+            playerAnimations.run = new SpriteAnimation(playerSprite, frameW, frameH, 4, 8);   // 4 frames run, update every 8 game ticks
+            playerAnimations.jump = new SpriteAnimation(playerSprite, frameW, frameH, 1, 60);  // 1 frame jump (use frame 2, for example - needs sheet support)
+            // Crouching needs a different height potentially, or specific frames
+            // For simplicity, using a single frame, potentially scaled or a specific one
+            playerAnimations.crouch = new SpriteAnimation(playerSprite, frameW, frameH, 1, 60); // Placeholder
+            playerAnimations.shoot = new SpriteAnimation(playerSprite, frameW, frameH, 1, 10); // Placeholder, could be non-looping
+        }
+
+        // Called after assets are loaded
+        function startGame() {
+            initPlayerAnimations(); // Initialize animations now that sprites are loaded
+
+            createLevel(levelConfig.currentLevel); // Setup the first level
+
+            // Add event listeners
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+
+            document.getElementById('restartButton').addEventListener('click', () => {
+                restartGame();
+            });
+
+            document.getElementById('nextLevelButton').addEventListener('click', () => {
+                levelConfig.currentLevel++;
+                if (levelConfig.currentLevel > levelConfig.totalLevels) {
+                    // Optionally: Add a "You Win" screen or loop back
+                    console.log("Game Completed! Restarting from Level 1.");
+                    levelConfig.currentLevel = 1;
+                }
+                createLevel(levelConfig.currentLevel);
+                document.getElementById('levelCompleteScreen').style.display = 'none';
+                gameActive = true;
+                playSound('powerup'); // Sound for starting next level
+            });
+
+            // Start game loop
+            gameLoop();
+        }
+
+
+        function createLevel(level) {
+            // Reset game state
+            gameActive = true; // Ensure game is active when creating level
+            platformScroll = 0;
+            bullets = [];
+            enemyBullets = [];
+            platforms = [];
+            enemies = [];
+            crates = [];
+            lockers = [];
+            doors = [];
+            particles = []; // Clear particles
+            boss = null;
+
+            // Reset player state
+            player.x = 200;
+            player.y = 300;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.isJumping = false;
+            player.jumpCount = 0;
+            player.isCrouching = false;
+            player.isShooting = false;
+            player.health = player.maxHealth;
+            player.ammo = player.maxAmmo / 2; // Start with half ammo
+            player.armor = 0; // Start with no armor
+            player.keys = 0;
+            player.isHit = false;
+            player.invulnerable = false;
+            player.isDashing = false;
+            player.dashCooldown = 0;
+            player.powerUpActive = false; // Reset powerup from previous level/death
+            player.powerUpTimer = 0;
+            player.shield = false;
+            player.speedMultiplier = 1;
+            player.damageMultiplier = 1;
+            player.moveLeft = false;
+            player.moveRight = false;
+
+            // Base platform (ground) - Make very wide
+            const groundLevelY = CANVAS_HEIGHT - 100;
+            const levelLength = CANVAS_WIDTH * (4 + level); // Increase level length based on level number
+            platforms.push({
+                x: -CANVAS_WIDTH, // Start off-screen left
+                y: groundLevelY,
+                width: levelLength + 2 * CANVAS_WIDTH, // Ensure coverage
+                height: 200 // Thicker ground
+            });
+
+            // Generate platforms based on level
+            const numPlatforms = 8 + level * 3;
+            let lastPlatformX = 600;
+            for (let i = 0; i < numPlatforms; i++) {
+                 const platformWidth = 250 + Math.random() * 250;
+                 const platformX = lastPlatformX + 200 + Math.random() * 400; // Ensure gaps
+                 const platformY = groundLevelY - 100 - (Math.random() * 500); // Varying heights
+
+                 platforms.push({
+                    x: platformX,
+                    y: Math.max(150, platformY), // Don't go too high
+                    width: platformWidth,
+                    height: 40
+                 });
+                 lastPlatformX = platformX + platformWidth;
+            }
+            // Ensure final platform exists for boss/door
+             const finalPlatformX = lastPlatformX + 500;
+             platforms.push({
+                 x: finalPlatformX,
+                 y: groundLevelY - 150,
+                 width: 600,
+                 height: 50
+             });
+
+
+            // Generate enemies on platforms (skip ground platform)
+            const numEnemies = 4 + level * 2;
+            for (let i = 0; i < numEnemies; i++) {
+                const platformIndex = 1 + Math.floor(Math.random() * (platforms.length - 2)); // Avoid ground and final platform initially
+                const platform = platforms[platformIndex];
+                // Ensure platform exists and has width
+                 if (!platform || platform.width <= 80) continue;
+
+                enemies.push({
+                    x: platform.x + 40 + Math.random() * (platform.width - 80), // Position within platform bounds
+                    y: platform.y - 80, // Stand on top
+                    width: 40,
+                    height: 80,
+                    health: 30 + level * 15,
+                    maxHealth: 30 + level * 15,
+                    shootCooldown: 60 + Math.random() * 60, // Random initial cooldown
+                    shootDelay: Math.max(40, 130 - level * 15), // Faster shooting on higher levels
+                    direction: Math.random() > 0.5 ? 1 : -1,
+                    patrolPoint1: platform.x + 20,
+                    patrolPoint2: platform.x + platform.width - 60,
+                    speed: 1.0 + level * 0.3 + Math.random() * 0.5,
+                    isHit: false,
+                    hitTimer: 0,
+                    aiState: 'patrol' // Add AI state
+                });
+            }
+
+            // Generate crates
+            const numCrates = 6 + level * 2;
+            for (let i = 0; i < numCrates; i++) {
+                const platformIndex = Math.floor(Math.random() * platforms.length);
+                const platform = platforms[platformIndex];
+                if (!platform || platform.width <= 60) continue; // Ensure valid platform
+
+                crates.push({
+                    x: platform.x + Math.random() * (platform.width - 60),
+                    y: platform.y - 60, // On top of platform
+                    width: 60,
+                    height: 60
+                });
+            }
+
+            // Generate lockers
+            const numLockers = 4 + level;
+            for (let i = 0; i < numLockers; i++) {
+                const platformIndex = Math.floor(Math.random() * platforms.length);
+                const platform = platforms[platformIndex];
+                 if (!platform || platform.width <= 50) continue;
+
+                lockers.push({
+                    x: platform.x + Math.random() * (platform.width - 50),
+                    y: platform.y - 80, // On top of platform
+                    width: 50,
+                    height: 80,
+                    searched: false,
+                    // Adjusted loot probability
+                    type: Math.random() < 0.4 ? 'ammo' : (Math.random() < 0.7 ? 'armor' : 'key')
+                });
+            }
+
+            // Add a door on the second to last platform
+            if (platforms.length >= 3) {
+                const doorPlatform = platforms[platforms.length - 2]; // Penultimate platform
+                 doors.push({
+                    x: doorPlatform.x + doorPlatform.width / 2 - 40,
+                    y: doorPlatform.y - 120, // Above platform
+                    width: 80,
+                    height: 120,
+                    isOpen: false,
+                    keysRequired: 2 + level // Keys needed increases
+                 });
+            } else {
+                console.warn("Not enough platforms to place a door.");
+            }
+
+            // Reset UI
+            updateUI();
+        }
+
+
+        function createBoss() {
+            // Boss appears on the final platform after door opens
+            if (platforms.length > 0) {
+                const endPlatform = platforms[platforms.length - 1];
+                boss = {
+                    x: endPlatform.x + endPlatform.width / 2 - 40,
+                    y: endPlatform.y - 120,
+                    width: 80,
+                    height: 120,
+                    health: 150 + levelConfig.currentLevel * 75, // More health
+                    maxHealth: 150 + levelConfig.currentLevel * 75,
+                    shootCooldown: 0,
+                    shootDelay: Math.max(30, 70 - levelConfig.currentLevel * 8), // Faster attacks
+                    attackPattern: 0,
+                    patternTimer: 180, // Time in current pattern
+                    isHit: false,
+                    hitTimer: 0,
+                    aiState: 'idle' // Boss AI state
+                };
+                 playSound('boss'); // Boss appearance sound
+                 console.log("Boss Created!", boss);
+            } else {
+                 console.error("Cannot create boss, no final platform found.");
+            }
+        }
+
+        function gameLoop() {
+            if (gameActive) {
+                update();
+                render(); // Use the improved render function
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            // Player movement & mechanics update
+            enhancedPlayerUpdate(); // Use the enhanced update function
+
+            // Update bullets (both player and enemy)
+            updateBullets();
+
+            // Update enemies
+            updateEnemies();
+
+            // Update boss
+            updateBoss();
+
+            // Update particle effects
+            updateParticles();
+
+            // Update powerup timer
+            updatePowerUp(); // Handles active powerup duration
+
+            // Collision detection
+            checkCollisions();
+
+            // Scroll level based on player position
+            scrollLevel();
+
+            // Update UI (HTML elements)
+            updateUI();
+        }
+
+        // ==========================================
+        // ENHANCED GAME MECHANICS - Player Update
+        // ==========================================
+        function enhancedPlayerUpdate() {
+            // Apply gravity
+            player.velocityY += GRAVITY;
+
+            // Apply friction (only if not dashing)
+            if (!player.isDashing) {
+                player.velocityX *= FRICTION;
+                // Stop small movements
+                if (Math.abs(player.velocityX) < 0.1) player.velocityX = 0;
+            }
+
+            // Handle input flags for movement (if not dashing)
+             if (!player.isDashing) {
+                if (player.moveLeft) {
+                    player.velocityX = -PLAYER_SPEED * player.speedMultiplier;
+                    player.direction = -1;
+                } else if (player.moveRight) {
+                    player.velocityX = PLAYER_SPEED * player.speedMultiplier;
+                    player.direction = 1;
+                } else {
+                    // If neither key is pressed, ensure velocity tends towards 0 via friction
+                }
+             }
+
+
+            // Update dash state
+            if (player.isDashing) {
+                player.dashTimer--;
+                if (player.dashTimer <= 0) {
+                    player.isDashing = false;
+                    // Optional: brief slowdown after dash
+                    player.velocityX *= 0.5;
+                }
+            }
+
+            // Update dash cooldown
+            if (player.dashCooldown > 0) {
+                player.dashCooldown--;
+            }
+
+            // Update invulnerability timer (from dash or hit)
+            if (player.invulnerable) {
+                player.invulnerableTimer--;
+                if (player.invulnerableTimer <= 0) {
+                    player.invulnerable = false;
+                }
+            }
+
+            // Update position based on velocity
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+
+
+            // Keep player roughly in the left third for scrolling
+             const scrollThreshold = CANVAS_WIDTH / 3;
+             if (player.x > scrollThreshold) {
+                 // Don't directly change player.x here, handle scrolling in scrollLevel()
+             }
+             // Prevent moving too far left (off-screen)
+             if (player.x < 0) {
+                 player.x = 0;
+                 player.velocityX = 0; // Stop movement at edge
+             }
+
+             // Prevent falling through floor (simple boundary)
+             if (player.y + player.height > CANVAS_HEIGHT) {
+                 player.y = CANVAS_HEIGHT - player.height;
+                 player.velocityY = 0;
+                 player.isJumping = false;
+                 player.jumpCount = 0; // Reset jumps on hitting absolute bottom
+             }
+
+
+            // Handle hit flash timer
+            if (player.isHit) {
+                player.hitTimer--;
+                if (player.hitTimer <= 0) {
+                    player.isHit = false;
+                }
+            }
+
+            // Handle shooting animation timer
+            if (player.isShooting) {
+                 player.shootTimer--;
+                 if (player.shootTimer <= 0) {
+                     player.isShooting = false;
+                      // Reset animation if non-looping?
+                      // playerAnimations.shoot.reset();
+                 }
+            }
+
+
+            // Check for game over
+            if (player.health <= 0 && gameActive) { // Prevent multiple calls
+                gameOver();
+            }
+
+             // Update animations based on state
+             // Ensure animations exist before updating
+             if (player.isJumping && playerAnimations.jump) {
+                 playerAnimations.jump.update();
+             } else if (player.isCrouching && playerAnimations.crouch) {
+                 playerAnimations.crouch.update();
+             } else if (player.isShooting && playerAnimations.shoot) {
+                 // Use shoot anim ONLY when shooting? Or blend?
+                 playerAnimations.shoot.update();
+             } else if (Math.abs(player.velocityX) > 0.5 && playerAnimations.run) {
+                 playerAnimations.run.update();
+             } else if (playerAnimations.idle) {
+                 playerAnimations.idle.update();
+             }
+        }
+
+        // --- Jump and Dash Mechanics ---
+
+        function updatePlayerJump() {
+             // Standard jump from ground
+             if (!player.isJumping) {
+                 player.velocityY = -JUMP_FORCE;
+                 player.isJumping = true;
+                 player.jumpCount = 1; // First jump used
+                 playSound('jump', 0.6);
+                 // Jump dust
+                 createExplosion(player.x + player.width / 2, player.y + player.height, [200, 200, 200], 10, 3, [0.5, 2], [15, 30], 0.05);
+             }
+             // Double jump
+             else if (player.jumpCount < 2 && player.keys >= 3) { // Requires 3+ keys
+                 player.velocityY = -JUMP_FORCE * 0.85; // Slightly weaker second jump
+                 player.jumpCount++;
+                 playSound('jump', 0.7, 1.2); // Higher pitch for second jump
+                 // Double jump visual effect
+                 createExplosion(player.x + player.width / 2, player.y + player.height / 2, [150, 150, 255], 15, 4, [1, 3], [20, 40], 0.02);
+             }
+        }
+
+        function playerDash() {
+             if (player.dashCooldown <= 0 && player.armor >= 5) { // Requires 5+ armor
+                 player.isDashing = true;
+                 player.dashTimer = 12; // Duration of dash (frames)
+                 player.dashCooldown = 100; // Cooldown period (frames)
+                 player.invulnerable = true; // Invulnerable during dash
+                 player.invulnerableTimer = 15; // Invulnerability duration slightly longer
+
+                 // Apply strong horizontal velocity, reset vertical
+                 player.velocityX = PLAYER_SPEED * 3.5 * player.direction;
+                 player.velocityY = 0; // Optional: cancel vertical motion
+
+                 playSound('dash', 0.7);
+
+                 // Create dash trail effect (particles behind player)
+                 const trailX = player.x + (player.direction > 0 ? 0 : player.width);
+                 createExplosion(
+                     trailX,
+                     player.y + player.height / 2,
+                     [100, 150, 255], // Blueish trail
+                     15, 4, [2, 5], [10, 20], 0.01); // Fast, short-lived particles
+             }
+        }
+
+         // --- Power-up System ---
+         function activatePowerUp(type) { // Example: Called by picking up an item
+            player.powerUpActive = true;
+            player.powerUpTimer = 60 * 20; // 20 seconds duration
+            player.powerUpType = type;
+            player.speedMultiplier = 1; // Reset multipliers
+            player.damageMultiplier = 1;
+            player.shield = false;
+
+            switch (type) {
+                case POWERUPS.SPEED:
+                    player.speedMultiplier = 1.6;
+                    break;
+                case POWERUPS.DAMAGE:
+                    player.damageMultiplier = 2.0;
+                    break;
+                case POWERUPS.SHIELD:
+                    player.shield = true; // Visual shield applied in rendering
+                    break;
+            }
+            playSound('powerup', 0.8);
+        }
+
+        function updatePowerUp() {
+            if (player.powerUpActive) {
+                player.powerUpTimer--;
+                if (player.powerUpTimer <= 0) {
+                    player.powerUpActive = false;
+                    player.powerUpType = null;
+                    // Reset effects
+                    player.speedMultiplier = 1;
+                    player.damageMultiplier = 1;
+                    player.shield = false;
+                     console.log("Power-up expired");
+                }
+            }
+            // Specific door powerup handled separately for now
+            if (player.doorPowerUpActive) { // Need to add this property if using door powerup timer
+                 player.doorPowerUpTimer--;
+                 if(player.doorPowerUpTimer <= 0) {
+                     player.doorPowerUpActive = false;
+                     // Reset specific door powerup effects if any
+                 }
+            }
+        }
+
+        // --- Update Bullets, Enemies, Boss ---
+
+        function updateBullets() {
+            // Update player bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].velocityX;
+                // Remove bullets that are off-screen (relative to viewport)
+                const screenX = bullets[i].x - platformScroll;
+                if (screenX < -bullets[i].width || screenX > CANVAS_WIDTH) {
+                    bullets.splice(i, 1);
+                }
+            }
+
+            // Update enemy bullets
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                enemyBullets[i].x += enemyBullets[i].velocityX;
+                // Add vertical movement if bullet has it (e.g., boss spread shot)
+                if (enemyBullets[i].velocityY) {
+                   enemyBullets[i].y += enemyBullets[i].velocityY;
+                   // Add slight gravity to projectiles?
+                   // enemyBullets[i].velocityY += 0.05;
+                }
+
+                // Remove bullets off-screen
+                const screenX = enemyBullets[i].x - platformScroll;
+                if (screenX < -enemyBullets[i].width || screenX > CANVAS_WIDTH || enemyBullets[i].y > CANVAS_HEIGHT || enemyBullets[i].y < -enemyBullets[i].height ) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+        }
+
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) { // Iterate backwards if removing elements
+                const enemy = enemies[i];
+                const screenX = enemy.x - platformScroll;
+
+                // Only update if potentially on screen or nearby
+                if (screenX < CANVAS_WIDTH + 200 && screenX > -enemy.width - 200) {
+
+                     // Basic AI: Patrol, maybe chase later
+                     if (enemy.aiState === 'patrol') {
+                         enemy.x += enemy.speed * enemy.direction;
+                         // Reverse direction at patrol points
+                         if (enemy.x <= enemy.patrolPoint1 && enemy.direction < 0) {
+                             enemy.direction = 1;
+                         } else if (enemy.x >= enemy.patrolPoint2 && enemy.direction > 0) {
+                             enemy.direction = -1;
+                         }
+                     }
+
+                     // Handle hit animation timer
+                     if (enemy.isHit) {
+                         enemy.hitTimer--;
+                         if (enemy.hitTimer <= 0) {
+                             enemy.isHit = false;
+                         }
+                     }
+
+                     // Enemy shooting logic
+                     enemy.shootCooldown--;
+                     if (enemy.shootCooldown <= 0) {
+                         // Simple line-of-sight check (horizontal proximity and facing player)
+                         const distanceX = (player.x + player.width/2) - (screenX + enemy.width/2);
+                         const distanceY = Math.abs((player.y + player.height/2) - (enemy.y + enemy.height/2));
+
+                         // Check if player is within reasonable vertical range and horizontal distance
+                         // And enemy is facing the player
+                         if (distanceY < enemy.height * 2 && Math.abs(distanceX) < CANVAS_WIDTH * 0.7 &&
+                             ((enemy.direction > 0 && distanceX > 0) || (enemy.direction < 0 && distanceX < 0)))
+                         {
+                             enemyShoot(enemy);
+                             enemy.shootCooldown = enemy.shootDelay + Math.random() * 30; // Add slight randomness
+                         } else {
+                             // If player not in sight, maybe reset cooldown slightly longer?
+                             enemy.shootCooldown = 30; // Check again soon
+                         }
+                     }
+
+                     // Basic gravity for enemies (to fall off platforms)
+                     // Needs collision detection with platforms for enemies too! (More complex)
+                     // enemy.y += GRAVITY * 2; // Simple fall for now
+
+
+                } else {
+                    // Enemy is far off-screen, maybe skip intensive updates?
+                }
+
+                 // Check if enemy health <= 0 AFTER updates
+                 if (enemy.health <= 0) {
+                     // Create death explosion
+                     createExplosion(enemy.x, enemy.y + enemy.height / 2, [255, 80, 80], 30, 6, [1, 5], [40, 70]);
+                     playSound('explosion', 0.6);
+                     enemies.splice(i, 1); // Remove enemy
+                 }
+            }
+        }
+
+        function updateBoss() {
+            if (!boss) return;
+
+             const screenX = boss.x - platformScroll;
+
+             // Only update if potentially on screen or nearby
+             if (screenX < CANVAS_WIDTH + 100 && screenX > -boss.width - 100) {
+                 // Boss AI State Machine (Simple Example)
+                 boss.patternTimer--;
+
+                 if (boss.patternTimer <= 0) {
+                     boss.attackPattern = Math.floor(Math.random() * 3); // Switch pattern
+                     boss.patternTimer = 120 + Math.random() * 180; // Duration for next pattern
+                     boss.aiState = 'attacking';
+                      console.log(`Boss changing pattern to: ${boss.attackPattern}`);
+                 }
+
+                 // Boss Shooting based on pattern
+                 if (boss.aiState === 'attacking') {
+                     boss.shootCooldown--;
+                     if (boss.shootCooldown <= 0) {
+                         bossShooting(); // Execute the current pattern's attack
+                         boss.shootCooldown = boss.shootDelay; // Reset cooldown
+                     }
+                 }
+
+                 // Handle hit animation
+                 if (boss.isHit) {
+                     boss.hitTimer--;
+                     if (boss.hitTimer <= 0) {
+                         boss.isHit = false;
+                     }
+                 }
+
+             } // End on-screen check
+
+             // Check if boss health <= 0 AFTER updates
+             if (boss.health <= 0 && gameActive) { // Check gameActive to prevent multiple calls
+                 levelComplete(); // Trigger level complete sequence
+                 // Create massive explosion
+                 createExplosion(boss.x + boss.width / 2, boss.y + boss.height / 2, [255, 150, 50], 100, 10, [2, 8], [60, 120]);
+                  playSound('explosion', 1.0);
+                  playSound('powerup', 1.0); // Victory sound
+                 boss = null; // Remove boss object
+             }
+        }
+
+        // --- Shooting Functions ---
+
+        function playerShoot() {
+            if (player.ammo <= 0 || player.isShooting) return; // Prevent shooting if out of ammo or already shooting
+
+            player.ammo--;
+            player.isShooting = true;
+            player.shootTimer = 10; // Duration of shooting animation/state
+
+            playSound('shoot', 0.5, 1.0 + Math.random() * 0.2); // Add pitch variation
+
+            // Calculate bullet spawn position based on direction and crouch state
+            const bulletYOffset = player.isCrouching ? player.height * 0.4 : player.height * 0.45; // Adjust Y offset
+            const bulletXOffset = player.direction > 0 ? player.width - 5 : 5; // Adjust X offset from edge
+
+            bullets.push({
+                x: player.x + bulletXOffset,
+                y: player.y + bulletYOffset, // Use player's current y
+                width: 10,
+                height: 5,
+                velocityX: BULLET_SPEED * player.direction,
+                // Apply damage multiplier
+                damage: (player.powerUpActive && player.powerUpType === POWERUPS.DAMAGE) ? 20 : 10
+            });
+
+            // Muzzle flash particle effect
+             createExplosion(
+                 player.x + (player.direction > 0 ? player.width : 0),
+                 player.y + bulletYOffset,
+                 [255, 255, 100], 5, 3, [1, 3], [5, 10], 0); // Short-lived, no gravity
+        }
+
+        function enemyShoot(enemy) {
+             // Determine direction towards player more accurately
+             const playerCenterX = player.x + player.width / 2;
+             const enemyCenterX = enemy.x + enemy.width / 2; // Use world X
+             const shootDirection = playerCenterX > enemyCenterX ? 1 : -1;
+
+             // Ensure enemy faces player before shooting? (Optional rule)
+             // enemy.direction = shootDirection;
+
+             playSound('enemyShoot', 0.3, 0.8 + Math.random() * 0.4);
+
+             enemyBullets.push({
+                 // Spawn bullet from center of enemy facing player
+                 x: enemy.x + enemy.width / 2 + (shootDirection * (enemy.width / 2)), // Start slightly ahead
+                 y: enemy.y + enemy.height / 2,
+                 width: 8,
+                 height: 4,
+                 velocityX: ENEMY_BULLET_SPEED * shootDirection,
+                 velocityY: 0, // Basic horizontal shot
+                 damage: 5 + levelConfig.currentLevel // Damage scales slightly
+             });
+        }
+
+        function bossShooting() {
+            if (!boss) return;
+
+             const bossCenterX = boss.x + boss.width / 2;
+             const bossCenterY = boss.y + boss.height / 2;
+             const shootDirection = -1; // Boss typically faces left towards player
+
+            switch (boss.attackPattern) {
+                case 0: // Single powerful shot
+                    playSound('boss', 0.7, 0.8);
+                    enemyBullets.push({
+                        x: bossCenterX + (shootDirection * boss.width / 2),
+                        y: bossCenterY,
+                        width: 12, height: 12, // Larger bullet
+                        velocityX: ENEMY_BULLET_SPEED * 1.3 * shootDirection,
+                        velocityY: 0,
+                        damage: 15 + levelConfig.currentLevel * 2
+                    });
+                    break;
+                case 1: // Spread shot (3 bullets)
+                    playSound('boss', 0.5, 1.0);
+                    for (let i = -1; i <= 1; i++) {
+                        const angle = i * 0.25; // Angle spread
+                        enemyBullets.push({
+                            x: bossCenterX + (shootDirection * boss.width / 2),
+                            y: bossCenterY,
+                            width: 8, height: 8,
+                            velocityX: ENEMY_BULLET_SPEED * Math.cos(angle) * shootDirection,
+                            velocityY: ENEMY_BULLET_SPEED * Math.sin(angle),
+                            damage: 10 + levelConfig.currentLevel
+                        });
+                    }
+                    break;
+                case 2: // Rapid fire burst (3 shots)
+                    for (let i = 0; i < 3; i++) {
+                         // Use setTimeout to delay shots slightly
+                         setTimeout(() => {
+                             if (boss && gameActive) { // Check if boss still exists and game is active
+                                 playSound('boss', 0.4, 1.2 + i * 0.1);
+                                 enemyBullets.push({
+                                     x: bossCenterX + (shootDirection * boss.width / 2),
+                                     y: bossCenterY + (Math.random() - 0.5) * 20, // Slight vertical variance
+                                     width: 6, height: 6,
+                                     velocityX: ENEMY_BULLET_SPEED * 1.1 * shootDirection,
+                                     velocityY: (Math.random() - 0.5) * 1, // Very slight vertical drift
+                                     damage: 8 + levelConfig.currentLevel
+                                 });
+                             }
+                         }, i * 100); // 100ms delay between shots in burst
+                    }
+                    // Reset cooldown after the burst duration
+                    boss.shootCooldown = boss.shootDelay + 15; // Add extra delay after burst
+                    break;
+            }
+        }
+
+        // --- Collision Detection ---
+
+        function checkCollisions() {
+            // Player collision with platforms (Ground Check)
+            let onGround = false;
+            const playerBottom = player.y + player.height;
+
+            for (let i = 0; i < platforms.length; i++) {
+                const platform = platforms[i];
+                const platformScreenX = platform.x - platformScroll;
+                const platformTop = platform.y;
+
+                // Check horizontal overlap first for efficiency
+                if (player.x + player.width > platformScreenX && player.x < platformScreenX + platform.width) {
+                     // Check vertical collision: landing on top
+                     // Player's bottom edge was above or at platform top last frame, and is now below or at it
+                     // And player is moving downwards
+                     if (player.velocityY >= 0 &&
+                         playerBottom >= platformTop &&
+                         (player.y + player.height - player.velocityY * 1.1) <= platformTop) // Check previous position roughly
+                     {
+                         player.y = platformTop - player.height; // Correct position
+                         player.velocityY = 0;
+                         player.isJumping = false;
+                         player.jumpCount = 0; // Reset jumps upon landing
+                         onGround = true;
+                         // break; // Found ground, no need to check other platforms for landing
+                     }
+                     // TODO: Add ceiling collision (hitting underside of platform)
+                     // TODO: Add side collision with platforms
+                }
+            }
+             // If no ground collision detected this frame, player is potentially falling/jumping
+             // Note: This simple 'onGround' check might fail on slopes or fast movement.
+             // More robust checks involve casting rays or checking corners.
+
+
+            // --- Interaction Collisions (Lockers, Doors) ---
+            const interactionCheckBox = {
+                 x: player.x + player.width / 2 - 10, // Small box in front of player center
+                 y: player.y + player.height / 2 - 10,
+                 width: 20,
+                 height: 20
+            };
+
+            // Check player collision with lockers for searching
+            for (let i = 0; i < lockers.length; i++) {
+                const locker = lockers[i];
+                const lockerScreenX = locker.x - platformScroll;
+                if (!locker.searched &&
+                    interactionCheckBox.x < lockerScreenX + locker.width &&
+                    interactionCheckBox.x + interactionCheckBox.width > lockerScreenX &&
+                    interactionCheckBox.y < locker.y + locker.height &&
+                    interactionCheckBox.y + interactionCheckBox.height > locker.y)
+                {
+                    // Player is near an unsearched locker - prompt could appear
+                    // Actual search triggered by key press ('e') - handled in handleKeyDown
+                }
+            }
+
+            // Check player collision with doors for opening
+            for (let i = 0; i < doors.length; i++) {
+                const door = doors[i];
+                const doorScreenX = door.x - platformScroll;
+                 if (!door.isOpen &&
+                     interactionCheckBox.x < doorScreenX + door.width &&
+                     interactionCheckBox.x + interactionCheckBox.width > doorScreenX &&
+                     interactionCheckBox.y < door.y + door.height &&
+                     interactionCheckBox.y + interactionCheckBox.height > door.y)
+                 {
+                     // Player is near a closed door - prompt could appear
+                     // Actual opening triggered by key press ('e') - handled in handleKeyDown
+                 }
+            }
+
+            // --- Hiding Behind Crates ---
+            player.isHidden = false;
+            if (player.isCrouching) {
+                for (let i = 0; i < crates.length; i++) {
+                    const crate = crates[i];
+                    const crateScreenX = crate.x - platformScroll;
+                    // Check if player center is horizontally behind crate
+                    if (player.x + player.width / 2 > crateScreenX &&
+                        player.x + player.width / 2 < crateScreenX + crate.width &&
+                        player.y + player.height > crate.y) // Ensure player is roughly at crate level vertically
+                    {
+                         player.isHidden = true;
+                         break; // Hidden behind one crate is enough
+                    }
+                }
+            }
+
+            // --- Bullet Collisions ---
+
+            // Player bullet collision with enemies and boss
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                 let bulletHit = false;
+                 const bullet = bullets[i];
+                 const bulletScreenX = bullet.x - platformScroll; // Use scrolled bullet X for checking
+
+                 // Check collision with enemies
+                 for (let j = enemies.length - 1; j >= 0; j--) {
+                     const enemy = enemies[j];
+                     const enemyScreenX = enemy.x - platformScroll;
+
+                     if (bulletScreenX + bullet.width > enemyScreenX &&
+                         bulletScreenX < enemyScreenX + enemy.width &&
+                         bullet.y + bullet.height > enemy.y &&
+                         bullet.y < enemy.y + enemy.height)
+                     {
+                         // Enemy hit
+                         enemy.health -= bullet.damage;
+                         enemy.isHit = true;
+                         enemy.hitTimer = 10; // Hit flash duration
+                         playSound('hit', 0.4, 1.2); // Enemy hit sound
+                         // Create hit particle effect
+                         createExplosion(bullet.x, bullet.y, [255, 0, 0], 5, 2, [1, 3], [10, 20]);
+
+                         bullets.splice(i, 1); // Remove bullet
+                         bulletHit = true;
+                         break; // Bullet hits one enemy and disappears
+                     }
+                 }
+
+                 if (bulletHit) continue; // Go to next bullet if this one hit an enemy
+
+                 // Check collision with boss (if exists and bullet wasn't destroyed)
+                 if (boss) {
+                     const bossScreenX = boss.x - platformScroll;
+                     if (bulletScreenX + bullet.width > bossScreenX &&
+                         bulletScreenX < bossScreenX + boss.width &&
+                         bullet.y + bullet.height > boss.y &&
+                         bullet.y < boss.y + boss.height)
+                     {
+                         // Boss hit
+                         boss.health -= bullet.damage;
+                         boss.isHit = true;
+                         boss.hitTimer = 15; // Longer flash for boss
+                         playSound('hit', 0.6, 0.8); // Boss hit sound (deeper)
+                         createExplosion(bullet.x, bullet.y, [255, 100, 0], 10, 4, [1, 4], [15, 30]);
+
+                         bullets.splice(i, 1); // Remove bullet
+                         // No break needed here as loop will end anyway
+                     }
+                 }
+            } // End player bullet loop
+
+
+            // Enemy bullet collision with player
+             if (!player.invulnerable && !player.shield) { // Only check if not invulnerable or shielded
+                 for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                     const bullet = enemyBullets[i];
+                     const bulletScreenX = bullet.x - platformScroll;
+
+                     // Check collision box - use crouch height if applicable
+                     const playerCurrentHeight = player.isCrouching ? player.height / 2 : player.height;
+                     const playerCurrentY = player.isCrouching ? player.y + player.height / 2 : player.y;
+
+                     if (bulletScreenX + bullet.width > player.x &&
+                         bulletScreenX < player.x + player.width &&
+                         bullet.y + bullet.height > playerCurrentY &&
+                         bullet.y < playerCurrentY + playerCurrentHeight &&
+                         !player.isHidden) // Cannot hit if hidden
+                     {
+                         // Player hit
+                         let damage = bullet.damage;
+                         // Apply armor damage reduction (simple linear reduction)
+                         damage = Math.max(1, damage - Math.floor(player.armor / 2)); // Each 2 armor reduces damage by 1
+
+                         player.health -= damage;
+                         player.isHit = true;
+                         player.hitTimer = 25; // Hit flash duration
+                         player.invulnerable = true; // Brief invulnerability after hit
+                         player.invulnerableTimer = 30;
+
+                         playSound('hit', 0.7, 0.9); // Player hit sound
+                         // Create hit particle effect on player
+                         createExplosion(player.x + player.width / 2, playerCurrentY + playerCurrentHeight / 2, [200, 200, 255], 10, 3);
+
+                         enemyBullets.splice(i, 1); // Remove bullet
+                         // Don't break, player can be hit by multiple bullets in one frame
+                     }
+                 }
+             } else if (player.shield) {
+                 // Check enemy bullet collision with shield
+                  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                      const bullet = enemyBullets[i];
+                      const bulletScreenX = bullet.x - platformScroll;
+                      const playerCurrentHeight = player.isCrouching ? player.height / 2 : player.height;
+                      const playerCurrentY = player.isCrouching ? player.y + player.height / 2 : player.y;
+                      const shieldRadius = playerCurrentHeight * 0.8;
+                      const shieldCenterX = player.x + player.width / 2;
+                      const shieldCenterY = playerCurrentY + playerCurrentHeight / 2;
+
+                      // Simple circle collision for shield
+                      // Check distance from bullet center to shield center
+                      const distX = (bulletScreenX + bullet.width/2) - shieldCenterX;
+                      const distY = (bullet.y + bullet.height/2) - shieldCenterY;
+                      const distance = Math.sqrt(distX*distX + distY*distY);
+
+                      if (distance < shieldRadius + bullet.width/2) { // Approximate collision
+                          // Bullet hit shield
+                          playSound('hit', 0.3, 1.5); // Shield hit sound (ting!)
+                          // Shield hit particles
+                           createExplosion(bullet.x, bullet.y, [0, 200, 255], 8, 2, [0.5, 2], [10, 15]);
+                          enemyBullets.splice(i, 1); // Remove bullet
+                      }
+                  }
+             } // End shield check
+
+        } // End checkCollisions
+
+
+        // --- Interactions ---
+         function tryInteract() {
+             const interactionCheckBox = {
+                 x: player.x + player.width / 2 - 15 * player.direction, // Check slightly in front
+                 y: player.y + player.height / 2 - 10,
+                 width: 30,
+                 height: 20
+             };
+
+             // Try interacting with Lockers
+             for (let i = 0; i < lockers.length; i++) {
+                 const locker = lockers[i];
+                 const lockerScreenX = locker.x - platformScroll;
+                 if (!locker.searched &&
+                     interactionCheckBox.x < lockerScreenX + locker.width &&
+                     interactionCheckBox.x + interactionCheckBox.width > lockerScreenX &&
+                     interactionCheckBox.y < locker.y + locker.height &&
+                     interactionCheckBox.y + interactionCheckBox.height > locker.y)
+                 {
+                     searchLocker(locker);
+                     return; // Interact with only one thing per press
+                 }
+             }
+
+              // Try interacting with Doors
+             for (let i = 0; i < doors.length; i++) {
+                 const door = doors[i];
+                 const doorScreenX = door.x - platformScroll;
+                  if (!door.isOpen &&
+                      interactionCheckBox.x < doorScreenX + door.width &&
+                      interactionCheckBox.x + interactionCheckBox.width > doorScreenX &&
+                      interactionCheckBox.y < door.y + door.height &&
+                      interactionCheckBox.y + interactionCheckBox.height > door.y)
+                  {
+                      if (player.keys >= door.keysRequired) {
+                         openDoor(door);
+                         return; // Interact with only one thing per press
+                      } else {
+                           playSound('hit', 0.5, 0.7); // Locked sound?
+                           console.log(`Door requires ${door.keysRequired} keys. You have ${player.keys}.`);
+                           // Maybe display message on screen
+                      }
+                  }
+             }
+         }
+
+        function searchLocker(locker) {
+            locker.searched = true;
+            playSound('pickup', 0.6);
+
+            let itemFound = 'Nothing';
+            // Give reward based on locker type
+            switch (locker.type) {
+                case 'ammo':
+                    const ammoAmount = 15 + Math.floor(Math.random() * 15);
+                    player.ammo = Math.min(player.maxAmmo, player.ammo + ammoAmount);
+                    itemFound = `${ammoAmount} Ammo`;
+                    break;
+                case 'armor':
+                    if (player.armor < player.maxArmor) {
+                         player.armor += 1;
+                         itemFound = 'Armor Plate';
+                    } else {
+                         itemFound = 'Armor Full';
+                    }
+                    break;
+                case 'key':
+                    player.keys += 1;
+                    itemFound = 'Key';
+                    break;
+            }
+            console.log(`Searched locker: Found ${itemFound}`);
+            // Update UI immediately
+            updateUI();
+        }
+
+        function openDoor(door) {
+            if (player.keys >= door.keysRequired) {
+                door.isOpen = true;
+                player.keys -= door.keysRequired;
+                playSound('door', 0.8);
+
+                // Trigger boss fight or next section
+                console.log("Door Opened!");
+                createBoss(); // Spawn the boss when the door opens
+
+                // Maybe give a small reward for opening the door?
+                // player.health = Math.min(player.maxHealth, player.health + 20); // Small heal
+
+                // Update UI
+                updateUI();
+            }
+        }
+
+        // --- Game State Functions ---
+
+        function gameOver() {
+            if (!gameActive) return; // Prevent multiple calls
+            console.log("Game Over triggered");
+            gameActive = false;
+            playSound('gameover', 0.8);
+            document.getElementById('gameOverScreen').style.display = 'block';
+        }
+
+        function levelComplete() {
+             if (!gameActive) return; // Prevent multiple calls
+             console.log("Level Complete triggered");
+             gameActive = false;
+             // Stop boss sounds if any were playing continuously?
+             document.getElementById('levelCompleteScreen').style.display = 'block';
+             // Play victory sound if not already played by boss death
+             // playSound('powerup', 1.0);
+        }
+
+        function restartGame() {
+            console.log("Restarting Level...");
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.getElementById('levelCompleteScreen').style.display = 'none'; // Hide this too if restarting
+            createLevel(levelConfig.currentLevel); // Recreate the current level
+            // gameActive is set to true inside createLevel
+        }
+
+        // ==========================================
+        // IMPROVED RENDERING
+        // ==========================================
+        function render() { // Renamed improvedRender to render
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // Draw parallax background
+            drawBackground();
+
+            // --- Draw Game Objects (Platforms, Items, Enemies, Boss) ---
+            // Use world coordinates adjusted by platformScroll
+
+            // Draw platforms
+            ctx.fillStyle = '#654321'; // Darker brown for platforms
+             for (let i = 0; i < platforms.length; i++) {
+                 const platform = platforms[i];
+                 const screenX = platform.x - platformScroll;
+                 // Simple Culling: Only draw if visible or nearby
+                 if (screenX < CANVAS_WIDTH && screenX + platform.width > 0) {
+                     ctx.fillRect(screenX, platform.y, platform.width, platform.height);
+                 }
+             }
+
+            // Draw lockers (using sprite sheet frames)
+            for (let i = 0; i < lockers.length; i++) {
+                const locker = lockers[i];
+                const screenX = locker.x - platformScroll;
+                 if (screenX < CANVAS_WIDTH && screenX + locker.width > 0) {
+                     const frameIndex = locker.searched ? 1 : 0; // Frame 0: closed, Frame 1: open
+                     const sourceX = frameIndex * 50; // Assuming 50px width per frame
+                      if (lockerSprite.complete && lockerSprite.naturalWidth > 0) {
+                           ctx.drawImage(
+                               lockerSprite,
+                               sourceX, 0, 50, 80, // Source rect for the frame
+                               screenX, locker.y, locker.width, locker.height // Destination rect
+                           );
+                       } else { // Fallback drawing
+                           ctx.fillStyle = locker.searched ? '#555555' : '#999999';
+                           ctx.fillRect(screenX, locker.y, locker.width, locker.height);
+                       }
+                 }
+            }
+
+            // Draw crates
+            for (let i = 0; i < crates.length; i++) {
+                const crate = crates[i];
+                const screenX = crate.x - platformScroll;
+                 if (screenX < CANVAS_WIDTH && screenX + crate.width > 0) {
+                     if (crateSprite.complete && crateSprite.naturalWidth > 0) {
+                         ctx.drawImage(crateSprite, screenX, crate.y, crate.width, crate.height);
+                     } else { // Fallback
+                          ctx.fillStyle = '#A0522D';
+                          ctx.fillRect(screenX, crate.y, crate.width, crate.height);
+                     }
+                     // Optional: Draw crate details outline
+                     // ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 2;
+                     // ctx.strokeRect(screenX + 5, crate.y + 5, crate.width - 10, crate.height - 10);
+                 }
+            }
+
+            // Draw doors (using sprite sheet frames)
+            for (let i = 0; i < doors.length; i++) {
+                const door = doors[i];
+                const screenX = door.x - platformScroll;
+                 if (screenX < CANVAS_WIDTH && screenX + door.width > 0) {
+                     const frameIndex = door.isOpen ? 1 : 0; // Frame 0: closed, Frame 1: open
+                     const sourceX = frameIndex * 80; // Assuming 80px width per frame
+                      if (doorSprite.complete && doorSprite.naturalWidth > 0) {
+                           ctx.drawImage(
+                               doorSprite,
+                               sourceX, 0, 80, 120, // Source rect for the frame
+                               screenX, door.y, door.width, door.height // Destination rect
+                           );
+                       } else { // Fallback
+                           ctx.fillStyle = door.isOpen ? '#008000' : '#8B0000'; // Dark Green / Dark Red
+                           ctx.fillRect(screenX, door.y, door.width, door.height);
+                       }
+                 }
+            }
+
+             // Draw bullets (Player and Enemy)
+             ctx.fillStyle = '#FFFF00'; // Player bullets
+             for (let i = 0; i < bullets.length; i++) {
+                 const bullet = bullets[i];
+                 const screenX = bullet.x - platformScroll;
+                 if (bulletSprite.complete && bulletSprite.naturalWidth > 0) {
+                     ctx.drawImage(bulletSprite, screenX, bullet.y, bullet.width, bullet.height);
+                 } else {
+                      ctx.fillRect(screenX, bullet.y, bullet.width, bullet.height);
+                 }
+             }
+
+             ctx.fillStyle = '#FF6347'; // Enemy bullets (Tomato color)
+             for (let i = 0; i < enemyBullets.length; i++) {
+                 const bullet = enemyBullets[i];
+                  const screenX = bullet.x - platformScroll;
+                  if (enemyBulletSprite.complete && enemyBulletSprite.naturalWidth > 0) {
+                     ctx.drawImage(enemyBulletSprite, screenX, bullet.y, bullet.width, bullet.height);
+                 } else {
+                     ctx.fillRect(screenX, bullet.y, bullet.width, bullet.height);
+                 }
+             }
+
+
+            // Draw enemies
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+                const screenX = enemy.x - platformScroll;
+
+                if (screenX < CANVAS_WIDTH && screenX + enemy.width > 0) {
+                    // Flash effect when hit
+                    ctx.globalAlpha = (enemy.isHit && Math.floor(Date.now() / 100) % 2 === 0) ? 0.5 : 1.0;
+
+                     if (enemySprite.complete && enemySprite.naturalWidth > 0) {
+                         // Simple enemy draw (no animation for now)
+                         // Flip based on direction
+                          ctx.save();
+                          if(enemy.direction < 0) {
+                              ctx.translate(screenX + enemy.width, enemy.y);
+                              ctx.scale(-1, 1);
+                              ctx.drawImage(enemySprite, 0, 0, enemy.width, enemy.height);
+                          } else {
+                               ctx.drawImage(enemySprite, screenX, enemy.y, enemy.width, enemy.height);
+                          }
+                          ctx.restore();
+
+                     } else { // Fallback
+                         ctx.fillStyle = '#FF0000';
+                         ctx.fillRect(screenX, enemy.y, enemy.width, enemy.height);
+                     }
+                    ctx.globalAlpha = 1.0; // Reset alpha
+
+                    // Draw enemy health bar
+                    if (enemy.health < enemy.maxHealth) {
+                        const healthPercent = Math.max(0, enemy.health / enemy.maxHealth);
+                        const barWidth = enemy.width * 0.8;
+                        const barX = screenX + (enemy.width - barWidth) / 2;
+                        const barY = enemy.y - 12;
+                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                        ctx.fillRect(barX, barY, barWidth, 6);
+                        ctx.fillStyle = healthPercent > 0.5 ? '#00FF00' : (healthPercent > 0.2 ? '#FFFF00' : '#FF0000');
+                        ctx.fillRect(barX, barY, barWidth * healthPercent, 6);
+                         ctx.strokeStyle = '#FFFFFF';
+                         ctx.strokeRect(barX, barY, barWidth, 6);
+                    }
+                }
+            }
+
+            // Draw boss
+            if (boss) {
+                const screenX = boss.x - platformScroll;
+                 if (screenX < CANVAS_WIDTH && screenX + boss.width > 0) {
+                    // Flash effect when hit
+                     ctx.globalAlpha = (boss.isHit && Math.floor(Date.now() / 100) % 2 === 0) ? 0.5 : 1.0;
+
+                     if (bossSprite.complete && bossSprite.naturalWidth > 0) {
+                         // Boss always faces left (towards player assumed)
+                           ctx.save();
+                           ctx.translate(screenX + boss.width, boss.y);
+                           ctx.scale(-1, 1);
+                           ctx.drawImage(bossSprite, 0, 0, boss.width, boss.height);
+                           ctx.restore();
+                     } else { // Fallback
+                         ctx.fillStyle = '#8B0000'; // Dark Red
+                         ctx.fillRect(screenX, boss.y, boss.width, boss.height);
+                     }
+                     ctx.globalAlpha = 1.0;
+
+                     // Draw boss health bar (larger, above boss)
+                     const healthPercent = Math.max(0, boss.health / boss.maxHealth);
+                     const barWidth = boss.width * 1.5;
+                     const barX = screenX + (boss.width - barWidth) / 2;
+                     const barY = boss.y - 25;
+                     ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                     ctx.fillRect(barX, barY, barWidth, 12);
+                     ctx.fillStyle = '#FF0000'; // Always red for boss health
+                     ctx.fillRect(barX, barY, barWidth * healthPercent, 12);
+                      ctx.strokeStyle = '#FFFFFF';
+                      ctx.strokeRect(barX, barY, barWidth, 12);
+                 }
+            }
+
+            // Draw particles (should be drawn after background but potentially before player/enemies depending on desired layering)
+            drawParticles(ctx); // Pass context
+
+            // Draw player (using animation system)
+            drawPlayer(ctx); // Pass context
+
+            // Draw HUD (on top of everything)
+            enhancedHUD(ctx); // Pass context
+        }
+
+
+        function drawPlayer(ctx) {
+            // Determine player's visual state
+             const playerCurrentHeight = player.isCrouching ? player.height / 2 : player.height;
+             const playerCurrentY = player.isCrouching ? player.y + player.height / 2 : player.y;
+             let currentAnimation = playerAnimations.idle; // Default
+
+            // Select appropriate animation object
+            if (player.isJumping && playerAnimations.jump) {
+                 currentAnimation = playerAnimations.jump;
+            } else if (player.isCrouching && playerAnimations.crouch) {
+                 currentAnimation = playerAnimations.crouch;
+            } else if (player.isShooting && playerAnimations.shoot) { // Prioritize shooting anim?
+                 currentAnimation = playerAnimations.shoot;
+            } else if (Math.abs(player.velocityX) > 0.5 && playerAnimations.run) {
+                 currentAnimation = playerAnimations.run;
+            }
+
+            // Apply effects (flashing) before drawing
+            ctx.save(); // Save context state
+            if ((player.isHit || player.invulnerable) && Math.floor(Date.now() / 100) % 2 === 0) {
+                ctx.globalAlpha = 0.4; // Make player semi-transparent
+            }
+
+            // Draw the animation frame
+            if (currentAnimation) {
+                 currentAnimation.draw(ctx, player.x, playerCurrentY, player.width, playerCurrentHeight, player.direction);
+            } else {
+                 // Fallback: Draw blue rectangle if animations fail
+                 ctx.fillStyle = '#0000FF';
+                 ctx.fillRect(player.x, playerCurrentY, player.width, playerCurrentHeight);
+            }
+
+
+            // Draw Power-up / Shield effects OVER the player sprite
+            ctx.globalAlpha = 1.0; // Reset alpha for effects if it was changed
+
+            // Draw power-up aura
+            if (player.powerUpActive) {
+                 let auraColor = 'rgba(255, 255, 0, 0.2)'; // Default yellow
+                 if (player.powerUpType === POWERUPS.DAMAGE) auraColor = 'rgba(255, 100, 100, 0.2)';
+                 else if (player.powerUpType === POWERUPS.SPEED) auraColor = 'rgba(100, 100, 255, 0.2)';
+
+                 ctx.fillStyle = auraColor;
+                 ctx.beginPath();
+                 const auraRadius = Math.max(player.width, playerCurrentHeight) * 0.7;
+                 ctx.arc(player.x + player.width / 2, playerCurrentY + playerCurrentHeight / 2, auraRadius, 0, Math.PI * 2);
+                 ctx.fill();
+            }
+
+            // Draw shield bubble
+            if (player.shield) {
+                ctx.strokeStyle = 'rgba(0, 200, 255, 0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                const shieldRadius = Math.max(player.width, playerCurrentHeight) * 0.75;
+                ctx.arc(player.x + player.width / 2, playerCurrentY + playerCurrentHeight / 2, shieldRadius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.restore(); // Restore context state (like globalAlpha)
+        }
+
+        // Parallax Background
+        function drawBackground() {
+             // Base sky color
+             ctx.fillStyle = '#2c3e50'; // Darker blue night sky?
+             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+             // Simple Stars (Layer 0 - Static)
+             ctx.fillStyle = '#FFFFFF';
+             for(let i=0; i<100; i++) {
+                 // Store star positions somewhere or generate consistently? For now, random each frame.
+                 // To make static: generate positions once in init and store them.
+                 let starX = Math.random() * CANVAS_WIDTH;
+                 let starY = Math.random() * CANVAS_HEIGHT * 0.7; // Only in upper part
+                 let starSize = Math.random() * 1.5;
+                 ctx.fillRect(starX, starY, starSize, starSize);
+             }
+
+
+             // Draw distant mountains (slowest parallax: scroll * 0.1)
+             const scrollFactor1 = 0.1;
+             ctx.fillStyle = '#34495e'; // Very dark blue/grey
+             for (let i = -2; i < 5; i++) { // Draw more to cover edges
+                 const mountainBaseX = i * 600;
+                 const mountainDrawX = (mountainBaseX - platformScroll * scrollFactor1) % (600 * 7) - 600; // Modulo arithmetic for looping
+                 const mountainHeight = 250 + Math.sin(i * 1.5 + 1) * 100; // Use sin for shape
+
+                 ctx.beginPath();
+                 ctx.moveTo(mountainDrawX - 200, CANVAS_HEIGHT);
+                 ctx.lineTo(mountainDrawX + 300, CANVAS_HEIGHT - mountainHeight); // Peak
+                 ctx.lineTo(mountainDrawX + 800, CANVAS_HEIGHT);
+                 ctx.closePath();
+                 ctx.fill();
+             }
+
+             // Draw middle layer hills (medium parallax: scroll * 0.3)
+              const scrollFactor2 = 0.3;
+             ctx.fillStyle = '#7f8c8d'; // Greyer hills
+             for (let i = -3; i < 7; i++) { // Draw more for coverage
+                 const hillBaseX = i * 450;
+                 const hillDrawX = (hillBaseX - platformScroll * scrollFactor2) % (450 * 10) - 450;
+                 const hillHeight = 180 + Math.sin(i * 2.5 + 2) * 60;
+
+                 ctx.beginPath();
+                 ctx.moveTo(hillDrawX - 100, CANVAS_HEIGHT);
+                 ctx.quadraticCurveTo(hillDrawX + 225, CANVAS_HEIGHT - hillHeight * 1.5, hillDrawX + 550, CANVAS_HEIGHT);
+                 ctx.closePath();
+                 ctx.fill();
+             }
+
+             // Draw closest layer - maybe trees/bushes (fastest parallax: scroll * 0.6)
+             const scrollFactor3 = 0.6;
+             ctx.fillStyle = '#95a5a6'; // Lighter grey foreground silhouettes
+             for (let i = -4; i < 10; i++) { // Draw more for coverage
+                 const bushBaseX = i * 350;
+                 const bushDrawX = (bushBaseX - platformScroll * scrollFactor3) % (350 * 14) - 350;
+                 const bushHeight = 120 + Math.sin(i * 3.5 + 3) * 40;
+                 const bushWidth = 100 + Math.random() * 50;
+
+                 // Simple tree/bush shape
+                 ctx.beginPath();
+                 ctx.moveTo(bushDrawX, CANVAS_HEIGHT);
+                 ctx.lineTo(bushDrawX + bushWidth * 0.3, CANVAS_HEIGHT - bushHeight * 0.8);
+                 ctx.lineTo(bushDrawX + bushWidth * 0.7, CANVAS_HEIGHT - bushHeight);
+                 ctx.lineTo(bushDrawX + bushWidth, CANVAS_HEIGHT - bushHeight * 0.7);
+                 ctx.lineTo(bushDrawX + bushWidth * 1.2, CANVAS_HEIGHT);
+                 ctx.closePath();
+                 ctx.fill();
+             }
+        }
+
+
+        // Enhanced HUD (drawn on canvas)
+        function enhancedHUD(ctx) {
+            const hudX = 15;
+            const hudY = 15;
+            const hudWidth = 220;
+            let currentY = hudY + 25; // Start position for text/bars
+
+            // Background panel
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(hudX - 5, hudY - 5, hudWidth + 10, 280); // Adjust height as needed
+
+            // Level Display
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 18px Arial';
+            ctx.fillText(`Level: ${levelConfig.currentLevel}`, hudX, currentY);
+            currentY += 30;
+
+            // Health Bar
+            ctx.font = '16px Arial';
+            ctx.fillText(`Health: ${player.health} / ${player.maxHealth}`, hudX, currentY);
+            currentY += 8;
+            drawBar(ctx, hudX, currentY, hudWidth, 12, player.health / player.maxHealth, '#FF4136', '#85144b');
+            currentY += 25;
+
+            // Ammo Bar
+            ctx.fillText(`Ammo: ${player.ammo} / ${player.maxAmmo}`, hudX, currentY);
+            currentY += 8;
+            drawBar(ctx, hudX, currentY, hudWidth, 12, player.ammo / player.maxAmmo, '#FFDC00', '#b39b00');
+            currentY += 25;
+
+            // Armor Bar
+             ctx.fillText(`Armor: ${player.armor} / ${player.maxArmor}`, hudX, currentY);
+             currentY += 8;
+             drawBar(ctx, hudX, currentY, hudWidth, 12, player.armor / player.maxArmor, '#0074D9', '#003b6f');
+             currentY += 25;
+
+
+            // Keys Display (using icons)
+             ctx.fillText('Keys:', hudX, currentY);
+             const keyIconSize = 20;
+             const keySpacing = 25;
+             for (let i = 0; i < player.keys; i++) {
+                 // Draw a simple key shape
+                 ctx.fillStyle = '#FFDC00'; // Gold
+                 const keyX = hudX + 50 + i * keySpacing;
+                 ctx.fillRect(keyX, currentY - keyIconSize * 0.8, keyIconSize * 0.3, keyIconSize * 0.8); // Stem
+                 ctx.beginPath();
+                 ctx.arc(keyX + keyIconSize * 0.15, currentY - keyIconSize * 0.8, keyIconSize * 0.3, 0, Math.PI * 2); // Head
+                 ctx.fill();
+                 ctx.fillStyle="#444"; // Key hole
+                 ctx.fillRect(keyX + keyIconSize * 0.1, currentY - keyIconSize * 0.5, keyIconSize * 0.1, keyIconSize*0.1);
+             }
+             currentY += 30;
+
+            // Power-up Indicator
+            if (player.powerUpActive) {
+                const powerUpSeconds = Math.ceil(player.powerUpTimer / 60);
+                let powerUpName = "Power Up";
+                let powerUpColor = '#FFDC00'; // Yellow default
+                switch (player.powerUpType) {
+                    case POWERUPS.SPEED: powerUpName = "Speed"; powerUpColor = '#7FDBFF'; break; // Light blue
+                    case POWERUPS.DAMAGE: powerUpName = "Damage"; powerUpColor = '#FF851B'; break; // Orange
+                    case POWERUPS.SHIELD: powerUpName = "Shield"; powerUpColor = '#0074D9'; break; // Blue
+                }
+                ctx.fillStyle = powerUpColor;
+                ctx.fillText(`${powerUpName}: ${powerUpSeconds}s`, hudX, currentY);
+                currentY += 20;
+            }
+
+             // Dash Cooldown Indicator (only if unlocked)
+            if (player.maxArmor > 0 && player.armor >= 5) { // Show only if armor >= 5
+                 const dashReady = player.dashCooldown <= 0;
+                 ctx.fillStyle = dashReady ? '#3D9970' : '#AAAAAA'; // Green if ready, grey if cooling down
+                 ctx.fillText(`Dash: ${dashReady ? 'Ready' : Math.ceil(player.dashCooldown / 60) + 's'}`, hudX, currentY);
+                 currentY += 20;
+            }
+
+             // Double Jump Indicator (only if unlocked)
+             if (player.keys >= 3) { // Show only if keys >= 3
+                 const jumpReady = player.jumpCount < 2;
+                 ctx.fillStyle = jumpReady ? '#3D9970' : '#AAAAAA'; // Green if ready, grey if used
+                 ctx.fillText(`Double Jump: ${jumpReady ? 'Available' : 'Used'}`, hudX, currentY);
+                 currentY += 20;
+             }
+
+
+            // Minimap (Bottom Right)
+            drawMinimap(ctx);
+        }
+
+        function drawBar(ctx, x, y, width, height, progress, fgColor, bgColor) {
+            progress = Math.max(0, Math.min(1, progress)); // Clamp progress 0-1
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(x, y, width, height);
+            ctx.fillStyle = fgColor;
+            ctx.fillRect(x, y, width * progress, height);
+            // Add outline
+             ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+             ctx.lineWidth = 1;
+             ctx.strokeRect(x, y, width, height);
+        }
+
+
+        // Add minimap
+        function drawMinimap(ctx) {
+            const minimapWidth = 200;
+            const minimapHeight = 100; // Increased height slightly
+            const minimapX = CANVAS_WIDTH - minimapWidth - 15;
+            const minimapY = CANVAS_HEIGHT - minimapHeight - 15; // Position bottom right
+
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
+             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+             ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
+
+            // Calculate scale based on the full level width (using ground platform width)
+            const levelWidth = platforms[0] ? platforms[0].width : CANVAS_WIDTH * 5; // Estimate if ground not found
+             const levelHeight = CANVAS_HEIGHT; // Use canvas height for vertical scale ref
+             const scaleX = minimapWidth / levelWidth;
+             const scaleY = minimapHeight / levelHeight; // Separate scale for Y
+
+
+             // Function to map world coords to minimap coords
+             const mapToMinimap = (worldX, worldY) => ({
+                  x: minimapX + worldX * scaleX,
+                  y: minimapY + worldY * scaleY
+             });
+
+            // Draw platforms
+            ctx.fillStyle = '#8B4513'; // Brown
+            for (let i = 0; i < platforms.length; i++) {
+                const platform = platforms[i];
+                 const mmP = mapToMinimap(platform.x, platform.y);
+                 const mmW = platform.width * scaleX;
+                 const mmH = Math.max(1, platform.height * scaleY); // Ensure at least 1px height
+                ctx.fillRect(mmP.x, mmP.y, mmW, mmH);
+            }
+
+            // Draw doors
+             ctx.fillStyle = '#FF0000'; // Red
+             for (let i = 0; i < doors.length; i++) {
+                 const door = doors[i];
+                  const mmD = mapToMinimap(door.x, door.y);
+                  const mmW = Math.max(2, door.width * scaleX);
+                  const mmH = Math.max(2, door.height * scaleY);
+                 ctx.fillStyle = door.isOpen ? '#00FF00' : '#FF0000'; // Green if open
+                 ctx.fillRect(mmD.x, mmD.y, mmW, mmH);
+             }
+
+            // Draw boss position
+            if (boss) {
+                ctx.fillStyle = '#800000'; // Dark Red
+                 const mmB = mapToMinimap(boss.x, boss.y);
+                 const mmW = Math.max(3, boss.width * scaleX);
+                 const mmH = Math.max(3, boss.height * scaleY);
+                 ctx.fillRect(mmB.x, mmB.y, mmW, mmH);
+            }
+
+             // Draw Enemy positions
+             ctx.fillStyle = '#FFA500'; // Orange dots for enemies
+             for (let i=0; i<enemies.length; i++) {
+                  const enemy = enemies[i];
+                   const mmE = mapToMinimap(enemy.x, enemy.y);
+                   ctx.fillRect(mmE.x, mmE.y, 2, 2); // Small dots
+             }
+
+             // Draw player position
+             ctx.fillStyle = '#00FFFF'; // Cyan for player
+             // Map player's world position (platformScroll + player.x)
+              const playerWorldX = platformScroll + player.x;
+              const mmPlayer = mapToMinimap(playerWorldX, player.y);
+             ctx.beginPath();
+             ctx.arc(mmPlayer.x, mmPlayer.y, 3, 0, Math.PI*2); // Circle for player
+             ctx.fill();
+
+
+             // Draw viewport rectangle (representing the camera)
+             // Viewport starts at platformScroll in world coordinates
+             ctx.strokeStyle = '#FFFFFF';
+             ctx.lineWidth = 1;
+              const mmV = mapToMinimap(platformScroll, 0);
+              const mmVW = CANVAS_WIDTH * scaleX;
+              const mmVH = CANVAS_HEIGHT * scaleY; // Viewport height scaled
+             ctx.strokeRect(
+                 mmV.x,
+                 minimapY, // Viewport always covers full minimap height visually
+                 mmVW,
+                 minimapHeight
+             );
+        }
+
+
+        // UI Update (HTML Elements)
+        function updateUI() {
+            document.getElementById('healthDisplay').textContent = player.health;
+            document.getElementById('ammoDisplay').textContent = player.ammo;
+            document.getElementById('armorDisplay').textContent = `${player.armor}/${player.maxArmor}`;
+            document.getElementById('keysDisplay').textContent = player.keys;
+            document.getElementById('levelDisplay').textContent = levelConfig.currentLevel;
+        }
+
+
+        // ==========================================
+        // ENHANCED CONTROLS
+        // ==========================================
+        function handleKeyDown(e) {
+            if (!gameActive) return;
+
+            switch(e.key) {
+                // Movement - Use flags
+                case 'ArrowLeft':
+                case 'a':
+                    player.moveLeft = true;
+                    player.direction = -1; // Ensure direction is set immediately
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    player.moveRight = true;
+                     player.direction = 1; // Ensure direction is set immediately
+                    break;
+
+                // Jumping - Call jump function
+                case 'ArrowUp':
+                case 'w':
+                    updatePlayerJump(); // Handles single and double jump logic
+                    break;
+
+                // Crouching - Set flag
+                case 'ArrowDown':
+                case 's':
+                    player.isCrouching = true;
+                    break;
+
+                // Shooting - Call shoot function
+                case ' ': // Space bar
+                     e.preventDefault(); // Prevent space bar from scrolling page
+                    playerShoot();
+                    break;
+
+                 // Dashing - Call dash function
+                 case 'Shift':
+                      playerDash();
+                      break;
+
+                 // Interaction Key
+                 case 'e':
+                      tryInteract(); // Tries to search locker or open door
+                      break;
+            }
+        }
+
+        function handleKeyUp(e) {
+             // No need to check gameActive here, releasing keys should always work
+            switch(e.key) {
+                 // Movement - Clear flags
+                case 'ArrowLeft':
+                case 'a':
+                    player.moveLeft = false;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    player.moveRight = false;
+                    break;
+
+                // Crouching - Clear flag
+                case 'ArrowDown':
+                case 's':
+                    player.isCrouching = false;
+                    break;
+
+                 // Stop shooting animation? (Optional, handled by timer now)
+                 // case ' ':
+                 //    player.isShooting = false;
+                 //    break;
+            }
+        }
+
+        // Scroll the level based on player position
+        function scrollLevel() {
+             // Define the screen region where scrolling occurs
+             const scrollZoneLeft = CANVAS_WIDTH * 0.3; // Start scrolling if player moves past 30%
+             const scrollZoneRight = CANVAS_WIDTH * 0.4; // Keep player generally before 40%
+
+             let scrollAmount = 0;
+
+             // Scroll right (move level left)
+             if (player.x > scrollZoneRight) {
+                 scrollAmount = player.x - scrollZoneRight;
+                 player.x = scrollZoneRight; // Lock player X position
+             }
+             // Scroll left (move level right) - less common unless level allows backtracking significantly
+             else if (player.x < scrollZoneLeft) {
+                  // Only scroll left if platformScroll > 0 (don't scroll past start)
+                 scrollAmount = Math.max(-platformScroll, player.x - scrollZoneLeft); // Calculate scroll, limit to not go below 0
+                 player.x = scrollZoneLeft; // Lock player X position
+             }
+
+             // Apply the scroll amount
+             if (scrollAmount !== 0) {
+                  platformScroll += scrollAmount;
+
+                  // Clamp platformScroll? (Prevent scrolling too far past level end?)
+                   const maxScroll = platforms[0] ? platforms[0].width - CANVAS_WIDTH : CANVAS_WIDTH * 5; // Estimate max scroll
+                   platformScroll = Math.max(0, Math.min(platformScroll, maxScroll));
+             }
+        }
+
+
+        // Start the game initialization process when page loads
+        window.onload = init;
+
+    </script>
+</body>
+</html>
