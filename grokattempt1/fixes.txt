@@ -1,0 +1,647 @@
+/* 
+ * SURVIVAL GAME FIXES
+ * 
+ * This includes patches for the key JavaScript files to fix issues
+ * with inventory updates, building functions, and world generation.
+ */
+
+// ==== FIX 1: Make updateInventoryUI global in player.js ====
+// Modified player.js
+function initPlayer(scene, camera) {
+    const player = {
+        inventory: {
+            quickBar: [{ type: "axe", count: 1 }, { type: "pickaxe", count: 1 }, { type: "knife", count: 1 }, { type: "canteen", count: 1 }],
+            slots: []
+        },
+        position: camera.position
+    };
+
+    const inventoryUI = document.getElementById("inventory");
+    const quickBarUI = document.getElementById("quickBar");
+    const inventorySlotsUI = document.getElementById("inventorySlots");
+
+    // Make updateInventoryUI globally accessible
+    window.updateInventoryUI = function() {
+        quickBarUI.innerHTML = player.inventory.quickBar.map((item, i) => `<div>${item.type} (${item.count})</div>`).join("");
+        inventorySlotsUI.innerHTML = player.inventory.slots.map((item, i) => `<div>${item.type} (${item.count})</div>`).join("");
+    };
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "i") {
+            inventoryUI.style.display = inventoryUI.style.display === "none" ? "block" : "none";
+            window.updateInventoryUI();
+        }
+        if (e.key === "e") {
+            const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), camera);
+            const hit = scene.pickWithRay(ray);
+            if (hit.pickedMesh && hit.pickedMesh.metadata) {
+                const { type, wood, stone, fiber, metal, loot } = hit.pickedMesh.metadata;
+                if (type === "tree" && player.inventory.quickBar.some(item => item.type === "axe")) {
+                    player.inventory.slots.push({ type: "wood", count: wood });
+                    hit.pickedMesh.dispose();
+                } else if (type === "rock" && player.inventory.quickBar.some(item => item.type === "pickaxe")) {
+                    player.inventory.slots.push({ type: "stone", count: stone });
+                    hit.pickedMesh.dispose();
+                } else if (type === "grass") {
+                    player.inventory.slots.push({ type: "fiber", count: fiber });
+                    hit.pickedMesh.dispose();
+                } else if (type === "scrap") {
+                    player.inventory.slots.push({ type: "metal", count: metal });
+                    hit.pickedMesh.dispose();
+                } else if (type === "barrel" || type === "crate") {
+                    player.inventory.slots.push({ type: loot[Math.floor(Math.random() * loot.length)], count: 1 });
+                    hit.pickedMesh.dispose();
+                } else if (type === "animal" && player.inventory.quickBar.some(item => item.type === "knife")) {
+                    player.inventory.slots.push({ type: "meat", count: hit.pickedMesh.metadata.meat });
+                    player.inventory.slots.push({ type: "leather", count: hit.pickedMesh.metadata.leather });
+                    player.inventory.slots.push({ type: "fat", count: hit.pickedMesh.metadata.fat });
+                    hit.pickedMesh.dispose();
+                }
+                window.updateInventoryUI();
+            }
+        }
+    });
+
+    inventoryUI.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        // Simplified: Move items between quickBar and slots (implement as needed)
+    });
+    
+    // Expose player object to scene for access by other modules
+    scene.player = player;
+}
+
+// ==== FIX 2: Building.js pointer event conflicts ====
+// Modified building.js
+function initBuilding(scene) {
+    const buildingUI = document.getElementById("building");
+    const buildingMenu = document.getElementById("buildingMenu");
+    const buildingTypes = ["foundation", "wall", "wall_window", "wall_doorway", "door", "ceiling"];
+    let selectedType = null;
+    let previewMesh = null;
+    let buildingMode = false;
+
+    function updateBuildingUI() {
+        buildingMenu.innerHTML = buildingTypes.map(type => `<button onclick="selectBuildingType('${type}')">${type}</button>`).join("");
+    }
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "b") {
+            buildingMode = !buildingMode;
+            buildingUI.style.display = buildingMode ? "block" : "none";
+            if (buildingMode) {
+                updateBuildingUI();
+            } else if (previewMesh) {
+                previewMesh.dispose();
+                previewMesh = null;
+            }
+        }
+    });
+
+    window.selectBuildingType = function(type) {
+        selectedType = type;
+        if (previewMesh) previewMesh.dispose();
+        previewMesh = BABYLON.MeshBuilder.CreateBox("preview", { width: 5, height: 5, depth: 5 }, scene);
+        previewMesh.material = new BABYLON.StandardMaterial("previewMat", scene);
+        previewMesh.material.alpha = 0.5;
+    };
+
+    // Store original pointer functions to restore them when not in building mode
+    const originalPointerMove = scene.onPointerMove;
+    const originalPointerDown = scene.onPointerDown;
+
+    // Override pointer events only when in building mode
+    scene.registerBeforeRender(() => {
+        if (buildingMode && previewMesh) {
+            // Updated pointer move handler for building preview
+            const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), scene.activeCamera);
+            const hit = scene.pickWithRay(ray);
+            if (hit.pickedPoint) {
+                const point = hit.pickedPoint;
+                point.x = Math.round(point.x / 5) * 5;
+                point.z = Math.round(point.z / 5) * 5;
+                if (selectedType === "foundation" || selectedType === "ceiling") {
+                    previewMesh.position = new BABYLON.Vector3(point.x, point.y, point.z);
+                } else {
+                    // Snap to foundation (simplified)
+                    previewMesh.position = new BABYLON.Vector3(point.x, point.y + 2.5, point.z);
+                }
+            }
+        }
+    });
+
+    // Handle building placement with pointer down
+    canvas.addEventListener("pointerdown", (evt) => {
+        if (buildingMode && previewMesh && evt.button === 0) {
+            const mesh = BABYLON.MeshBuilder.CreateBox(selectedType, { width: 5, height: 5, depth: 5 }, scene);
+            mesh.position = previewMesh.position.clone();
+            mesh.rotation = previewMesh.rotation.clone();
+            mesh.checkCollisions = true;
+            mesh.metadata = { type: selectedType };
+            
+            // Apply material based on type
+            const material = new BABYLON.StandardMaterial(selectedType + "Mat", scene);
+            switch(selectedType) {
+                case "foundation":
+                    material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5); // Gray
+                    break;
+                case "wall":
+                case "wall_window":
+                case "wall_doorway":
+                    material.diffuseColor = new BABYLON.Color3(0.8, 0.8, 0.8); // Light gray
+                    break;
+                case "door":
+                    material.diffuseColor = new BABYLON.Color3(0.6, 0.3, 0.1); // Brown
+                    break;
+                case "ceiling":
+                    material.diffuseColor = new BABYLON.Color3(0.7, 0.7, 0.7); // Medium gray
+                    break;
+                default:
+                    material.diffuseColor = new BABYLON.Color3(1, 1, 1); // White
+            }
+            mesh.material = material;
+        }
+    });
+
+    // Mouse wheel to rotate building preview
+    document.addEventListener("wheel", (e) => {
+        if (buildingMode && previewMesh) {
+            previewMesh.rotation.y += e.deltaY * 0.01;
+        }
+    });
+}
+
+// ==== FIX 3: Crafting.js with proper scene.player reference ====
+// Modified crafting.js
+function initCrafting(scene) {
+    const craftingRecipes = [
+        { name: "axe", resources: { wood: 5, stone: 3 }, output: { type: "axe", count: 1 } },
+        { name: "pickaxe", resources: { wood: 5, stone: 5 }, output: { type: "pickaxe", count: 1 } },
+        { name: "campfire", resources: { wood: 10, stone: 5 }, output: { type: "campfire", count: 1 } },
+        { name: "crafting_table", resources: { wood: 20, stone: 10 }, output: { type: "crafting_table", count: 1 } },
+        { name: "forge", resources: { stone: 20, metal: 10 }, output: { type: "forge", count: 1 } },
+        { name: "rope", resources: { fiber: 5 }, output: { type: "rope", count: 1 } }
+    ];
+
+    const craftingUI = document.getElementById("crafting");
+    const craftingMenu = document.getElementById("craftingMenu");
+
+    function updateCraftingUI() {
+        craftingMenu.innerHTML = craftingRecipes.map(recipe => `<button onclick="craftItem('${recipe.name}')">${recipe.name}</button>`).join("");
+    }
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "c") {
+            craftingUI.style.display = craftingUI.style.display === "none" ? "block" : "none";
+            updateCraftingUI();
+        }
+    });
+
+    window.craftItem = function(name) {
+        const recipe = craftingRecipes.find(r => r.name === name);
+        if (!recipe) {
+            console.error("Recipe not found:", name);
+            return;
+        }
+        
+        if (!scene.player) {
+            console.error("Player not initialized in scene");
+            return;
+        }
+        
+        const player = scene.player;
+        let canCraft = true;
+        
+        // Check if we have all required resources
+        for (const [resource, count] of Object.entries(recipe.resources)) {
+            const totalResource = player.inventory.quickBar.concat(player.inventory.slots)
+                .filter(item => item.type === resource)
+                .reduce((sum, item) => sum + item.count, 0);
+            if (totalResource < count) {
+                canCraft = false;
+                console.log(`Not enough ${resource}: need ${count}, have ${totalResource}`);
+            }
+        }
+        
+        if (canCraft) {
+            // Consume resources
+            for (const [resource, count] of Object.entries(recipe.resources)) {
+                let needed = count;
+                // Check quick bar first
+                for (let i = player.inventory.quickBar.length - 1; i >= 0 && needed > 0; i--) {
+                    if (player.inventory.quickBar[i].type === resource) {
+                        const deduct = Math.min(player.inventory.quickBar[i].count, needed);
+                        player.inventory.quickBar[i].count -= deduct;
+                        needed -= deduct;
+                        if (player.inventory.quickBar[i].count === 0) {
+                            player.inventory.quickBar.splice(i, 1);
+                        }
+                    }
+                }
+                // Then check inventory slots
+                for (let i = player.inventory.slots.length - 1; i >= 0 && needed > 0; i--) {
+                    if (player.inventory.slots[i].type === resource) {
+                        const deduct = Math.min(player.inventory.slots[i].count, needed);
+                        player.inventory.slots[i].count -= deduct;
+                        needed -= deduct;
+                        if (player.inventory.slots[i].count === 0) {
+                            player.inventory.slots.splice(i, 1);
+                        }
+                    }
+                }
+            }
+            
+            // Add crafted item
+            const quickBarFull = player.inventory.quickBar.length >= 4;
+            if (!quickBarFull) {
+                player.inventory.quickBar.push(Object.assign({}, recipe.output)); // Clone to avoid reference issues
+            } else {
+                player.inventory.slots.push(Object.assign({}, recipe.output)); // Clone to avoid reference issues
+            }
+            
+            console.log(`Crafted ${recipe.name}`);
+            if (typeof window.updateInventoryUI === 'function') {
+                window.updateInventoryUI();
+            } else {
+                console.error("updateInventoryUI function not found");
+            }
+        } else {
+            console.log("Cannot craft: missing resources");
+        }
+    };
+
+    // Improved campfire interaction
+    let originalPointerDown = scene.onPointerDown;
+    canvas.addEventListener("pointerdown", (evt) => {
+        const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), scene.activeCamera);
+        const hit = scene.pickWithRay(ray);
+        if (hit.hit && hit.pickedMesh && hit.pickedMesh.metadata?.type === "campfire") {
+            console.log("Campfire interacted");
+            // Simplified: Open campfire UI with 4 slots for meat/water (implement as needed)
+            alert("Campfire cooking interface would open here");
+        }
+    });
+}
+
+// ==== FIX 4: World.js with improved error handling ====
+// Modified world.js - Fix for height map generation
+function initWorld(scene) {
+    try {
+        console.log("Generating height map...");
+        let heightMapURL;
+        try {
+            // Handle potential errors with height map generation
+            heightMapURL = window.getHeightMapDataURL();
+            console.log("Height map URL generated successfully");
+        } catch (e) {
+            console.error("Failed to generate height map:", e);
+            // Fallback to flat ground
+            createFlatGround(scene);
+            // Continue with other world objects
+            createWorldObjects(scene);
+            return;
+        }
+
+        // Terrain
+        console.log("Creating terrain...");
+        const ground = BABYLON.MeshBuilder.CreateGroundFromHeightMap("ground", heightMapURL, {
+            width: 1000,
+            height: 1000,
+            subdivisions: 100,
+            minHeight: 0,
+            maxHeight: 50,
+            onReady: () => {
+                console.log("Terrain loaded successfully");
+                // Add metadata to ground for building system
+                ground.metadata = { type: "ground" };
+            },
+            updatable: false
+        }, scene);
+        
+        ground.checkCollisions = true;
+        const groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+        groundMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.2);
+        ground.material = groundMaterial;
+        
+        // Create the rest of the world objects
+        createWorldObjects(scene);
+
+    } catch (e) {
+        console.error("Error in initWorld:", e);
+        // Fallback to safe initialization
+        createFlatGround(scene);
+        createWorldObjects(scene);
+    }
+}
+
+// Helper functions for world creation
+function createFlatGround(scene) {
+    console.log("Using fallback flat ground...");
+    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 1000, height: 1000 }, scene);
+    ground.checkCollisions = true;
+    const groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+    groundMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.6, 0.2);
+    ground.material = groundMaterial;
+    ground.metadata = { type: "ground" };
+}
+
+function createWorldObjects(scene) {
+    // Water
+    console.log("Creating water...");
+    const water = BABYLON.MeshBuilder.CreateGround("water", { width: 1000, height: 1000 }, scene);
+    water.position.y = 2;
+    const waterMaterial = new BABYLON.StandardMaterial("waterMat", scene);
+    waterMaterial.diffuseColor = new BABYLON.Color3(0, 0.3, 0.8);
+    waterMaterial.alpha = 0.6;
+    water.material = waterMaterial;
+
+    // Trees
+    console.log("Creating trees...");
+    for (let i = 0; i < 100; i++) {
+        try {
+            const treeHeight = 5 + Math.random() * 5;
+            const treeWidth = 2 + Math.random() * 1;
+            
+            // Create tree trunk
+            const tree = BABYLON.MeshBuilder.CreateCylinder("tree" + i, { 
+                height: treeHeight,
+                diameter: treeWidth
+            }, scene);
+            
+            // Position avoiding water level
+            const posX = Math.random() * 900 - 450;
+            const posZ = Math.random() * 900 - 450;
+            let posY = 2.5; // Default height
+            
+            // Cast ray to find ground height
+            const startVec = new BABYLON.Vector3(posX, 100, posZ);
+            const direction = new BABYLON.Vector3(0, -1, 0);
+            const ray = new BABYLON.Ray(startVec, direction, 150);
+            const hit = scene.pickWithRay(ray);
+            
+            if (hit.hit) {
+                posY = hit.pickedPoint.y + (treeHeight / 2);
+            }
+            
+            tree.position = new BABYLON.Vector3(posX, posY, posZ);
+            tree.checkCollisions = true;
+            
+            // Create tree foliage
+            const foliage = BABYLON.MeshBuilder.CreateSphere("foliage" + i, { 
+                diameter: treeWidth * 3 
+            }, scene);
+            foliage.position = new BABYLON.Vector3(
+                tree.position.x, 
+                tree.position.y + (treeHeight / 2), 
+                tree.position.z
+            );
+            
+            // Materials
+            const trunkMaterial = new BABYLON.StandardMaterial("trunkMat", scene);
+            trunkMaterial.diffuseColor = new BABYLON.Color3(0.4, 0.3, 0.2);
+            tree.material = trunkMaterial;
+            
+            const foliageMaterial = new BABYLON.StandardMaterial("foliageMat", scene);
+            foliageMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.5, 0.1);
+            foliage.material = foliageMaterial;
+            
+            // Metadata
+            tree.metadata = { type: "tree", wood: 10 };
+            foliage.metadata = { type: "tree", wood: 5 };
+        } catch (e) {
+            console.error("Error creating tree:", e);
+        }
+    }
+    
+    // Create other world objects
+    createRocks(scene);
+    createGrass(scene);
+    createScrapMetal(scene);
+    createBarrels(scene);
+    createBuildings(scene);
+    createWildlife(scene);
+    
+    // Fog
+    console.log("Enabling fog...");
+    scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+    scene.fogDensity = 0.005;
+    scene.fogColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+    
+    console.log("World initialization complete.");
+}
+
+function createRocks(scene) {
+    console.log("Creating rocks...");
+    for (let i = 0; i < 50; i++) {
+        try {
+            const rock = BABYLON.MeshBuilder.CreateSphere("rock" + i, { diameter: 3 }, scene);
+            rock.position = new BABYLON.Vector3(Math.random() * 900 - 450, 5, Math.random() * 900 - 450);
+            rock.checkCollisions = true;
+            rock.metadata = { type: "rock", stone: 5 };
+            
+            const rockMaterial = new BABYLON.StandardMaterial("rockMat" + i, scene);
+            rockMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+            rock.material = rockMaterial;
+        } catch (e) {
+            console.error("Error creating rock:", e);
+        }
+    }
+}
+
+function createGrass(scene) {
+    console.log("Creating grass...");
+    for (let i = 0; i < 200; i++) {
+        try {
+            const grass = BABYLON.MeshBuilder.CreateBox("grass" + i, { width: 1, height: 2, depth: 1 }, scene);
+            grass.position = new BABYLON.Vector3(Math.random() * 900 - 450, 5, Math.random() * 900 - 450);
+            grass.metadata = { type: "grass", fiber: 2 };
+            
+            const grassMaterial = new BABYLON.StandardMaterial("grassMat" + i, scene);
+            grassMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.7, 0.2);
+            grass.material = grassMaterial;
+        } catch (e) {
+            console.error("Error creating grass:", e);
+        }
+    }
+}
+
+function createScrapMetal(scene) {
+    console.log("Creating scrap metal...");
+    for (let i = 0; i < 50; i++) {
+        try {
+            const scrap = BABYLON.MeshBuilder.CreateBox("scrap" + i, { size: 1 }, scene);
+            scrap.position = new BABYLON.Vector3(Math.random() * 900 - 450, 5, Math.random() * 900 - 450);
+            scrap.metadata = { type: "scrap", metal: 3 };
+            
+            const scrapMaterial = new BABYLON.StandardMaterial("scrapMat" + i, scene);
+            scrapMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+            scrap.material = scrapMaterial;
+        } catch (e) {
+            console.error("Error creating scrap:", e);
+        }
+    }
+}
+
+function createBarrels(scene) {
+    console.log("Creating barrels...");
+    for (let i = 0; i < 20; i++) {
+        try {
+            const barrel = BABYLON.MeshBuilder.CreateCylinder("barrel" + i, { height: 2, diameter: 1 }, scene);
+            barrel.position = new BABYLON.Vector3(Math.random() * 900 - 450, 5, Math.random() * 900 - 450);
+            barrel.metadata = { type: "barrel", loot: ["wood", "stone", "metal"] };
+            
+            const barrelMaterial = new BABYLON.StandardMaterial("barrelMat" + i, scene);
+            barrelMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.3, 0.3);
+            barrel.material = barrelMaterial;
+        } catch (e) {
+            console.error("Error creating barrel:", e);
+        }
+    }
+}
+
+function createBuildings(scene) {
+    console.log("Creating buildings...");
+    for (let i = 0; i < 5; i++) {
+        try {
+            const building = BABYLON.MeshBuilder.CreateBox("building" + i, { width: 10, height: 5, depth: 10 }, scene);
+            building.position = new BABYLON.Vector3(Math.random() * 900 - 450, 5, Math.random() * 900 - 450);
+            building.checkCollisions = true;
+            
+            const buildingMaterial = new BABYLON.StandardMaterial("buildingMat" + i, scene);
+            buildingMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.7);
+            building.material = buildingMaterial;
+            
+            const crate = BABYLON.MeshBuilder.CreateBox("crate" + i, { size: 2 }, scene);
+            crate.position = new BABYLON.Vector3(
+                building.position.x, 
+                building.position.y + 3, 
+                building.position.z
+            );
+            crate.metadata = { type: "crate", loot: ["wood", "stone", "metal"] };
+            
+            const crateMaterial = new BABYLON.StandardMaterial("crateMat" + i, scene);
+            crateMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.3, 0.1);
+            crate.material = crateMaterial;
+        } catch (e) {
+            console.error("Error creating building:", e);
+        }
+    }
+}
+
+function createWildlife(scene) {
+    console.log("Creating animals...");
+    for (let i = 0; i < 10; i++) {
+        try {
+            const animal = BABYLON.MeshBuilder.CreateSphere("animal" + i, { diameter: 2 }, scene);
+            animal.position = new BABYLON.Vector3(Math.random() * 900 - 450, 5, Math.random() * 900 - 450);
+            animal.metadata = { type: "animal", meat: 5, leather: 3, fat: 2 };
+            
+            const animalMaterial = new BABYLON.StandardMaterial("animalMat" + i, scene);
+            animalMaterial.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.1);
+            animal.material = animalMaterial;
+            
+            // Simple animal movement
+            scene.registerBeforeRender(() => {
+                animal.position.x += Math.sin(Date.now() * 0.001 + i) * 0.05;
+                animal.position.z += Math.cos(Date.now() * 0.001 + i) * 0.05;
+                
+                // Keep animals above ground
+                const ray = new BABYLON.Ray(
+                    new BABYLON.Vector3(animal.position.x, 10, animal.position.z),
+                    new BABYLON.Vector3(0, -1, 0),
+                    15
+                );
+                const hit = scene.pickWithRay(ray);
+                if (hit.hit && hit.pickedPoint) {
+                    animal.position.y = hit.pickedPoint.y + 1;
+                }
+            });
+        } catch (e) {
+            console.error("Error creating animal:", e);
+        }
+    }
+}
+
+// ==== FIX 5: game.js with improved initialization and error handling ====
+// Modified game.js
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas, true);
+
+const createScene = () => {
+    const scene = new BABYLON.Scene(engine);
+    scene.collisionsEnabled = true;
+    scene.clearColor = new BABYLON.Color4(0.5, 0.8, 1, 1); // Light blue background for debugging
+
+    // Camera
+    const camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 20, -10), scene); // Raised camera position
+    camera.setTarget(BABYLON.Vector3.Zero());
+    camera.attachControl(canvas, true);
+    camera.applyGravity = true;
+    camera.checkCollisions = true;
+    camera.ellipsoid = new BABYLON.Vector3(1, 2, 1);
+    
+    // Camera speed
+    camera.speed = 0.5;
+    camera.angularSensibility = 2000;
+    
+    // Add key control for camera height adjustment
+    const inputMap = {};
+    scene.actionManager = new BABYLON.ActionManager(scene);
+    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+        BABYLON.ActionManager.OnKeyDownTrigger, 
+        function (evt) {
+            inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+        }
+    ));
+    scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+        BABYLON.ActionManager.OnKeyUpTrigger, 
+        function (evt) {
+            inputMap[evt.sourceEvent.key] = evt.sourceEvent.type === "keydown";
+        }
+    ));
+    
+    // Handle Q and E keys for up/down movement
+    scene.registerBeforeRender(function() {
+        if(inputMap["q"] || inputMap["Q"]) {
+            camera.position.y += 0.1;
+        }
+        if(inputMap["e"] || inputMap["E"]) {
+            camera.position.y -= 0.1;
+        }
+    });
+
+    // Lighting
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-1, -2, -1), scene);
+    sun.position = new BABYLON.Vector3(50, 100, 50);
+    
+    // Set up shadows (simplified version)
+    const shadowGenerator = new BABYLON.ShadowGenerator(1024, sun);
+    shadowGenerator.useBlurExponentialShadowMap = true;
+    shadowGenerator.blurScale = 2;
+    shadowGenerator.setDarkness(0.2);
+
+    // Day-night cycle
+    let time = 0;
+    scene.registerBeforeRender(() => {
+        time += 0.0001; // Slower day-night cycle
+        
+        // Calculate sun intensity based on time
+        const sunIntensity = Math.sin(time) * 0.5 + 0.5;
+        sun.intensity = sunIntensity;
+        light.intensity = sunIntensity * 0.5 + 0.2; // Ambient light never completely dark
+        
+        // Change sky color based on time of day
+        const blueComponent = 0.5 + sunIntensity * 0.5;
+        scene.clearColor = new BABYLON.Color4(0.5, 0.7, blueComponent, 1);
+    });
+
+    // Initialize systems with proper error handling
+    try {
+        console.log("Initializing world...");
+        initWorld(scene);
+    } catch(e) {
+        console.error("World initialization failed:", e);
+    }
+    
+    try {
