@@ -267,17 +267,17 @@
             try {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 // Load sounds (replace placeholders with actual sound file URLs)
-                loadSound('shoot', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/laser.wav'); // Placeholder URL
-                loadSound('hit', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/qubodup-crash.ogg'); // Placeholder URL
-                loadSound('jump', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/jump.wav'); // Placeholder URL
-                loadSound('pickup', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/collect-point.wav'); // Placeholder URL
-                loadSound('door', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/door-open.wav'); // Placeholder URL
-                loadSound('explosion', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/explosion.wav'); // Placeholder URL
-                loadSound('boss', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-shot.wav');   // Placeholder URL
-                loadSound('powerup', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/power-up.wav'); // Placeholder URL
-                loadSound('gameover', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/game-over.wav'); // Placeholder URL
-                loadSound('enemyShoot', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/synth-laser.wav'); // Placeholder URL
-                loadSound('dash', 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/swoosh.wav'); // Placeholder URL
+                loadSound('shoot', 'media/laser.wav'); // Placeholder URL
+                loadSound('hit', 'media/qubodup-crash.ogg'); // Placeholder URL
+                loadSound('jump', 'media/jump.wav'); // Placeholder URL
+                loadSound('pickup', 'media/collect-point.wav'); // Placeholder URL
+                loadSound('door', 'media/door-open.wav'); // Placeholder URL
+                loadSound('explosion', 'media/explosion.wav'); // Placeholder URL
+                loadSound('boss', 'media/synth-shot.wav');   // Placeholder URL
+                loadSound('powerup', 'media/power-up.wav'); // Placeholder URL
+                loadSound('gameover', 'media/game-over.wav'); // Placeholder URL
+                loadSound('enemyShoot', 'media/synth-laser.wav'); // Placeholder URL
+                loadSound('dash', 'media/swoosh.wav'); // Placeholder URL
             } catch (e) {
                 console.error('Web Audio API not supported or context failed to initialize:', e);
                 audioContext = null; // Ensure audioContext is null if it failed
