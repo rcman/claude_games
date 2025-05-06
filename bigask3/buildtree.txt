@@ -1,0 +1,37 @@
+your-game/
+├── index.html
+├── style.css
+├── js/
+│   ├── three.min.js          # Three.js library
+│   ├── Water.js              # For realistic water (from Three.js examples)
+│   ├── OrbitControls.js      # Optional: for camera control during dev
+│   ├── PointerLockControls.js # For first/third person view
+│   ├── game.js               # Main game logic
+│   ├── world.js              # World generation, terrain, static objects
+│   ├── player.js             # Player logic, controls, inventory
+│   ├── animals.js            # Animal AI, models, interactions
+│   ├── crafting.js           # Crafting recipes and logic
+│   ├── building.js           # Building system logic
+│   ├── ui.js                 # UI management (inventory, crafting menus)
+│   └── utils.js              # Helper functions
+├── assets/
+│   ├── textures/
+│   │   ├── grass.jpg
+│   │   ├── rock.jpg
+│   │   ├── wood.jpg
+│   │   ├── waternormals.jpg  # For Water.js
+│   │   └── ... (skybox, etc.)
+│   ├── models/               # GLTF/GLB format is recommended
+│   │   ├── tree.glb
+│   │   ├── rock_model.glb
+│   │   ├── chicken.glb
+│   │   ├── rabbit.glb
+│   │   ├── wolf.glb
+│   │   ├── bear.glb
+│   │   ├── building_shell.glb
+│   │   ├── barrel.glb
+│   │   ├── crate.glb
+│   │   └── ... (axe, pickaxe, etc.)
+│   └── sounds/
+│       ├── chop.wav
+│       └── ...

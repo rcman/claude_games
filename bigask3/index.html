@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <!-- UI Elements (hidden by default) -->
+    <div id="inventory-ui" class="ui-panel">
+        <h2>Inventory</h2>
+        <div id="inventory-slots"></div>
+        <div id="quick-bar-slots-inventory-view"></div>
+        <button id="close-inventory">Close</button>
+    </div>
+
+    <div id="crafting-menu-ui" class="ui-panel">
+        <h2>Crafting</h2>
+        <ul id="craftable-items-list"></ul>
+        <button id="close-crafting">Close</button>
+    </div>
+
+    <div id="building-menu-ui" class="ui-panel">
+        <h2>Build</h2>
+        <ul id="buildable-items-list"></ul>
+        <button id="close-building">Close</button>
+    </div>
+
+    <div id="campfire-ui" class="ui-panel">
+        <h2>Campfire</h2>
+        <div class="campfire-slots">
+            <div class="slot" id="campfire-slot-1"></div>
+            <div class="slot" id="campfire-slot-2"></div>
+            <div class="slot" id="campfire-slot-3"></div>
+            <div class="slot" id="campfire-slot-4"></div>
+        </div>
+        <div id="campfire-player-inventory"></div>
+        <button id="close-campfire">Close</button>
+    </div>
+
+    <div id="quick-bar-ui">
+        <!-- Slots 1-0 -->
+    </div>
+
+    <div id="crosshair">+</div>
+    <div id="interaction-prompt"></div> <!-- e.g., "Press E to search" -->
+
+    <script src="js/three.min.js"></script>
+    <script src="js/Water.js"></script>
+    <script src="js/PointerLockControls.js"></script>
+    <!-- <script src="js/OrbitControls.js"></script> -->
+    
+    <!-- Your game scripts (use type="module" for ES6 imports) -->
+    <script type="module" src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+body { margin: 0; overflow: hidden; font-family: sans-serif; }
+#game-container { width: 100vw; height: 100vh; }
+.ui-panel {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 20px;
+    border: 1px solid #555;
+    z-index: 10;
+    min-width: 300px;
+}
+#quick-bar-ui {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    background-color: rgba(0,0,0,0.5);
+    padding: 5px;
+    border-radius: 5px;
+    z-index: 5;
+}
+#quick-bar-ui .slot, .campfire-slots .slot {
+    width: 50px;
+    height: 50px;
+    border: 1px solid #ccc;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(255,255,255,0.1);
+    font-size: 10px;
+}
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    color: white;
+    pointer-events: none; /* Important for raycasting */
+    z-index: 1;
+}
+#interaction-prompt {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    background-color: rgba(0,0,0,0.7);
+    padding: 5px 10px;
+    border-radius: 3px;
+    display: none; /* Show when interaction is possible */
+    z-index: 5;
+}
