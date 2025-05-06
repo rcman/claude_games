@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>BabylonJS Dungeon Crawler</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #uiOverlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #healthBar {
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            margin-top: 5px;
+        }
+        #healthFill {
+            height: 100%;
+            background-color: #e74c3c;
+            border-radius: 10px;
+            width: 100%;
+        }
+        #minimap {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 5px;
+        }
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: block;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="uiOverlay">
+        <div>Level: <span id="levelDisplay">1</span></div>
+        <div>Health:</div>
+        <div id="healthBar"><div id="healthFill"></div></div>
+    </div>
+    <div id="minimap"></div>
+    <div id="instructions">
+        <h2>Dungeon Crawler</h2>
+        <p>Navigate through the dungeon, find the exit to proceed to the next level.</p>
+        <p>WASD or Arrow keys to move</p>
+        <p>Mouse to look around</p>
+        <p>Click to interact</p>
+        <button id="startButton">Start Game</button>
+    </div>
+
+    <!-- Import BabylonJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.16.0/babylon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.16.0/babylon.gui.min.js"></script>
+    <script>
+        // Game configuration
+        const config = {
+            dungeonSize: 15,
+            cellSize: 4,
+            wallHeight: 4,
+            playerHeight: 1.8,
+            playerSpeed: 1.5,  // Significantly increased for much faster movement
+            playerHealth: 100,
+            minimapScale: 10,
+            levels: 3,
+            // Torch configuration
+            torchLight: {
+                intensity: 2.0,
+                range: 16,
+                diffuse: new BABYLON.Color3(1.0, 0.7, 0.3),  // Warm orange-yellow torch color
+                specular: new BABYLON.Color3(1.0, 0.7, 0.3),
+                flickerSpeed: 0.05,
+                flickerRange: 0.2
+            }
+        };
+
+        // Game state
+        const gameState = {
+            level: 1,
+            health: config.playerHealth,
+            dungeon: null,
+            playerPosition: { x: 0, z: 0 },
+            isGameStarted: false,
+            torchLight: null,
+            torchFlame: null,
+            torchTime: 0
+        };
+
+        // Wait for the page to load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('startButton').addEventListener('click', startGame);
+        });
+
+        function startGame() {
+            document.getElementById('instructions').classList.add('hidden');
+            gameState.isGameStarted = true;
+            initGame();
+        }
+
+        function initGame() {
+            // Get the canvas element
+            const canvas = document.getElementById("renderCanvas");
+            
+            // Create the BabylonJS engine
+            const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+            
+            // Create the scene
+            const scene = createScene(engine, canvas);
+            
+            // Register a render loop to repeatedly render the scene
+            engine.runRenderLoop(function () {
+                scene.render();
+            });
+            
+            // Watch for browser/canvas resize events
+            window.addEventListener("resize", function () {
+                engine.resize();
+            });
+        }
+
+        function createScene(engine, canvas) {
+            // Create the scene
+            const scene = new BABYLON.Scene(engine);
+            
+            // Set the scene to be darker overall for better torch effect
+            scene.ambientColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+            
+            // Create a dimmer light as ambient base lighting
+            const hemisphericLight = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            hemisphericLight.intensity = 0.2; // Reduced from 0.7 to make torch more noticeable
+            
+            // Reduce or remove directional light to emphasize torch
+            // const directionalLight = new BABYLON.DirectionalLight("directional", new BABYLON.Vector3(0, -1, 1), scene);
+            // directionalLight.intensity = 0.1; // Reduced from 0.5
+            
+            // Create camera
+            const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, config.playerHeight, 0), scene);
+            camera.attachControl(canvas, true);
+            camera.speed = config.playerSpeed;
+            camera.inertia = 0.3;
+            camera.angularSensibility = 1000;
+            camera.applyGravity = true;
+            camera.checkCollisions = true;
+            camera.ellipsoid = new BABYLON.Vector3(0.5, 1, 0.5);
+            camera.keysUp.push(87);    // W
+            camera.keysDown.push(83);  // S
+            camera.keysLeft.push(65);  // A
+            camera.keysRight.push(68); // D
+            
+            // Setup physics and collision
+            scene.gravity = new BABYLON.Vector3(0, -9.81, 0);
+            scene.collisionsEnabled = true;
+            
+            // Generate dungeon
+            gameState.dungeon = generateDungeon(config.dungeonSize);
+            createDungeonMesh(scene, gameState.dungeon);
+            
+            // Place player at start
+            const startPosition = findStartPosition(gameState.dungeon);
+            camera.position.x = startPosition.x * config.cellSize + config.cellSize / 2;
+            camera.position.z = startPosition.z * config.cellSize + config.cellSize / 2;
+            gameState.playerPosition = startPosition;
+            
+            // Create the torch light that follows the player
+            createTorchLight(scene, camera);
+            
+            // Update minimap
+            updateMinimap(gameState.dungeon, startPosition);
+            
+            // Register player movement event for updating the minimap and torch
+            scene.registerBeforeRender(function() {
+                // Update player position
+                const gridX = Math.floor(camera.position.x / config.cellSize);
+                const gridZ = Math.floor(camera.position.z / config.cellSize);
+                
+                if (gridX !== gameState.playerPosition.x || gridZ !== gameState.playerPosition.z) {
+                    gameState.playerPosition = { x: gridX, z: gridZ };
+                    updateMinimap(gameState.dungeon, gameState.playerPosition);
+                    
+                    // Check if player reached the exit
+                    if (gameState.dungeon[gridZ][gridX] === 2) {
+                        nextLevel(scene, camera);
+                    }
+                }
+                
+                // Update torch flicker effect
+                updateTorchEffect(scene);
+            });
+            
+            return scene;
+        }
+
+        // Create torch light that follows the player
+        function createTorchLight(scene, camera) {
+            // Create a point light for the torch
+            const torchLight = new BABYLON.PointLight("torchLight", 
+                new BABYLON.Vector3(
+                    camera.position.x, 
+                    camera.position.y - 0.5, // Slightly below eye level
+                    camera.position.z
+                ), 
+                scene);
+            
+            // Set torch light properties
+            torchLight.diffuse = config.torchLight.diffuse;
+            torchLight.specular = config.torchLight.specular;
+            torchLight.intensity = config.torchLight.intensity;
+            torchLight.range = config.torchLight.range;
+            
+            // Parent the light to the camera so it moves with the player
+            torchLight.parent = camera;
+            
+            // Position the light slightly in front and below the camera for a torch-like effect
+            torchLight.position = new BABYLON.Vector3(0.3, -0.5, 0.5);
+            
+            // Create a small sphere to represent the torch flame (optional visual element)
+            const torchFlame = BABYLON.MeshBuilder.CreateSphere("torchFlame", {
+                diameter: 0.2
+            }, scene);
+            
+            // Make the sphere emissive to look like fire
+            const flameMaterial = new BABYLON.StandardMaterial("flameMaterial", scene);
+            flameMaterial.diffuseColor = new BABYLON.Color3(1, 0.6, 0);
+            flameMaterial.emissiveColor = new BABYLON.Color3(1, 0.4, 0);
+            flameMaterial.specularColor = new BABYLON.Color3(1, 0.4, 0);
+            torchFlame.material = flameMaterial;
+            
+            // Position the flame at the light position
+            torchFlame.parent = camera;
+            torchFlame.position = new BABYLON.Vector3(0.3, -0.5, 0.5);
+            
+            // Store references to update in the animation loop
+            gameState.torchLight = torchLight;
+            gameState.torchFlame = torchFlame;
+        }
+
+        // Update torch flickering effect
+        function updateTorchEffect(scene) {
+            // Increment time for the flicker effect
+            gameState.torchTime += scene.getEngine().getDeltaTime() / 1000;
+            
+            if (gameState.torchLight) {
+                // Create a natural flickering effect using sin waves of different frequencies
+                const flicker = 
+                    Math.sin(gameState.torchTime * 10 * config.torchLight.flickerSpeed) * 0.3 + 
+                    Math.sin(gameState.torchTime * 5.5 * config.torchLight.flickerSpeed) * 0.2 + 
+                    Math.sin(gameState.torchTime * 2.0 * config.torchLight.flickerSpeed) * 0.1;
+                
+                // Apply the flicker to the torch intensity
+                const baseIntensity = config.torchLight.intensity;
+                const flickerAmount = config.torchLight.flickerRange;
+                
+                gameState.torchLight.intensity = baseIntensity * (1 + flicker * flickerAmount);
+                
+                // Also slightly adjust the range for a more dynamic effect
+                gameState.torchLight.range = config.torchLight.range * (1 + flicker * 0.1);
+                
+                // Update the flame size to match the flicker (optional)
+                if (gameState.torchFlame) {
+                    gameState.torchFlame.scaling.x = gameState.torchFlame.scaling.y = gameState.torchFlame.scaling.z = 
+                        1 + flicker * 0.2;
+                }
+            }
+        }
+
+        // Generate a random dungeon layout
+        function generateDungeon(size) {
+            // Initialize with all walls
+            const dungeon = Array(size).fill().map(() => Array(size).fill(1));
+            
+            // Create a path using a simple maze generation algorithm
+            const stack = [];
+            const start = { x: 1, z: 1 };
+            dungeon[start.z][start.x] = 0; // 0 = floor
+            stack.push(start);
+            
+            const directions = [
+                { x: 0, z: -2 }, // North
+                { x: 2, z: 0 },  // East
+                { x: 0, z: 2 },  // South
+                { x: -2, z: 0 }  // West
+            ];
+            
+            while (stack.length > 0) {
+                const current = stack[stack.length - 1];
+                
+                // Get valid neighbors
+                const validNeighbors = [];
+                for (const dir of directions) {
+                    const nx = current.x + dir.x;
+                    const nz = current.z + dir.z;
+                    
+                    if (nx > 0 && nx < size - 1 && nz > 0 && nz < size - 1 && dungeon[nz][nx] === 1) {
+                        validNeighbors.push({ x: nx, z: nz, dx: dir.x / 2, dz: dir.z / 2 });
+                    }
+                }
+                
+                if (validNeighbors.length > 0) {
+                    // Choose random neighbor
+                    const next = validNeighbors[Math.floor(Math.random() * validNeighbors.length)];
+                    
+                    // Remove wall between current and neighbor
+                    dungeon[current.z + next.dz][current.x + next.dx] = 0;
+                    dungeon[next.z][next.x] = 0;
+                    
+                    // Add neighbor to stack
+                    stack.push(next);
+                } else {
+                    // Backtrack
+                    stack.pop();
+                }
+            }
+            
+            // Place exit
+            let exitPlaced = false;
+            while (!exitPlaced) {
+                const x = Math.floor(Math.random() * (size - 2)) + 1;
+                const z = Math.floor(Math.random() * (size - 2)) + 1;
+                
+                // Ensure exit is not too close to the start
+                const distanceFromStart = Math.sqrt(Math.pow(x - start.x, 2) + Math.pow(z - start.z, 2));
+                
+                if (dungeon[z][x] === 0 && distanceFromStart > size / 2) {
+                    dungeon[z][x] = 2; // 2 = exit
+                    exitPlaced = true;
+                }
+            }
+            
+            return dungeon;
+        }
+
+        // Create the 3D dungeon meshes
+        function createDungeonMesh(scene, dungeon) {
+            // Clear any existing meshes first
+            const meshesToDispose = scene.meshes.slice();
+            for (const mesh of meshesToDispose) {
+                if (mesh.name !== "camera" && !mesh.name.includes("torch")) {
+                    mesh.dispose();
+                }
+            }
+            
+            // Create materials with procedurally generated textures
+            const floorMaterial = createProceduralMaterial("floorMat", scene, {
+                baseColor: new BABYLON.Color3(0.3, 0.3, 0.35),
+                pattern: "stone",
+                roughness: 0.8
+            });
+            
+            const wallMaterial = createProceduralMaterial("wallMat", scene, {
+                baseColor: new BABYLON.Color3(0.5, 0.45, 0.4),
+                pattern: "brick",
+                roughness: 0.9
+            });
+            
+            const ceilingMaterial = createProceduralMaterial("ceilingMat", scene, {
+                baseColor: new BABYLON.Color3(0.2, 0.2, 0.25),
+                pattern: "noise",
+                roughness: 0.7
+            });
+            
+            const exitMaterial = new BABYLON.StandardMaterial("exitMat", scene);
+            exitMaterial.diffuseColor = new BABYLON.Color3(0.1, 0.5, 0.1);
+            exitMaterial.emissiveColor = new BABYLON.Color3(0, 0.5, 0);
+            
+            // Build floor, ceiling and walls
+            for (let z = 0; z < dungeon.length; z++) {
+                for (let x = 0; x < dungeon[z].length; x++) {
+                    const cellType = dungeon[z][x];
+                    const posX = x * config.cellSize;
+                    const posZ = z * config.cellSize;
+                    
+                    if (cellType === 0 || cellType === 2) {
+                        // Create floor
+                        const floor = BABYLON.MeshBuilder.CreateBox("floor_" + x + "_" + z, {
+                            width: config.cellSize,
+                            height: 0.1,
+                            depth: config.cellSize
+                        }, scene);
+                        floor.position = new BABYLON.Vector3(
+                            posX + config.cellSize / 2,
+                            0,
+                            posZ + config.cellSize / 2
+                        );
+                        floor.material = floorMaterial;
+                        floor.checkCollisions = true;
+                        
+                        // Create ceiling
+                        const ceiling = BABYLON.MeshBuilder.CreateBox("ceiling_" + x + "_" + z, {
+                            width: config.cellSize,
+                            height: 0.1,
+                            depth: config.cellSize
+                        }, scene);
+                        ceiling.position = new BABYLON.Vector3(
+                            posX + config.cellSize / 2,
+                            config.wallHeight,
+                            posZ + config.cellSize / 2
+                        );
+                        ceiling.material = ceilingMaterial;
+                        ceiling.checkCollisions = true;
+                        
+                        // Create exit marker
+                        if (cellType === 2) {
+                            const exitMarker = BABYLON.MeshBuilder.CreateCylinder("exit", {
+                                height: 0.1,
+                                diameter: config.cellSize * 0.6
+                            }, scene);
+                            exitMarker.position = new BABYLON.Vector3(
+                                posX + config.cellSize / 2,
+                                0.05,
+                                posZ + config.cellSize / 2
+                            );
+                            exitMarker.material = exitMaterial;
+                            
+                            // Add a point light to make the exit more visible
+                            const exitLight = new BABYLON.PointLight("exitLight", new BABYLON.Vector3(
+                                posX + config.cellSize / 2,
+                                config.wallHeight / 2,
+                                posZ + config.cellSize / 2
+                            ), scene);
+                            exitLight.diffuse = new BABYLON.Color3(0, 1, 0);
+                            exitLight.intensity = 0.7;
+                            exitLight.range = config.cellSize * 2;
+                        }
+                    }
+                    
+                    // Add walls around the cell if needed
+                    if (cellType === 0 || cellType === 2) {
+                        // Check neighbor cells and add walls if they're solid
+                        
+                        // North wall
+                        if (z === 0 || dungeon[z-1][x] === 1) {
+                            createWall(scene, posX, posZ, config.cellSize, config.wallHeight, "north", wallMaterial);
+                        }
+                        
+                        // East wall
+                        if (x === dungeon[z].length - 1 || dungeon[z][x+1] === 1) {
+                            createWall(scene, posX + config.cellSize, posZ, config.cellSize, config.wallHeight, "east", wallMaterial);
+                        }
+                        
+                        // South wall
+                        if (z === dungeon.length - 1 || dungeon[z+1][x] === 1) {
+                            createWall(scene, posX, posZ + config.cellSize, config.cellSize, config.wallHeight, "south", wallMaterial);
+                        }
+                        
+                        // West wall
+                        if (x === 0 || dungeon[z][x-1] === 1) {
+                            createWall(scene, posX, posZ, config.cellSize, config.wallHeight, "west", wallMaterial);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Helper function to create walls
+        function createWall(scene, x, z, width, height, direction, material) {
+            let wall;
+            
+            if (direction === "north" || direction === "south") {
+                wall = BABYLON.MeshBuilder.CreateBox("wall_" + x + "_" + z + "_" + direction, {
+                    width: width,
+                    height: height,
+                    depth: 0.1
+                }, scene);
+                
+                wall.position = new BABYLON.Vector3(
+                    x + width / 2,
+                    height / 2,
+                    direction === "north" ? z : z + 0.1
+                );
+            } else { // east or west
+                wall = BABYLON.MeshBuilder.CreateBox("wall_" + x + "_" + z + "_" + direction, {
+                    width: 0.1,
+                    height: height,
+                    depth: width
+                }, scene);
+                
+                wall.position = new BABYLON.Vector3(
+                    direction === "east" ? x : x + 0.1,
+                    height / 2,
+                    z + width / 2
+                );
+            }
+            
+            wall.material = material;
+            wall.checkCollisions = true;
+            
+            return wall;
+        }
+
+        // Create a procedural material
+        function createProceduralMaterial(name, scene, options) {
+            const material = new BABYLON.StandardMaterial(name, scene);
+            
+            // Create a dynamic texture
+            const textureSize = 512;
+            const texture = new BABYLON.DynamicTexture(name + "_texture", textureSize, scene);
+            const ctx = texture.getContext();
+            
+            // Generate pattern based on options
+            ctx.fillStyle = options.baseColor.toHexString();
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            if (options.pattern === "brick") {
+                // Draw brick pattern
+                ctx.fillStyle = "#000000";
+                ctx.globalAlpha = 0.1;
+                
+                const brickWidth = 64;
+                const brickHeight = 32;
+                
+                for (let y = 0; y < textureSize; y += brickHeight) {
+                    const offset = (Math.floor(y / brickHeight) % 2) * (brickWidth / 2);
+                    
+                    for (let x = 0; x < textureSize; x += brickWidth) {
+                        // Brick outline
+                        ctx.fillRect(x + offset, y, brickWidth - 1, 1);
+                        ctx.fillRect(x + offset, y + brickHeight - 1, brickWidth - 1, 1);
+                        ctx.fillRect(x + offset, y, 1, brickHeight);
+                        ctx.fillRect(x + offset + brickWidth - 1, y, 1, brickHeight);
+                    }
+                }
+                
+                // Add some variation
+                addNoiseToTexture(ctx, textureSize, 0.05);
+                
+            } else if (options.pattern === "stone") {
+                // Draw stone pattern
+                ctx.fillStyle = "#000000";
+                ctx.globalAlpha = 0.1;
+                
+                // Draw large stone blocks
+                const stoneCount = 20;
+                for (let i = 0; i < stoneCount; i++) {
+                    const x = Math.random() * textureSize;
+                    const y = Math.random() * textureSize;
+                    const w = 50 + Math.random() * 70;
+                    const h = 30 + Math.random() * 50;
+                    
+                    ctx.fillRect(x, y, w, h);
+                }
+                
+                // Add some variation
+                addNoiseToTexture(ctx, textureSize, 0.1);
+                
+            } else if (options.pattern === "noise") {
+                // Just add noise
+                addNoiseToTexture(ctx, textureSize, 0.2);
+            }
+            
+            // Apply the texture
+            texture.update();
+            material.diffuseTexture = texture;
+            
+            // Apply other material properties
+            material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+            material.roughness = options.roughness || 0.5;
+            
+            return material;
+        }
+
+        // Add noise to a texture context
+        function addNoiseToTexture(ctx, size, intensity) {
+            const imageData = ctx.getImageData(0, 0, size, size);
+            const data = imageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                const noise = (Math.random() - 0.5) * intensity * 255;
+                
+                data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
+                data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Find a starting position (first free cell after the entrance)
+        function findStartPosition(dungeon) {
+            return { x: 1, z: 1 };
+        }
+
+        // Update the minimap
+        function updateMinimap(dungeon, playerPosition) {
+            const minimap = document.getElementById('minimap');
+            
+            // Check if minimap already has a canvas
+            let canvas = minimap.querySelector('canvas');
+            if (!canvas) {
+                // If canvas isn't available, create it
+                canvas = document.createElement('canvas');
+                canvas.width = 150;
+                canvas.height = 150;
+                minimap.innerHTML = '';
+                minimap.appendChild(canvas);
+            }
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.error("Could not get canvas context");
+                return;
+            }
+            
+            // Clear the canvas
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            
+            const cellSize = Math.min(ctx.canvas.width, ctx.canvas.height) / config.minimapScale;
+            
+            // Calculate viewport center
+            const viewX = playerPosition.x - Math.floor(config.minimapScale / 2);
+            const viewZ = playerPosition.z - Math.floor(config.minimapScale / 2);
+            
+            // Draw the visible part of the dungeon
+            for (let z = 0; z < config.minimapScale; z++) {
+                for (let x = 0; x < config.minimapScale; x++) {
+                    const mapX = viewX + x;
+                    const mapZ = viewZ + z;
+                    
+                    if (mapX >= 0 && mapX < dungeon[0].length && mapZ >= 0 && mapZ < dungeon.length) {
+                        const cellType = dungeon[mapZ][mapX];
+                        
+                        if (cellType === 0) {
+                            ctx.fillStyle = '#555';
+                        } else if (cellType === 1) {
+                            ctx.fillStyle = '#222';
+                        } else if (cellType === 2) {
+                            ctx.fillStyle = '#0f0';
+                        }
+                        
+                        ctx.fillRect(x * cellSize, z * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+            
+            // Draw player position
+            const playerX = (playerPosition.x - viewX) * cellSize;
+            const playerZ = (playerPosition.z - viewZ) * cellSize;
+            
+            ctx.fillStyle = '#f00';
+            ctx.beginPath();
+            ctx.arc(playerX + cellSize / 2, playerZ + cellSize / 2, cellSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Advance to the next level
+        function nextLevel(scene, camera) {
+            // Increase level
+            gameState.level++;
+            
+            // Update level display
+            document.getElementById('levelDisplay').textContent = gameState.level;
+            
+            if (gameState.level > config.levels) {
+                // Game completed
+                alert("Congratulations! You've completed all " + config.levels + " levels!");
+                // Reset to level 1
+                gameState.level = 1;
+                document.getElementById('levelDisplay').textContent = gameState.level;
+            }
+            
+            // Generate new dungeon
+            gameState.dungeon = generateDungeon(config.dungeonSize);
+            createDungeonMesh(scene, gameState.dungeon);
+            
+            // Place player at start
+            const startPosition = findStartPosition(gameState.dungeon);
+            camera.position.x = startPosition.x * config.cellSize + config.cellSize / 2;
+            camera.position.z = startPosition.z * config.cellSize + config.cellSize / 2;
+            gameState.playerPosition = startPosition;
+            
+            // Update minimap
+            updateMinimap(gameState.dungeon, startPosition);
+        }
+    </script>
+</body>
+</html>
