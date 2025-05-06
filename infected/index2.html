@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Survival Game+</title>
+    <style>
+        body { font-family: sans-serif; display: flex; margin: 10px; background-color: #f0f0f0;}
+        canvas { border: 1px solid black; background-color: #a0d9a0; margin-right: 20px; cursor: crosshair; }
+        #gameUI { display: flex; flex-direction: column; max-height: 95vh; } /* Limit UI height */
+        #stats, #inventory, #crafting, #messages {
+            border: 1px solid #ccc;
+            background-color: #fff;
+            padding: 10px;
+            margin-bottom: 10px;
+            min-width: 220px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        h3 { margin-top: 0; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid #eee; }
+        #inventory ul, #crafting ul { list-style: none; padding: 0; margin: 5px 0 0 0; max-height: 150px; overflow-y: auto; } /* Scrollable lists */
+        #inventory li { margin-bottom: 5px; padding: 2px; border-radius: 3px; }
+        #inventory li:hover { background-color: #eee; }
+        #crafting li { margin-bottom: 5px; }
+        #crafting button { cursor: pointer; padding: 4px 8px; width: 100%; text-align: left; border: 1px solid #ccc; background-color: #e9e9e9; border-radius: 3px;}
+        #crafting button:hover:not(:disabled) { background-color: #dcdcdc; }
+        #crafting button:disabled { cursor: not-allowed; opacity: 0.6; background-color: #f5f5f5;}
+        #messageLog { height: 180px; overflow-y: scroll; border: 1px solid #eee; padding: 5px; font-size: 0.85em; background-color: #fafafa; }
+        #messageLog p { margin: 3px 0; padding-bottom: 3px; border-bottom: 1px dotted #eee; }
+        #messageLog p:last-child { border-bottom: none; }
+        .stat-bar { background-color: #ddd; height: 12px; width: 100px; display: inline-block; margin-left: 5px; border: 1px solid #aaa; vertical-align: middle; }
+        .stat-bar-fill { height: 100%; transition: width 0.2s ease-out; } /* Smooth transition */
+        .health-fill { background-color: #dc3545; } /* Red */
+        .hunger-fill { background-color: #ffc107; } /* Yellow/Orange */
+        .thirst-fill { background-color: #17a2b8; } /* Cyan */
+        .equipped-tool { font-style: italic; color: #555; }
+        .build-mode { color: green; font-weight: bold; display: block; margin-top: 5px; } /* Ensure it takes space */
+        #stats p { margin: 6px 0; }
+        li[title]:hover { position: relative; } /* For potential tooltips later */
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="700" height="550"></canvas>
+
+    <div id="gameUI">
+        <div id="stats">
+            <h3>Stats</h3>
+            <p>Health: <span id="healthValue">100</span> / 100
+                <span class="stat-bar"><span id="healthBarFill" class="stat-bar-fill health-fill" style="width: 100%;"></span></span>
+            </p>
+            <p>Hunger: <span id="hungerValue">100</span> / 100
+                 <span class="stat-bar"><span id="hungerBarFill" class="stat-bar-fill hunger-fill" style="width: 100%;"></span></span>
+            </p>
+            <p>Thirst: <span id="thirstValue">100</span> / 100
+                 <span class="stat-bar"><span id="thirstBarFill" class="stat-bar-fill thirst-fill" style="width: 100%;"></span></span>
+            </p>
+             <p>Equipped: <span id="equippedTool" class="equipped-tool">None</span></p>
+             <p><span id="buildModeIndicator"></span></p> <!-- For build mode -->
+        </div>
+
+        <div id="inventory">
+            <h3>Inventory (Click Tool to Equip)</h3>
+            <ul id="inventoryList">
+                <li>Empty</li>
+            </ul>
+        </div>
+
+        <div id="crafting">
+            <h3>Crafting (Hover for Cost)</h3>
+            <ul id="craftingList">
+                <!-- Crafting options will be populated by JS -->
+            </ul>
+        </div>
+
+        <div id="messages">
+            <h3>Log</h3>
+            <div id="messageLog"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const healthValueSpan = document.getElementById('healthValue');
+        const healthBarFillSpan = document.getElementById('healthBarFill');
+        const hungerValueSpan = document.getElementById('hungerValue');
+        const hungerBarFillSpan = document.getElementById('hungerBarFill');
+        const thirstValueSpan = document.getElementById('thirstValue');
+        const thirstBarFillSpan = document.getElementById('thirstBarFill');
+        const inventoryListUl = document.getElementById('inventoryList');
+        const craftingListUl = document.getElementById('craftingList');
+        const messageLogDiv = document.getElementById('messageLog');
+        const equippedToolSpan = document.getElementById('equippedTool');
+        const buildModeIndicatorSpan = document.getElementById('buildModeIndicator');
+
+
+        // --- Game Settings ---
+        const TILE_SIZE = 32; // Concept for potential grid later
+        const PLAYER_SPEED = 2.5; // Slightly slower due to survival needs
+        const ENEMY_SPEED = 0.8;
+        const PLAYER_REACH = 60; // Increased reach
+        const ENEMY_ATTACK_RANGE = 45;
+        const ENEMY_DAMAGE = 5;
+        const PLAYER_DAMAGE = 8; // Base damage, modified by tools
+        const BASE_GATHER_AMOUNT = 1; // Amount with bare hands (if allowed)
+        const ENEMY_SPAWN_INTERVAL = 7000; // ms
+        const ENEMY_HEALTH = 30;
+        const MAX_ENEMIES = 4;
+        const HUNGER_RATE = 0.15; // Points per second
+        const THIRST_RATE = 0.25; // Points per second
+        const STARVATION_DAMAGE_RATE = 0.5; // Health points per second when starving/dehydrated
+        const BUILDING_PLACEMENT_RANGE = 80;
+        const WALL_HEALTH = 100;
+        const LOG_MESSAGE_LIMIT = 25;
+
+        // --- Game Data ---
+        const tools = {
+            'Wooden Axe': { damage: 12, gatherBonus: { 'wood': 2 }, durability: 50 },
+            'Stone Pickaxe': { damage: 15, gatherBonus: { 'stone': 3 }, durability: 80 },
+            // Add more tools: Stone Axe, Iron Pickaxe etc.
+        };
+
+        const recipes = {
+            'Wooden Axe': { cost: { 'wood': 5 }, output: { item: 'Wooden Axe', type: 'tool' }, requires: null },
+            'Stone Pickaxe': { cost: { 'wood': 2, 'stone': 3 }, output: { item: 'Stone Pickaxe', type: 'tool' }, requires: null },
+            'Campfire': { cost: { 'wood': 10, 'stone': 5 }, output: { item: 'Campfire', type: 'building' }, requires: null },
+            'Wooden Wall': { cost: { 'wood': 8 }, output: { item: 'Wooden Wall', type: 'building' }, requires: null },
+            // 'Cooked Meat': { cost: { 'raw_meat': 1, 'wood': 1 }, output: { item: 'Cooked Meat', type: 'food', hunger: 30 }, requires: 'Campfire' }, // Example
+        };
+
+        const resourceRequirements = {
+            'tree': 'Axe', // Requires an item containing 'Axe' in its name
+            'rock': 'Pickaxe' // Requires an item containing 'Pickaxe' in its name
+        };
+
+        // --- Game State ---
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 25,
+            height: 25,
+            color: 'blue',
+            health: 100,
+            maxHealth: 100,
+            hunger: 100,
+            maxHunger: 100,
+            thirst: 100,
+            maxThirst: 100,
+            inventory: {}, // { 'wood': 5, 'stone': 2, 'Wooden Axe': 1 }
+            moving: { up: false, down: false, left: false, right: false },
+            equippedTool: null, // Stores the name of the equipped tool, e.g., 'Wooden Axe'
+            isBuilding: null, // Stores the name of the building to place, e.g., 'Wooden Wall'
+            buildGhost: { x: 0, y: 0, valid: false } // For visual build placement
+        };
+
+        let resources = [];
+        let enemies = [];
+        let buildings = []; // Store placed buildings
+        let lastEnemySpawnTime = 0;
+        let lastHungerTick = Date.now();
+        let lastThirstTick = Date.now();
+        let gameOver = false;
+        let gameTime = 0; // Track total game time ms
+        let lastTickTime = 0; // For delta time calculation
+
+        // --- Utility Functions ---
+        function distance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+        }
+
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function logMessage(msg, type = 'info') {
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            if (type === 'error') p.style.color = '#dc3545'; // Red
+            if (type === 'success') p.style.color = '#28a745'; // Green
+            if (type === 'warning') p.style.color = '#ffc107'; // Yellow/Orange
+            messageLogDiv.insertBefore(p, messageLogDiv.firstChild);
+            while (messageLogDiv.children.length > LOG_MESSAGE_LIMIT) { // Use constant for limit
+                messageLogDiv.removeChild(messageLogDiv.lastChild);
+            }
+        }
+
+        // Collision check between two rectangles
+        function checkCollision(rect1, rect2) {
+            // Add small buffer to prevent exact edge touching being collision
+            const buffer = 0.1;
+            return rect1.x < rect2.x + rect2.width - buffer &&
+                   rect1.x + rect1.width > rect2.x + buffer &&
+                   rect1.y < rect2.y + rect2.height - buffer &&
+                   rect1.y + rect1.height > rect2.y + buffer;
+        }
+
+        // --- Initialization ---
+        function init() {
+            spawnResource('tree', 'darkgreen', 8); // More trees
+            spawnResource('rock', 'dimgray', 5);  // More rocks
+
+            // Add Input Listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            canvas.addEventListener('mousemove', handleMouseMove); // For build preview
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('contextmenu', handleRightClick); // To cancel building
+
+            logMessage("Game started. WASD/Arrows to move.", 'info');
+            logMessage("Click resources with correct tool equipped.", 'info');
+            logMessage("Click enemies to attack (damage depends on tool).", 'info');
+            logMessage("Craft items and place buildings.", 'info');
+            logMessage("Right-click or ESC to cancel building mode.", 'info');
+            logMessage("Press 1, 2, 3... to equip tools in inventory order.", 'info');
+
+            updateInventoryUI();
+            updateCraftingUI();
+            updateStatsUI();
+            lastTickTime = performance.now(); // Initialize for first delta time calculation
+            gameLoop();
+        }
+
+        function spawnResource(type, color, count) {
+            for (let i = 0; i < count; i++) {
+                resources.push({
+                    x: getRandomInt(50, canvas.width - 50),
+                    y: getRandomInt(50, canvas.height - 50),
+                    width: 30,
+                    height: type === 'tree' ? 40 : 30, // Trees taller
+                    type: type,
+                    color: color
+                });
+            }
+        }
+
+        function spawnEnemy() {
+             if (enemies.length >= MAX_ENEMIES) return;
+             const edge = getRandomInt(1, 4);
+             let x, y;
+             // Spawn further off-screen
+             switch(edge) {
+                case 1: x = getRandomInt(0, canvas.width); y = -30; break;
+                case 2: x = canvas.width + 30; y = getRandomInt(0, canvas.height); break;
+                case 3: x = getRandomInt(0, canvas.width); y = canvas.height + 30; break;
+                case 4: x = -30; y = getRandomInt(0, canvas.height); break;
+             }
+
+            enemies.push({
+                x: x,
+                y: y,
+                width: 20,
+                height: 20,
+                color: 'darkred',
+                health: ENEMY_HEALTH,
+                maxHealth: ENEMY_HEALTH,
+                speed: ENEMY_SPEED + (Math.random() * 0.3 - 0.15), // Variation
+                attackCooldown: 0 // Initialize cooldown timer
+            });
+            lastEnemySpawnTime = Date.now();
+        }
+
+        // --- Input Handling ---
+        function handleKeyDown(e) {
+            if (gameOver) return;
+            switch (e.key.toLowerCase()) {
+                case 'w': case 'arrowup': player.moving.up = true; break;
+                case 's': case 'arrowdown': player.moving.down = true; break;
+                case 'a': case 'arrowleft': player.moving.left = true; break;
+                case 'd': case 'arrowright': player.moving.right = true; break;
+                case 'escape': // Cancel building with Escape key
+                     if (player.isBuilding) {
+                         cancelBuilding();
+                     }
+                     break;
+                // Basic equip keys (1-9) - equips based on inventory order
+                case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+                    equipItemFromSlot(parseInt(e.key) - 1);
+                    break;
+            }
+        }
+
+        function handleKeyUp(e) {
+            switch (e.key.toLowerCase()) {
+                case 'w': case 'arrowup': player.moving.up = false; break;
+                case 's': case 'arrowdown': player.moving.down = false; break;
+                case 'a': case 'arrowleft': player.moving.left = false; break;
+                case 'd': case 'arrowright': player.moving.right = false; break;
+            }
+        }
+
+        function handleMouseMove(e) {
+            if (gameOver || !player.isBuilding) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Get building dimensions for centering the ghost
+            const buildingData = getBuildingData(player.isBuilding);
+            player.buildGhost.x = mouseX - buildingData.width / 2;
+            player.buildGhost.y = mouseY - buildingData.height / 2;
+
+            // Check placement validity
+            const ghostRect = {
+                x: player.buildGhost.x,
+                y: player.buildGhost.y,
+                width: buildingData.width,
+                height: buildingData.height
+            };
+            player.buildGhost.valid = canPlaceBuilding(ghostRect);
+        }
+
+        function handleCanvasClick(e) {
+            if (gameOver) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+
+            // 1. Building Placement
+            if (player.isBuilding) {
+                if (player.buildGhost.valid) {
+                    placeBuilding();
+                } else {
+                    logMessage("Cannot place building here (obstructed or too far).", "error");
+                }
+                return; // Don't process other clicks if in build mode
+            }
+
+            let actionTaken = false;
+
+            // 2. Attack Enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const enemyCenterX = enemy.x + enemy.width / 2;
+                const enemyCenterY = enemy.y + enemy.height / 2;
+                const distToPlayer = distance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY);
+                const clickDist = distance(clickX, clickY, enemyCenterX, enemyCenterY);
+
+                // Check if click is within enemy bounds (approx) and player is within reach
+                if (clickX >= enemy.x && clickX <= enemy.x + enemy.width &&
+                    clickY >= enemy.y && clickY <= enemy.y + enemy.height &&
+                    distToPlayer <= PLAYER_REACH) {
+                    attackEnemy(enemy, i);
+                    actionTaken = true;
+                    break;
+                }
+            }
+            if (actionTaken) return;
+
+            // 3. Gather Resources
+            for (let i = resources.length - 1; i >= 0; i--) {
+                const res = resources[i];
+                const resCenterX = res.x + res.width / 2;
+                const resCenterY = res.y + res.height / 2;
+                const distToPlayer = distance(playerCenterX, playerCenterY, resCenterX, resCenterY);
+
+                 // Check if click is within resource bounds (approx) and player is within reach
+                 if (clickX >= res.x && clickX <= res.x + res.width &&
+                    clickY >= res.y && clickY <= res.y + res.height &&
+                    distToPlayer <= PLAYER_REACH) {
+                    gatherResource(res, i);
+                    actionTaken = true;
+                    break;
+                }
+            }
+             if (actionTaken) return;
+
+            // 4. Interact with Buildings (e.g., open campfire UI) - Future enhancement
+            // for (let i = buildings.length - 1; i >= 0; i--) { ... }
+        }
+
+        function handleRightClick(e) {
+            e.preventDefault(); // Prevent browser context menu
+            if (gameOver) return;
+            if (player.isBuilding) {
+                cancelBuilding();
+            }
+        }
+
+        // --- Action Functions ---
+
+        function attackEnemy(enemy, index) {
+            let damageDealt = PLAYER_DAMAGE; // Base damage
+            let toolName = "Fists";
+            if (player.equippedTool && tools[player.equippedTool]) {
+                damageDealt = tools[player.equippedTool].damage;
+                toolName = player.equippedTool;
+                // Add durability loss here later if desired
+            }
+
+            enemy.health -= damageDealt;
+            logMessage(`Attacked enemy with ${toolName}! (-${damageDealt} HP)`, 'info');
+
+            if (enemy.health <= 0) {
+                logMessage("Enemy defeated!", 'success');
+                // Maybe drop loot?
+                // if (Math.random() < 0.3) addItemToInventory('raw_meat', 1);
+                enemies.splice(index, 1);
+            }
+        }
+
+        function gatherResource(res, index) {
+            const requiredToolType = resourceRequirements[res.type];
+            let canGather = false;
+            let gatherAmount = 0; // Start at 0
+            let toolUsed = "Nothing"; // Default if cannot gather
+
+            let hasCorrectTool = false;
+            if (player.equippedTool && tools[player.equippedTool]) {
+                const tool = tools[player.equippedTool];
+                // Simple check if tool name contains required type (e.g., "Wooden Axe" contains "Axe")
+                if (requiredToolType && player.equippedTool.toLowerCase().includes(requiredToolType.toLowerCase())) {
+                    hasCorrectTool = true;
+                    toolUsed = player.equippedTool;
+                    gatherAmount = BASE_GATHER_AMOUNT; // Base amount when using *a* tool
+                    // Apply bonus gathering amount
+                    if (tool.gatherBonus && tool.gatherBonus[res.type.toLowerCase()]) {
+                         gatherAmount += tool.gatherBonus[res.type.toLowerCase()];
+                    }
+                     // Add durability loss here later if desired
+                }
+            }
+
+            // Check if bare hands gathering is allowed
+            if (!hasCorrectTool && BASE_GATHER_AMOUNT > 0 && !requiredToolType) {
+                // Resource does not require a tool, allow base gathering
+                 canGather = true;
+                 gatherAmount = BASE_GATHER_AMOUNT;
+                 toolUsed = "Bare Hands";
+            } else if (!hasCorrectTool && BASE_GATHER_AMOUNT > 0 && requiredToolType) {
+                 // Resource requires a tool, but bare hands gathering yields a small amount
+                 canGather = true;
+                 gatherAmount = BASE_GATHER_AMOUNT;
+                 toolUsed = "Bare Hands";
+                 logMessage(`Need a ${requiredToolType} to gather ${res.type} efficiently.`, 'warning');
+            } else if (hasCorrectTool) {
+                // Has the correct tool
+                 canGather = true;
+            } else if (!requiredToolType) {
+                 // Does not require a tool, but base gather amount is 0
+                 logMessage(`Cannot gather ${res.type} right now.`, 'error');
+                 return;
+            } else {
+                 // Requires a tool, no tool equipped/wrong tool, and base gather amount is 0
+                logMessage(`Cannot gather ${res.type} without a ${requiredToolType}.`, 'error');
+                return;
+            }
+
+
+            // Perform gathering if possible
+            if (canGather && gatherAmount > 0) {
+                const resourceItemName = res.type === 'tree' ? 'wood' : (res.type === 'rock' ? 'stone' : res.type);
+                addItemToInventory(resourceItemName, gatherAmount);
+                logMessage(`Gathered ${gatherAmount} ${resourceItemName} with ${toolUsed}.`, 'success');
+                updateInventoryUI();
+                updateCraftingUI(); // Update availability
+
+                // Remove resource node (consider health/stages later)
+                resources.splice(index, 1);
+                // Maybe respawn resources after a delay?
+            } else if (!canGather) {
+                 logMessage(`Cannot gather ${res.type}.`, 'error'); // Should be caught above, but as fallback
+            }
+        }
+
+
+        function addItemToInventory(itemName, quantity) {
+            player.inventory[itemName] = (player.inventory[itemName] || 0) + quantity;
+        }
+
+        function removeItemFromInventory(itemName, quantity) {
+            if (player.inventory[itemName] && player.inventory[itemName] >= quantity) { // Check if enough
+                player.inventory[itemName] -= quantity;
+                if (player.inventory[itemName] <= 0) {
+                    delete player.inventory[itemName];
+                    // Unequip if it was the equipped tool and now it's gone
+                    if (player.equippedTool === itemName) {
+                        player.equippedTool = null;
+                        updateEquippedToolUI();
+                    }
+                }
+                return true; // Success
+            }
+            return false; // Item not found or not enough
+        }
+
+        function craftItem(recipeName) {
+            const recipe = recipes[recipeName];
+            if (!recipe) {
+                logMessage(`Recipe "${recipeName}" not found.`, 'error');
+                return;
+            }
+
+            // Check resource cost
+            let canAfford = true;
+            let missingResources = [];
+            for (const resource in recipe.cost) {
+                if ((player.inventory[resource] || 0) < recipe.cost[resource]) {
+                    canAfford = false;
+                    missingResources.push(`${recipe.cost[resource]} ${resource}`);
+                }
+            }
+            if (!canAfford) {
+                 logMessage(`Cannot craft ${recipeName}. Need: ${missingResources.join(', ')}.`, 'error');
+                return;
+            }
+
+            // Check requirements (e.g., near a Campfire)
+            let requirementMet = true; // Assume met if none specified
+            if (recipe.requires) {
+                 requirementMet = false; // Assume not met initially if specified
+                 let foundRequirement = false;
+                 for (const building of buildings) {
+                     if (building.type === recipe.requires) {
+                          const dist = distance(player.x + player.width / 2, player.y + player.height / 2,
+                                                building.x + building.width / 2, building.y + building.height / 2);
+                          if (dist < PLAYER_REACH * 1.2) { // Must be reasonably close
+                              foundRequirement = true;
+                              break;
+                          }
+                     }
+                 }
+                 if (!foundRequirement) {
+                     logMessage(`Need to be near a ${recipe.requires} to craft ${recipeName}.`, 'error');
+                     return; // Stop crafting
+                 }
+                 requirementMet = true; // Set back to true if found
+            }
+
+            // If all checks pass: Deduct resources
+            for (const resource in recipe.cost) {
+                if (!removeItemFromInventory(resource, recipe.cost[resource])) {
+                     // This should not happen if canAfford check passed, but as a safeguard
+                     logMessage(`Error deducting resource ${resource}. Crafting cancelled.`, 'error');
+                     // Attempt to refund already deducted resources (tricky, might skip for simplicity)
+                     return;
+                }
+            }
+
+            // Add output
+            const output = recipe.output;
+            if (output.type === 'tool' || output.type === 'food' || output.type === 'material') {
+                addItemToInventory(output.item, 1); // Assuming output quantity is 1 for now
+                logMessage(`Crafted ${output.item}.`, 'success');
+            } else if (output.type === 'building') {
+                // Don't add to inventory, instead enter build mode
+                startBuilding(output.item);
+                 // Message now handled in startBuilding
+            }
+
+            updateInventoryUI();
+            updateCraftingUI();
+        }
+
+        function equipItemFromSlot(slotIndex) {
+             // Get tools from inventory in a consistent order (alphabetic)
+            const inventoryTools = Object.keys(player.inventory)
+                                        .filter(item => tools[item])
+                                        .sort();
+
+            if (slotIndex >= 0 && slotIndex < inventoryTools.length) {
+                const itemToEquip = inventoryTools[slotIndex];
+                if (player.equippedTool !== itemToEquip) {
+                    player.equippedTool = itemToEquip;
+                    logMessage(`Equipped ${itemToEquip}.`, 'info');
+                    updateEquippedToolUI();
+                } else {
+                    // Unequip if selecting the same item again
+                    player.equippedTool = null;
+                    logMessage(`Unequipped ${itemToEquip}.`, 'info');
+                    updateEquippedToolUI();
+                }
+            } else {
+                // Optional: log message if invalid slot pressed
+                // logMessage(`No tool in slot ${slotIndex + 1}.`, 'info');
+            }
+        }
+
+
+        function startBuilding(buildingName) {
+             if (player.isBuilding) { // Prevent starting a new build while already building
+                 logMessage(`Already placing a ${player.isBuilding}. Cancel first.`, 'warning');
+                 return;
+             }
+            player.isBuilding = buildingName;
+            buildModeIndicatorSpan.textContent = `Building: ${buildingName}`;
+            buildModeIndicatorSpan.classList.add('build-mode');
+            logMessage(`Selected ${buildingName} for placement. Move mouse, click to place. Right-click/ESC to cancel.`, 'info');
+            // Reset ghost state
+            player.buildGhost.valid = false;
+            player.buildGhost.x = -100; // Hide initially off-screen
+            player.buildGhost.y = -100;
+        }
+
+        function cancelBuilding() {
+             if (!player.isBuilding) return; // Don't log if not building
+             logMessage("Building cancelled.", 'info');
+             player.isBuilding = null;
+             buildModeIndicatorSpan.textContent = '';
+             buildModeIndicatorSpan.classList.remove('build-mode');
+        }
+
+        function getBuildingData(buildingName) {
+            // Define building dimensions and properties here
+            switch(buildingName) {
+                case 'Campfire': return { width: 40, height: 40, color: 'orange', health: 50, type: 'Campfire', blocksMovement: false }; // Campfires might not block movement
+                case 'Wooden Wall': return { width: TILE_SIZE, height: TILE_SIZE * 1.5, color: '#8B4513', health: WALL_HEALTH, type: 'Wooden Wall', blocksMovement: true };
+                default: return { width: 30, height: 30, color: 'purple', health: 10, type: 'Unknown', blocksMovement: true }; // Default fallback
+            }
+        }
+
+        function canPlaceBuilding(buildingRect) {
+             // 1. Check distance from player
+            const buildCenterX = buildingRect.x + buildingRect.width / 2;
+            const buildCenterY = buildingRect.y + buildingRect.height / 2;
+            const playerCenterX = player.x + player.width / 2;
+            const playerCenterY = player.y + player.height / 2;
+            if (distance(playerCenterX, playerCenterY, buildCenterX, buildCenterY) > BUILDING_PLACEMENT_RANGE) {
+                return false; // Too far
+            }
+
+            // 2. Check canvas bounds
+             if (buildingRect.x < 0 || buildingRect.x + buildingRect.width > canvas.width ||
+                 buildingRect.y < 0 || buildingRect.y + buildingRect.height > canvas.height) {
+                 return false; // Out of bounds
+             }
+
+            // 3. Check collision with existing buildings
+            for (const building of buildings) {
+                if (checkCollision(buildingRect, building)) {
+                    return false;
+                }
+            }
+            // 4. Check collision with resources
+            for (const res of resources) {
+                if (checkCollision(buildingRect, res)) {
+                    return false;
+                }
+            }
+             // 5. Check collision with enemies (optional, usually allow building near them)
+             // for (const enemy of enemies) {
+             //     if (checkCollision(buildingRect, enemy)) { return false; }
+             // }
+             // 6. Check collision with player (usually allowed, player can move)
+            // if (checkCollision(buildingRect, player)) { return false; }
+
+
+            return true; // Placement is valid
+        }
+
+        function placeBuilding() {
+            if (!player.isBuilding || !player.buildGhost.valid) return;
+
+            const buildingData = getBuildingData(player.isBuilding);
+            buildings.push({
+                x: player.buildGhost.x,
+                y: player.buildGhost.y,
+                width: buildingData.width,
+                height: buildingData.height,
+                color: buildingData.color,
+                type: buildingData.type,
+                health: buildingData.health,
+                maxHealth: buildingData.health,
+                blocksMovement: buildingData.blocksMovement // Store blocking property
+            });
+
+            logMessage(`Placed ${player.isBuilding}.`, 'success');
+
+            // Exit build mode
+             player.isBuilding = null; // Reset build state *before* logging cancel message
+             buildModeIndicatorSpan.textContent = '';
+             buildModeIndicatorSpan.classList.remove('build-mode');
+             // No need to call cancelBuilding() here as we just completed the action
+        }
+
+
+        // --- Update Functions ---
+        function updatePlayer(deltaTime) {
+            const now = Date.now(); // Use current time, not gameTime for rates
+            const timeSinceHungerTick = now - lastHungerTick;
+            const timeSinceThirstTick = now - lastThirstTick;
+            let statsChanged = false;
+
+            // --- Survival Stats Update ---
+            if (timeSinceHungerTick > 1000) {
+                const hungerLoss = HUNGER_RATE * (timeSinceHungerTick / 1000);
+                if (hungerLoss > 0) {
+                    player.hunger -= hungerLoss;
+                    player.hunger = Math.max(0, player.hunger);
+                    if (player.hunger === 0) {
+                         // Log starvation only once when it hits 0
+                        if(player.hunger + hungerLoss > 0) logMessage("You are starving!", 'warning');
+                    }
+                    statsChanged = true;
+                }
+                lastHungerTick = now;
+            }
+            if (timeSinceThirstTick > 1000) {
+                 const thirstLoss = THIRST_RATE * (timeSinceThirstTick / 1000);
+                 if (thirstLoss > 0) {
+                    player.thirst -= thirstLoss;
+                    player.thirst = Math.max(0, player.thirst);
+                     if (player.thirst === 0) {
+                         // Log dehydration only once when it hits 0
+                         if(player.thirst + thirstLoss > 0) logMessage("You are dehydrated!", 'warning');
+                     }
+                    statsChanged = true;
+                 }
+                lastThirstTick = now;
+            }
+
+            // Apply damage if starving or dehydrated (scaled by deltaTime)
+            let survivalDamage = 0;
+            if (player.hunger <= 0) {
+                survivalDamage += STARVATION_DAMAGE_RATE * (deltaTime / 1000);
+            }
+            if (player.thirst <= 0) {
+                survivalDamage += STARVATION_DAMAGE_RATE * (deltaTime / 1000); // Damage stacks
+            }
+
+            if (survivalDamage > 0) {
+                player.health -= survivalDamage;
+                // Log damage message less frequently to avoid spam
+                if (Math.random() < 0.02) logMessage("Losing health from hunger/thirst!", 'warning');
+                statsChanged = true;
+            }
+
+            // --- Movement ---
+            let moveX = 0;
+            let moveY = 0;
+            if (player.moving.up) moveY -= 1;
+            if (player.moving.down) moveY += 1;
+            if (player.moving.left) moveX -= 1;
+            if (player.moving.right) moveX += 1;
+
+            // Normalize diagonal speed
+            let moveMagnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+            if (moveMagnitude > 0) {
+                moveX = (moveX / moveMagnitude) * PLAYER_SPEED;
+                moveY = (moveY / moveMagnitude) * PLAYER_SPEED;
+            }
+
+            // --- Collision Detection & Resolution ---
+            const potentialX = player.x + moveX;
+            const potentialY = player.y + moveY;
+
+            let blockedX = false;
+            let blockedY = false;
+
+            // Create potential bounding boxes for X and Y movement
+            const playerRectNextX = { x: potentialX, y: player.y, width: player.width, height: player.height };
+            const playerRectNextY = { x: player.x, y: potentialY, width: player.width, height: player.height };
+
+            // Check collision with buildings that block movement
+            for (const building of buildings) {
+                if (building.blocksMovement) {
+                    if (checkCollision(playerRectNextX, building)) {
+                        blockedX = true;
+                    }
+                    if (checkCollision(playerRectNextY, building)) {
+                        blockedY = true;
+                    }
+                    // Optimization: if both are blocked by the same object, no need to check others? Not quite, might slide along one.
+                }
+            }
+
+            // Apply movement if not blocked
+            if (!blockedX) {
+                player.x = potentialX;
+            }
+            if (!blockedY) {
+                player.y = potentialY;
+            }
+
+            // Keep player within canvas bounds
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+            player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+
+             // Check game over state
+            if (player.health <= 0 && !gameOver) {
+                player.health = 0; // Clamp health at 0
+                gameOver = true;
+                logMessage("GAME OVER!", 'error');
+                statsChanged = true; // Ensure UI updates one last time
+            }
+
+             // Update UI only if stats changed
+            if (statsChanged) {
+                updateStatsUI();
+            }
+        }
+
+
+        function updateEnemies(deltaTime) {
+            if (Date.now() - lastEnemySpawnTime > ENEMY_SPAWN_INTERVAL && enemies.length < MAX_ENEMIES) {
+                spawnEnemy();
+            }
+
+            enemies.forEach((enemy, index) => {
+                const playerCenterX = player.x + player.width / 2;
+                const playerCenterY = player.y + player.height / 2;
+                const enemyCenterX = enemy.x + enemy.width / 2;
+                const enemyCenterY = enemy.y + enemy.height / 2;
+
+                const distToPlayer = distance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY);
+                const angle = Math.atan2(playerCenterY - enemyCenterY, playerCenterX - enemyCenterX);
+
+                let moveX = Math.cos(angle) * enemy.speed;
+                let moveY = Math.sin(angle) * enemy.speed;
+
+                // Basic avoidance/pathing around buildings (very simple)
+                let blockedX = false;
+                let blockedY = false;
+                const potentialEnemyX = enemy.x + moveX;
+                const potentialEnemyY = enemy.y + moveY;
+                const enemyRectNextX = { x: potentialEnemyX, y: enemy.y, width: enemy.width, height: enemy.height };
+                const enemyRectNextY = { x: enemy.x, y: potentialEnemyY, width: enemy.width, height: enemy.height };
+
+                for (const building of buildings) {
+                     if (building.blocksMovement) { // Only check against blocking buildings
+                        if(checkCollision(enemyRectNextX, building)){
+                            blockedX = true;
+                        }
+                         if(checkCollision(enemyRectNextY, building)){
+                            blockedY = true;
+                        }
+                     }
+                 }
+
+                // Move towards player if not too close and path not blocked
+                // Prioritize getting unstuck over strictly following player if blocked
+                 if (distToPlayer > ENEMY_ATTACK_RANGE * 0.9) {
+                     if (!blockedX) {
+                         enemy.x = potentialEnemyX;
+                     } else if (!blockedY){
+                         // If X is blocked, but Y isn't, try moving only on Y to slide
+                         enemy.y += Math.sign(moveY) * enemy.speed; // Move Y only
+                     }
+                      if (!blockedY) {
+                         enemy.y = potentialEnemyY;
+                     } else if (!blockedX){
+                          // If Y is blocked, but X isn't, try moving only on X to slide
+                         enemy.x += Math.sign(moveX) * enemy.speed; // Move X only
+                     }
+                     // If both blocked, the enemy might get stuck - needs better pathfinding
+                 }
+
+                // Keep enemy within reasonable bounds (prevent running too far away)
+                 enemy.x = Math.max(-50, Math.min(canvas.width + 50, enemy.x));
+                 enemy.y = Math.max(-50, Math.min(canvas.height + 50, enemy.y));
+
+
+                // Attack player if in range
+                if (distToPlayer <= ENEMY_ATTACK_RANGE && !gameOver) {
+                    const now = Date.now();
+                    if (now - enemy.attackCooldown > 1500) { // Attack cooldown (1.5 seconds)
+                         player.health -= ENEMY_DAMAGE;
+                         player.health = Math.max(0, player.health); // Prevent negative health display before game over check
+                         logMessage(`Hit by enemy! (-${ENEMY_DAMAGE} HP)`, 'warning');
+                         updateStatsUI(); // Update health immediately
+                         enemy.attackCooldown = now;
+                     }
+                }
+            });
+        }
+
+        // --- UI Update Functions ---
+
+        function updateStatsUI() {
+            healthValueSpan.textContent = Math.ceil(player.health);
+            healthBarFillSpan.style.width = `${Math.max(0, player.health / player.maxHealth) * 100}%`;
+            hungerValueSpan.textContent = Math.ceil(player.hunger);
+            hungerBarFillSpan.style.width = `${Math.max(0, player.hunger / player.maxHunger) * 100}%`;
+            thirstValueSpan.textContent = Math.ceil(player.thirst);
+            thirstBarFillSpan.style.width = `${Math.max(0, player.thirst / player.maxThirst) * 100}%`;
+        }
+
+
+        function updateInventoryUI() {
+            inventoryListUl.innerHTML = ''; // Clear list
+            let count = 0;
+            // Sort inventory items alphabetically for consistency
+            const sortedItems = Object.keys(player.inventory).sort();
+
+            sortedItems.forEach((item, index) => {
+                 if (player.inventory[item] > 0) {
+                    const li = document.createElement('li');
+                    li.textContent = `(${index + 1}) ${item}: ${player.inventory[item]}`; // Show keybind number
+
+                    // Add click listener to equip/unequip tools
+                    if (tools[item]) {
+                         li.style.cursor = 'pointer';
+                         li.title = 'Click or press number to equip/unequip';
+                         li.onclick = () => {
+                             // Find the correct slot index based on the sorted tool list
+                             const toolSlotIndex = Object.keys(player.inventory).filter(i => tools[i]).sort().indexOf(item);
+                             equipItemFromSlot(toolSlotIndex);
+                         };
+                         if (player.equippedTool === item) {
+                            li.style.fontWeight = 'bold'; // Highlight equipped
+                            li.style.backgroundColor = '#d1e7dd'; // Light green background
+                        }
+                    } else {
+                        // Non-tool items don't need click handlers for equipping
+                         li.style.cursor = 'default';
+                    }
+                    inventoryListUl.appendChild(li);
+                    count++;
+                }
+            });
+
+            if (count === 0) {
+                inventoryListUl.innerHTML = '<li>Empty</li>';
+            }
+        }
+
+        function updateEquippedToolUI() {
+            equippedToolSpan.textContent = player.equippedTool || 'None';
+            // Re-render inventory to update bolding/styling
+            updateInventoryUI();
+             // Re-render crafting in case tool requirement changed availability (although craft check handles this)
+             updateCraftingUI();
+        }
+
+
+        function updateCraftingUI() {
+            craftingListUl.innerHTML = ''; // Clear list
+            for (const recipeName in recipes) {
+                const recipe = recipes[recipeName];
+                const li = document.createElement('li');
+                const button = document.createElement('button');
+                button.textContent = recipeName;
+                button.onclick = () => craftItem(recipeName);
+
+                // Check resource cost
+                let canAfford = true;
+                let costString = "Cost: ";
+                let costs = [];
+                for (const resource in recipe.cost) {
+                    const needed = recipe.cost[resource];
+                    const owned = player.inventory[resource] || 0;
+                    costs.push(`${needed} ${resource} (${owned})`);
+                    if (owned < needed) {
+                        canAfford = false;
+                    }
+                }
+                costString += costs.join(', ');
+
+                 // Check requirements (e.g., near a Campfire)
+                let requirementMet = true; // Assume met if none specified
+                let requirementString = "";
+                if (recipe.requires) {
+                     requirementMet = false; // Assume not met initially if specified
+                     requirementString = ` Requires: Nearby ${recipe.requires}`;
+                     for (const building of buildings) {
+                         if (building.type === recipe.requires) {
+                              const dist = distance(player.x + player.width / 2, player.y + player.height / 2,
+                                                    building.x + building.width / 2, building.y + building.height / 2);
+                              if (dist < PLAYER_REACH * 1.2) {
+                                  requirementMet = true;
+                                  requirementString += " (Met)";
+                                  break;
+                              }
+                         }
+                     }
+                      if (!requirementMet) {
+                         requirementString += " (Not Met)";
+                      }
+                }
+
+                button.disabled = !canAfford || !requirementMet;
+                button.title = costString + requirementString;
+
+                li.appendChild(button);
+                craftingListUl.appendChild(li);
+            }
+             if (Object.keys(recipes).length === 0) {
+                 craftingListUl.innerHTML = '<li>No recipes known</li>';
+             }
+        }
+
+        // --- Main Update Function ---
+        function update(timestamp) {
+            const deltaTime = timestamp - lastTickTime;
+            lastTickTime = timestamp;
+            gameTime += deltaTime;
+
+            if (gameOver || deltaTime <= 0) return; // Skip update if game over or time hasn't passed
+
+            updatePlayer(deltaTime);
+            updateEnemies(deltaTime);
+            // Update buildings (e.g., decay, campfire fuel) could go here
+
+            // Update UI less frequently? - Currently updated on change, which is better.
+            // Example: Only update Crafting UI every 500ms if needed for performance.
+            // if(gameTime % 500 < deltaTime) updateCraftingUI();
+        }
+
+        // --- Render Functions ---
+        function clearCanvas() {
+            ctx.fillStyle = '#8FBC8F'; // Dark Sea Green
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            // Health bar now shown in UI panel
+        }
+
+        function drawResources() {
+            resources.forEach(res => {
+                ctx.fillStyle = res.color;
+                ctx.fillRect(res.x, res.y, res.width, res.height);
+                // Simple label below resource
+                 ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                 ctx.font = '10px sans-serif';
+                 ctx.textAlign = 'center';
+                 ctx.fillText(res.type, res.x + res.width / 2, res.y + res.height + 12);
+            });
+             ctx.textAlign = 'left'; // Reset alignment
+        }
+
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+
+                // Draw health bar above enemy if damaged
+                if (enemy.health < enemy.maxHealth) {
+                    const healthPercent = Math.max(0, enemy.health / enemy.maxHealth);
+                    const barWidth = enemy.width;
+                    const barHeight = 4;
+                    const barY = enemy.y - barHeight - 3; // Position above enemy
+                    ctx.fillStyle = '#555'; // Darker grey for background
+                    ctx.fillRect(enemy.x, barY, barWidth, barHeight);
+                    ctx.fillStyle = '#ffc107'; // Use orange for enemy health
+                    ctx.fillRect(enemy.x, barY, barWidth * healthPercent, barHeight);
+                }
+            });
+        }
+
+        function drawBuildings() {
+             buildings.forEach(building => {
+                ctx.fillStyle = building.color;
+                // Add simple border/detail
+                ctx.fillRect(building.x, building.y, building.width, building.height);
+                ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                ctx.strokeRect(building.x, building.y, building.width, building.height);
+
+                 // Draw building health bar if damaged
+                 if (building.health < building.maxHealth) {
+                    const healthPercent = Math.max(0, building.health / building.maxHealth);
+                    const barWidth = building.width * 0.8; // Slightly smaller bar
+                    const barHeight = 5;
+                    const barX = building.x + (building.width - barWidth) / 2; // Center the bar
+                    const barY = building.y - barHeight - 4; // Position above building
+                    ctx.fillStyle = '#6c757d'; // Grey background
+                    ctx.fillRect(barX, barY, barWidth, barHeight);
+                    ctx.fillStyle = '#17a2b8'; // Use cyan for building health
+                    ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+                 }
+                 // Label building type (optional, can get cluttered)
+                 // ctx.fillStyle = 'black';
+                 // ctx.font = '10px sans-serif';
+                 // ctx.textAlign = 'center';
+                 // ctx.fillText(building.type, building.x + building.width / 2, building.y - 10);
+            });
+            ctx.textAlign = 'left'; // Reset alignment
+        }
+
+
+        function drawBuildPreview() {
+            if (!player.isBuilding) return;
+
+            const buildingData = getBuildingData(player.isBuilding);
+            const ghostX = player.buildGhost.x;
+            const ghostY = player.buildGhost.y;
+
+            ctx.globalAlpha = 0.6; // Make it semi-transparent
+            ctx.fillStyle = player.buildGhost.valid ? 'rgba(144, 238, 144, 0.8)' : 'rgba(250, 128, 114, 0.8)'; // LightGreen or Salmon
+            ctx.fillRect(ghostX, ghostY, buildingData.width, buildingData.height);
+            ctx.strokeStyle = player.buildGhost.valid ? 'darkgreen' : 'darkred';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(ghostX, ghostY, buildingData.width, buildingData.height);
+            ctx.globalAlpha = 1.0; // Reset alpha
+            ctx.lineWidth = 1; // Reset line width
+
+            // Draw placement range circle (optional debug)
+             // ctx.beginPath();
+             // ctx.arc(player.x + player.width/2, player.y + player.height/2, BUILDING_PLACEMENT_RANGE, 0, Math.PI * 2);
+             // ctx.strokeStyle = 'rgba(0, 255, 0, 0.2)';
+             // ctx.stroke();
+        }
+
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; // Darker overlay
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 48px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+             ctx.font = '20px sans-serif';
+             ctx.fillText('Refresh the page to play again', canvas.width / 2, canvas.height / 2 + 30);
+            ctx.textAlign = 'left'; // Reset alignment
+        }
+
+        function render() {
+            clearCanvas();
+            drawResources();
+            drawBuildings(); // Draw buildings generally behind entities
+            drawEnemies();
+            drawPlayer();
+            drawBuildPreview(); // Draw build ghost on top of everything else
+
+            if (gameOver) {
+                drawGameOver();
+            }
+        }
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            update(timestamp || 0); // Pass timestamp for delta time calculation
+            render();
+            if (!gameOver) { // Only continue loop if game is not over
+                 requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // --- Start the Game ---
+        init();
+
+    </script>
+</body>
+</html>

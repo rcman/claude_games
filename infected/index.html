@@ -1,0 +1,354 @@
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const healthValueSpan = document.getElementById('healthValue');
+const inventoryListUl = document.getElementById('inventoryList');
+const messageLogDiv = document.getElementById('messageLog');
+
+// --- Game Settings ---
+const TILE_SIZE = 32; // Not strictly used for rendering, but good concept
+const PLAYER_SPEED = 3;
+const ENEMY_SPEED = 1;
+const PLAYER_REACH = 50;
+const ENEMY_ATTACK_RANGE = 40;
+const ENEMY_DAMAGE = 5;
+const PLAYER_DAMAGE = 10;
+const RESOURCE_GATHER_AMOUNT = 1;
+const ENEMY_SPAWN_INTERVAL = 5000; // ms
+const ENEMY_HEALTH = 30;
+const MAX_ENEMIES = 5;
+
+// --- Game State ---
+let player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    width: 25,
+    height: 25,
+    color: 'blue',
+    health: 100,
+    maxHealth: 100,
+    inventory: {}, // { 'wood': 5, 'stone': 2 }
+    moving: { up: false, down: false, left: false, right: false }
+};
+
+let resources = [];
+let enemies = [];
+let lastEnemySpawnTime = 0;
+let gameOver = false;
+
+// --- Utility Functions ---
+function distance(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+}
+
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function logMessage(msg) {
+    const p = document.createElement('p');
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    messageLogDiv.insertBefore(p, messageLogDiv.firstChild); // Add new message at top
+    // Limit log size (optional)
+    while (messageLogDiv.children.length > 10) {
+        messageLogDiv.removeChild(messageLogDiv.lastChild);
+    }
+}
+
+// --- Initialization ---
+function init() {
+    // Spawn initial resources
+    spawnResource('tree', 'green', 5); // 5 trees
+    spawnResource('rock', 'grey', 3);  // 3 rocks
+
+    // Add Input Listeners
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    canvas.addEventListener('click', handleCanvasClick);
+
+    logMessage("Game started. Use WASD or Arrow Keys to move.");
+    logMessage("Click on resources (trees, rocks) to gather.");
+    logMessage("Click on enemies (red squares) to attack.");
+
+    // Start the game loop
+    gameLoop();
+}
+
+function spawnResource(type, color, count) {
+    for (let i = 0; i < count; i++) {
+        resources.push({
+            x: getRandomInt(50, canvas.width - 50),
+            y: getRandomInt(50, canvas.height - 50),
+            width: 30,
+            height: 30,
+            type: type,
+            color: color
+        });
+    }
+}
+
+function spawnEnemy() {
+     if (enemies.length >= MAX_ENEMIES) return;
+
+     const edge = getRandomInt(1, 4); // 1: top, 2: right, 3: bottom, 4: left
+     let x, y;
+     switch(edge) {
+        case 1: x = getRandomInt(0, canvas.width); y = -20; break; // Top
+        case 2: x = canvas.width + 20; y = getRandomInt(0, canvas.height); break; // Right
+        case 3: x = getRandomInt(0, canvas.width); y = canvas.height + 20; break; // Bottom
+        case 4: x = -20; y = getRandomInt(0, canvas.height); break; // Left
+     }
+
+    enemies.push({
+        x: x,
+        y: y,
+        width: 20,
+        height: 20,
+        color: 'red',
+        health: ENEMY_HEALTH,
+        maxHealth: ENEMY_HEALTH,
+        speed: ENEMY_SPEED + (Math.random() * 0.5 - 0.25) // Slight speed variation
+    });
+    lastEnemySpawnTime = Date.now();
+}
+
+// --- Input Handling ---
+function handleKeyDown(e) {
+    switch (e.key.toLowerCase()) {
+        case 'w': case 'arrowup': player.moving.up = true; break;
+        case 's': case 'arrowdown': player.moving.down = true; break;
+        case 'a': case 'arrowleft': player.moving.left = true; break;
+        case 'd': case 'arrowright': player.moving.right = true; break;
+    }
+}
+
+function handleKeyUp(e) {
+    switch (e.key.toLowerCase()) {
+        case 'w': case 'arrowup': player.moving.up = false; break;
+        case 's': case 'arrowdown': player.moving.down = false; break;
+        case 'a': case 'arrowleft': player.moving.left = false; break;
+        case 'd': case 'arrowright': player.moving.right = false; break;
+    }
+}
+
+function handleCanvasClick(e) {
+    if (gameOver) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    let clickedOnSomething = false;
+
+    // Check click on enemies first
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+        const dist = distance(player.x, player.y, enemy.x, enemy.y);
+        const clickDist = distance(clickX, clickY, enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+
+        if (clickDist < enemy.width / 2 + 5 && dist <= PLAYER_REACH) { // Clicked near enemy & player is in reach
+            enemy.health -= PLAYER_DAMAGE;
+            logMessage(`Attacked enemy! (-${PLAYER_DAMAGE} HP)`);
+             if (enemy.health <= 0) {
+                logMessage("Enemy defeated!");
+                enemies.splice(i, 1); // Remove dead enemy
+                // Maybe add loot?
+            }
+            clickedOnSomething = true;
+            break; // Only attack one enemy per click
+        }
+    }
+
+     // Check click on resources if nothing else was clicked
+    if (!clickedOnSomething) {
+        for (let i = resources.length - 1; i >= 0; i--) {
+            const res = resources[i];
+            const dist = distance(player.x, player.y, res.x, res.y);
+            const clickDist = distance(clickX, clickY, res.x + res.width / 2, res.y + res.height / 2);
+
+            if (clickDist < res.width / 2 + 5 && dist <= PLAYER_REACH) { // Clicked near resource & player is in reach
+                const resourceType = res.type;
+                player.inventory[resourceType] = (player.inventory[resourceType] || 0) + RESOURCE_GATHER_AMOUNT;
+                logMessage(`Gathered ${RESOURCE_GATHER_AMOUNT} ${resourceType}.`);
+                updateInventoryUI();
+                resources.splice(i, 1); // Remove gathered resource node
+                // Maybe respawn resources later?
+                clickedOnSomething = true;
+                break; // Only gather one resource per click
+            }
+        }
+    }
+
+    if (!clickedOnSomething) {
+        // Maybe handle other clicks later (e.g., ground for movement?)
+    }
+}
+
+
+// --- Update Functions ---
+function updatePlayer() {
+    let dx = 0;
+    let dy = 0;
+    if (player.moving.up) dy -= PLAYER_SPEED;
+    if (player.moving.down) dy += PLAYER_SPEED;
+    if (player.moving.left) dx -= PLAYER_SPEED;
+    if (player.moving.right) dx += PLAYER_SPEED;
+
+    // Normalize diagonal movement (optional but good)
+    if (dx !== 0 && dy !== 0) {
+        const factor = Math.sqrt(2);
+        dx /= factor;
+        dy /= factor;
+    }
+
+    // Move player
+    player.x += dx;
+    player.y += dy;
+
+    // Keep player within bounds
+    player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+    player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+
+     // Update health display
+    healthValueSpan.textContent = player.health;
+    if (player.health <= 0 && !gameOver) {
+        gameOver = true;
+        logMessage("GAME OVER!");
+        // Could stop the game loop or just display a message
+    }
+}
+
+function updateEnemies() {
+    // Spawn new enemies
+    if (Date.now() - lastEnemySpawnTime > ENEMY_SPAWN_INTERVAL) {
+        spawnEnemy();
+    }
+
+    // Move and attack
+    enemies.forEach(enemy => {
+        const distToPlayer = distance(player.x, player.y, enemy.x, enemy.y);
+
+        // Move towards player
+        if (distToPlayer > ENEMY_ATTACK_RANGE * 0.8) { // Move if not too close
+            const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            enemy.x += Math.cos(angle) * enemy.speed;
+            enemy.y += Math.sin(angle) * enemy.speed;
+        }
+
+         // Attack player if in range
+        if (distToPlayer <= ENEMY_ATTACK_RANGE) {
+            // Basic attack cooldown (could be improved)
+            if (!enemy.attackCooldown || Date.now() - enemy.attackCooldown > 1000) {
+                 player.health -= ENEMY_DAMAGE;
+                 player.health = Math.max(0, player.health); // Prevent negative health
+                 logMessage(`Hit by enemy! (-${ENEMY_DAMAGE} HP)`);
+                 enemy.attackCooldown = Date.now();
+             }
+        }
+    });
+}
+
+function updateInventoryUI() {
+    inventoryListUl.innerHTML = ''; // Clear list
+    for (const item in player.inventory) {
+        if (player.inventory[item] > 0) {
+            const li = document.createElement('li');
+            li.textContent = `${item}: ${player.inventory[item]}`;
+            inventoryListUl.appendChild(li);
+        }
+    }
+    if (Object.keys(player.inventory).length === 0 || Object.values(player.inventory).every(v => v === 0)) {
+        inventoryListUl.innerHTML = '<li>Empty</li>';
+    }
+}
+
+function update() {
+    if (gameOver) return; // Stop updating game logic if over
+
+    updatePlayer();
+    updateEnemies();
+    // No collision checks needed between player/enemies as movement/attack handles it
+    // No resource collision needed as it's click-based
+}
+
+// --- Render Functions ---
+function clearCanvas() {
+    ctx.fillStyle = '#a0d9a0'; // Background color
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawPlayer() {
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    // Draw health bar above player
+    const healthPercent = player.health / player.maxHealth;
+    const barWidth = player.width;
+    const barHeight = 5;
+    ctx.fillStyle = 'grey';
+    ctx.fillRect(player.x, player.y - barHeight - 2, barWidth, barHeight);
+    ctx.fillStyle = 'red';
+    ctx.fillRect(player.x, player.y - barHeight - 2, barWidth * healthPercent, barHeight);
+}
+
+function drawResources() {
+    resources.forEach(res => {
+        ctx.fillStyle = res.color;
+        ctx.fillRect(res.x, res.y, res.width, res.height);
+        // Maybe add a simple texture/icon later
+         ctx.fillStyle = 'black';
+         ctx.font = '10px sans-serif';
+         ctx.textAlign = 'center';
+         ctx.fillText(res.type, res.x + res.width / 2, res.y + res.height + 10);
+    });
+     ctx.textAlign = 'left'; // Reset alignment
+}
+
+function drawEnemies() {
+    enemies.forEach(enemy => {
+        ctx.fillStyle = enemy.color;
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+
+        // Draw health bar above enemy
+        const healthPercent = enemy.health / enemy.maxHealth;
+        const barWidth = enemy.width;
+        const barHeight = 4;
+        ctx.fillStyle = 'grey';
+        ctx.fillRect(enemy.x, enemy.y - barHeight - 2, barWidth, barHeight);
+        ctx.fillStyle = 'orange';
+        ctx.fillRect(enemy.x, enemy.y - barHeight - 2, barWidth * healthPercent, barHeight);
+    });
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
+     ctx.font = '20px sans-serif';
+     ctx.fillText('Refresh to play again', canvas.width / 2, canvas.height / 2 + 40);
+    ctx.textAlign = 'left'; // Reset alignment
+}
+
+function render() {
+    clearCanvas();
+    drawResources();
+    drawEnemies();
+    drawPlayer();
+
+    if (gameOver) {
+        drawGameOver();
+    }
+}
+
+// --- Game Loop ---
+function gameLoop() {
+    update();
+    render();
+    requestAnimationFrame(gameLoop); // Keep the loop going smoothly
+}
+
+// --- Start the Game ---
+init();
+updateInventoryUI(); // Show initial empty inventory

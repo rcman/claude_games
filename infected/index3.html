@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Survival Game - 3D Attempt</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; display: flex; }
+        #rendererContainer { width: 75%; height: 100vh; position: relative; } /* Container for 3D view */
+        #gameUI { width: 25%; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; background-color: #f0f0f0;} /* UI Panel */
+
+        /* Reuse styles from the 2D version for the UI panel */
+        #stats, #inventory, #crafting, #messages {
+            border: 1px solid #ccc; background-color: #fff; padding: 10px; margin-bottom: 10px; min-width: 200px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        h3 { margin-top: 0; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid #eee; }
+        #inventory ul, #crafting ul { list-style: none; padding: 0; margin: 5px 0 0 0; max-height: 150px; overflow-y: auto; }
+        #inventory li { margin-bottom: 5px; padding: 2px; border-radius: 3px; }
+        #inventory li:hover { background-color: #eee; }
+        #crafting li { margin-bottom: 5px; }
+        #crafting button { cursor: pointer; padding: 4px 8px; width: 100%; text-align: left; border: 1px solid #ccc; background-color: #e9e9e9; border-radius: 3px;}
+        #crafting button:hover:not(:disabled) { background-color: #dcdcdc; }
+        #crafting button:disabled { cursor: not-allowed; opacity: 0.6; background-color: #f5f5f5;}
+        #messageLog { height: 180px; overflow-y: scroll; border: 1px solid #eee; padding: 5px; font-size: 0.85em; background-color: #fafafa; }
+        #messageLog p { margin: 3px 0; padding-bottom: 3px; border-bottom: 1px dotted #eee; }
+        #messageLog p:last-child { border-bottom: none; }
+        .stat-bar { background-color: #ddd; height: 12px; width: 100px; display: inline-block; margin-left: 5px; border: 1px solid #aaa; vertical-align: middle; }
+        .stat-bar-fill { height: 100%; transition: width 0.2s ease-out; }
+        .health-fill { background-color: #dc3545; }
+        .hunger-fill { background-color: #ffc107; }
+        .thirst-fill { background-color: #17a2b8; }
+        .equipped-tool { font-style: italic; color: #555; }
+        .build-mode { color: green; font-weight: bold; display: block; margin-top: 5px; }
+        #stats p { margin: 6px 0; }
+        li[title]:hover { position: relative; }
+    </style>
+</head>
+<body>
+    <!-- Container for the 3D Renderer -->
+    <div id="rendererContainer"></div>
+
+    <!-- Existing UI Panel -->
+    <div id="gameUI">
+        <div id="stats">
+            <h3>Stats</h3>
+            <p>Health: <span id="healthValue">100</span> / 100
+                <span class="stat-bar"><span id="healthBarFill" class="stat-bar-fill health-fill" style="width: 100%;"></span></span>
+            </p>
+            <p>Hunger: <span id="hungerValue">100</span> / 100
+                 <span class="stat-bar"><span id="hungerBarFill" class="stat-bar-fill hunger-fill" style="width: 100%;"></span></span>
+            </p>
+            <p>Thirst: <span id="thirstValue">100</span> / 100
+                 <span class="stat-bar"><span id="thirstBarFill" class="stat-bar-fill thirst-fill" style="width: 100%;"></span></span>
+            </p>
+             <p>Equipped: <span id="equippedTool" class="equipped-tool">None</span></p>
+             <p><span id="buildModeIndicator"></span></p>
+        </div>
+        <div id="inventory">
+            <h3>Inventory (Click/Numkey)</h3>
+            <ul id="inventoryList"><li>Empty</li></ul>
+        </div>
+        <div id="crafting">
+            <h3>Crafting (Hover for Cost)</h3>
+            <ul id="craftingList"></ul>
+        </div>
+        <div id="messages">
+            <h3>Log</h3>
+            <div id="messageLog"></div>
+        </div>
+    </div>
+
+    <!-- Import Three.js (replace with local path if downloaded) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                 "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        // --- Import Three.js ---
+        import * as THREE from 'three';
+        // Optional: OrbitControls for debugging camera
+        // import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- DOM Elements (Mostly for UI Panel) ---
+        const rendererContainer = document.getElementById('rendererContainer');
+        const healthValueSpan = document.getElementById('healthValue');
+        const healthBarFillSpan = document.getElementById('healthBarFill');
+        const hungerValueSpan = document.getElementById('hungerValue');
+        const hungerBarFillSpan = document.getElementById('hungerBarFill');
+        const thirstValueSpan = document.getElementById('thirstValue');
+        const thirstBarFillSpan = document.getElementById('thirstBarFill');
+        const inventoryListUl = document.getElementById('inventoryList');
+        const craftingListUl = document.getElementById('craftingList');
+        const messageLogDiv = document.getElementById('messageLog');
+        const equippedToolSpan = document.getElementById('equippedTool');
+        const buildModeIndicatorSpan = document.getElementById('buildModeIndicator');
+
+        // --- Game Settings (Keep most, adapt sizes for 3D) ---
+        const PLAYER_SIZE = { width: 1, height: 1.8, depth: 1 }; // Example dimensions
+        const ENEMY_SIZE = { width: 0.8, height: 0.8, depth: 0.8 };
+        const TREE_SIZE = { radius: 0.5, height: 4 };
+        const ROCK_SIZE = { width: 1.5, height: 1, depth: 1.2 };
+        const WALL_SIZE = { width: 4, height: 2.5, depth: 0.5 };
+        const CAMPFIRE_SIZE = { radius: 0.8, height: 0.5 };
+
+        const PLAYER_SPEED = 5; // Units per second in 3D space
+        const ENEMY_SPEED = 2.5;
+        const PLAYER_REACH = 8; // Distance in 3D units
+        const ENEMY_ATTACK_RANGE = 3;
+        const BUILDING_PLACEMENT_RANGE = 10;
+
+        // --- Constants from 2D version (Keep as is) ---
+        const ENEMY_DAMAGE = 5;
+        const PLAYER_DAMAGE = 8;
+        const BASE_GATHER_AMOUNT = 1;
+        const ENEMY_SPAWN_INTERVAL = 7000;
+        const ENEMY_HEALTH = 30;
+        const MAX_ENEMIES = 4;
+        const HUNGER_RATE = 0.15;
+        const THIRST_RATE = 0.25;
+        const STARVATION_DAMAGE_RATE = 0.5;
+        const WALL_HEALTH = 100;
+        const CAMPFIRE_HEALTH = 50; // Added for consistency
+        const LOG_MESSAGE_LIMIT = 25;
+
+        // --- Game Data (Keep as is) ---
+        const tools = { /* ... (same as 2D version) ... */
+            'Wooden Axe': { damage: 12, gatherBonus: { 'wood': 2 }, durability: 50 },
+            'Stone Pickaxe': { damage: 15, gatherBonus: { 'stone': 3 }, durability: 80 },
+         };
+        const recipes = { /* ... (same as 2D version) ... */
+            'Wooden Axe': { cost: { 'wood': 5 }, output: { item: 'Wooden Axe', type: 'tool' }, requires: null },
+            'Stone Pickaxe': { cost: { 'wood': 2, 'stone': 3 }, output: { item: 'Stone Pickaxe', type: 'tool' }, requires: null },
+            'Campfire': { cost: { 'wood': 10, 'stone': 5 }, output: { item: 'Campfire', type: 'building' }, requires: null },
+            'Wooden Wall': { cost: { 'wood': 8 }, output: { item: 'Wooden Wall', type: 'building' }, requires: null },
+        };
+        const resourceRequirements = { /* ... (same as 2D version) ... */
+            'tree': 'Axe',
+            'rock': 'Pickaxe'
+         };
+
+        // --- Three.js Setup ---
+        let scene, camera, renderer, clock, raycaster, mouse;
+        let groundPlane; // Reference to the ground
+        const interactableObjects = []; // Meshes player can click on (enemies, resources, buildings)
+
+        // --- Game State ---
+        let player = {
+            // x, y, z position managed by mesh directly
+            mesh: null, // Holds the Three.js Mesh
+            collider: null, // Holds the AABB
+            health: 100, maxHealth: 100,
+            hunger: 100, maxHunger: 100,
+            thirst: 100, maxThirst: 100,
+            inventory: {},
+            moving: { forward: false, backward: false, left: false, right: false, up: false, down: false }, // Adapt movement flags
+            velocity: new THREE.Vector3(), // For smoother movement/physics later
+            onGround: false, // Simple ground check
+            equippedTool: null,
+            isBuilding: null,
+            buildGhost: { mesh: null, valid: false, position: new THREE.Vector3() }
+        };
+
+        let resources = []; // Array of objects: { type: 'tree'/'rock', mesh: Mesh, collider: AABB, data: originalResourceData }
+        let enemies = []; // Array of objects: { mesh: Mesh, collider: AABB, health: number, maxHealth: number, speed: number, attackCooldown: number, target: Vector3 }
+        let buildings = []; // Array of objects: { type: string, mesh: Mesh, collider: AABB, health: number, maxHealth: number, blocksMovement: boolean }
+
+        let lastEnemySpawnTime = 0;
+        let lastHungerTick = Date.now();
+        let lastThirstTick = Date.now();
+        let gameOver = false;
+        const cameraOffset = new THREE.Vector3(0, 8, 15); // Camera distance from player
+
+        // --- Utility Functions ---
+        // Keep logMessage as is
+        function logMessage(msg, type = 'info') { /* ... (same as 2D version) ... */
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            if (type === 'error') p.style.color = '#dc3545'; // Red
+            if (type === 'success') p.style.color = '#28a745'; // Green
+            if (type === 'warning') p.style.color = '#ffc107'; // Yellow/Orange
+            messageLogDiv.insertBefore(p, messageLogDiv.firstChild);
+            while (messageLogDiv.children.length > LOG_MESSAGE_LIMIT) { // Use constant for limit
+                messageLogDiv.removeChild(messageLogDiv.lastChild);
+            }
+         }
+
+        function getRandomInt(min, max) { /* ... (same as 2D version) ... */
+             return Math.floor(Math.random() * (max - min + 1)) + min;
+         }
+        // 3D distance (using Three.js Vector3 distanceTo) - Simpler!
+        // function distance(pos1, pos2) { return pos1.distanceTo(pos2); } // Replaced direct calls
+
+        // --- 3D Specific Helpers ---
+        function createPlayerMesh() {
+            const geometry = new THREE.CapsuleGeometry(PLAYER_SIZE.width / 2, PLAYER_SIZE.height - PLAYER_SIZE.width, 4, 8);
+            const material = new THREE.MeshStandardMaterial({ color: 0x0000ff }); // Blue
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, PLAYER_SIZE.height / 2, 0); // Start at origin, slightly above ground
+            mesh.castShadow = true;
+            mesh.userData.type = 'player'; // Identify mesh type
+            mesh.userData.state = player; // Link back to game state
+             player.collider = new THREE.Box3().setFromObject(mesh);
+            return mesh;
+        }
+
+        function createEnemyMesh() {
+            const geometry = new THREE.BoxGeometry(ENEMY_SIZE.width, ENEMY_SIZE.height, ENEMY_SIZE.depth);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Red
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.userData.type = 'enemy'; // Identify mesh type
+            return mesh;
+        }
+
+        function createResourceMesh(type) {
+            let geometry, material, mesh;
+            if (type === 'tree') {
+                const trunkHeight = TREE_SIZE.height * 0.8;
+                const leavesHeight = TREE_SIZE.height * 0.4;
+                const trunkGeo = new THREE.CylinderGeometry(TREE_SIZE.radius * 0.5, TREE_SIZE.radius * 0.6, trunkHeight, 8);
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Brown
+                const trunkMesh = new THREE.Mesh(trunkGeo, trunkMat);
+                trunkMesh.position.y = trunkHeight / 2;
+
+                const leavesGeo = new THREE.ConeGeometry(TREE_SIZE.radius * 2, leavesHeight, 8);
+                const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Forest Green
+                const leavesMesh = new THREE.Mesh(leavesGeo, leavesMat);
+                leavesMesh.position.y = trunkHeight + leavesHeight / 2 - 0.2; // Slightly overlap
+
+                mesh = new THREE.Group(); // Group trunk and leaves
+                mesh.add(trunkMesh);
+                mesh.add(leavesMesh);
+                mesh.position.y = 0; // Base of the group at ground level (trunk handles offset)
+
+            } else if (type === 'rock') {
+                geometry = new THREE.BoxGeometry(ROCK_SIZE.width, ROCK_SIZE.height, ROCK_SIZE.depth); // Simple rock shape
+                material = new THREE.MeshStandardMaterial({ color: 0x808080 }); // Grey
+                mesh = new THREE.Mesh(geometry, material);
+                 mesh.position.y = ROCK_SIZE.height / 2; // Center on ground
+                 // Add some rotation for variety
+                 mesh.rotation.y = Math.random() * Math.PI * 2;
+                 mesh.rotation.x = (Math.random() - 0.5) * 0.1;
+                 mesh.rotation.z = (Math.random() - 0.5) * 0.1;
+            } else {
+                geometry = new THREE.SphereGeometry(0.5); // Default fallback
+                material = new THREE.MeshStandardMaterial({ color: 0xff00ff }); // Magenta error
+                mesh = new THREE.Mesh(geometry, material);
+                 mesh.position.y = 0.5;
+            }
+             mesh.castShadow = true;
+             mesh.receiveShadow = true; // Rocks might receive shadows
+             mesh.userData.type = 'resource'; // Identify mesh type
+             mesh.userData.resourceType = type; // Store specific type
+            return mesh;
+        }
+
+         function createBuildingMesh(type) {
+             let geometry, material, mesh;
+             let size;
+             let blocksMovement = true; // Default
+
+             switch(type) {
+                 case 'Wooden Wall':
+                     size = WALL_SIZE;
+                     geometry = new THREE.BoxGeometry(size.width, size.height, size.depth);
+                     material = new THREE.MeshStandardMaterial({ color: 0x8B4513, map: createWoodTexture() }); // SaddleBrown + basic texture
+                     mesh = new THREE.Mesh(geometry, material);
+                     mesh.position.y = size.height / 2;
+                     break;
+                 case 'Campfire':
+                     size = CAMPFIRE_SIZE;
+                     // Simple representation: cylinder base + maybe some 'logs'
+                     geometry = new THREE.CylinderGeometry(size.radius, size.radius * 0.9, size.height, 12);
+                     material = new THREE.MeshStandardMaterial({ color: 0x505050 }); // Dark Grey base
+                     mesh = new THREE.Mesh(geometry, material);
+                     mesh.position.y = size.height / 2;
+                     blocksMovement = false; // Campfires don't usually block
+                     // Could add particle effect for fire later
+                     break;
+                 default:
+                     geometry = new THREE.BoxGeometry(1, 1, 1);
+                     material = new THREE.MeshStandardMaterial({ color: 0xff00ff }); // Error color
+                     mesh = new THREE.Mesh(geometry, material);
+                     mesh.position.y = 0.5;
+             }
+             mesh.castShadow = true;
+             mesh.receiveShadow = true;
+             mesh.userData.type = 'building';
+             mesh.userData.buildingType = type;
+             mesh.userData.blocksMovement = blocksMovement; // Store blocking info
+             return mesh;
+         }
+
+         // Basic procedural wood texture
+         function createWoodTexture() {
+             const canvas = document.createElement('canvas');
+             canvas.width = 64;
+             canvas.height = 128;
+             const context = canvas.getContext('2d');
+             context.fillStyle = '#A0522D'; // Sienna
+             context.fillRect(0, 0, canvas.width, canvas.height);
+             context.strokeStyle = '#8B4513'; // Darker Brown
+             context.lineWidth = 2;
+             for (let i = 0; i < 10; i++) {
+                 context.beginPath();
+                 context.moveTo(Math.random() * canvas.width, 0);
+                 context.lineTo(Math.random() * canvas.width, canvas.height);
+                 context.stroke();
+             }
+             const texture = new THREE.CanvasTexture(canvas);
+             texture.wrapS = THREE.RepeatWrapping;
+             texture.wrapT = THREE.RepeatWrapping;
+             texture.repeat.set(1, 1); // Adjust tiling if needed
+             return texture;
+         }
+
+         // Update collider helper
+          function updateCollider(objectState) {
+             if (objectState.mesh && objectState.collider) {
+                 objectState.collider.setFromObject(objectState.mesh);
+             }
+         }
+
+        // AABB Collision Check (Basic)
+         function check3DCollision(colliderA, colliderB) {
+             if (!colliderA || !colliderB) return false;
+             return colliderA.intersectsBox(colliderB);
+         }
+
+        // --- Initialization ---
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // Sky blue background
+            scene.fog = new THREE.Fog(0x87ceeb, 50, 150); // Add fog
+
+            // Camera
+            const aspect = rendererContainer.clientWidth / rendererContainer.clientHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            // Position will be updated relative to player in gameLoop
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(rendererContainer.clientWidth, rendererContainer.clientHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            rendererContainer.appendChild(renderer.domElement);
+
+            // Clock
+            clock = new THREE.Clock();
+
+            // Raycaster
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft white light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(20, 30, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 100;
+            directionalLight.shadow.camera.left = -50;
+            directionalLight.shadow.camera.right = 50;
+            directionalLight.shadow.camera.top = 50;
+            directionalLight.shadow.camera.bottom = -50;
+            scene.add(directionalLight);
+             scene.add(directionalLight.target); // Add target to scene for control
+
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(500, 500); // Large ground plane
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, side: THREE.DoubleSide }); // ForestGreen
+            groundPlane = new THREE.Mesh(groundGeometry, groundMaterial);
+            groundPlane.rotation.x = -Math.PI / 2; // Rotate flat
+            groundPlane.receiveShadow = true;
+            groundPlane.userData.type = 'ground'; // Identify ground for raycasting
+            scene.add(groundPlane);
+            interactableObjects.push(groundPlane); // Needed for building placement raycast
+
+            // Player
+            player.mesh = createPlayerMesh();
+            scene.add(player.mesh);
+            updateCollider(player);
+
+            // Initial Resources
+            spawnResource3D('tree', 8);
+            spawnResource3D('rock', 5);
+
+            // Build Ghost Mesh (initially hidden)
+             player.buildGhost.mesh = new THREE.Mesh(
+                 new THREE.BoxGeometry(1,1,1), // Placeholder geometry
+                 new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, depthWrite: false })
+             );
+             player.buildGhost.mesh.visible = false;
+             scene.add(player.buildGhost.mesh);
+
+            // Event Listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            renderer.domElement.addEventListener('mousemove', handleMouseMove); // Use renderer's element
+            renderer.domElement.addEventListener('click', handleCanvasClick);
+            renderer.domElement.addEventListener('contextmenu', handleRightClick);
+            window.addEventListener('resize', onWindowResize);
+
+            // Initial UI Update
+            updateInventoryUI();
+            updateCraftingUI();
+            updateStatsUI();
+
+            // Start Game Loop
+            logMessage("3D Game Initialized. WASD to move, Click to interact.", "info");
+            animate(); // Use animate instead of gameLoop for Three.js convention
+        }
+
+        function spawnResource3D(type, count) {
+            for (let i = 0; i < count; i++) {
+                const mesh = createResourceMesh(type);
+                // Spread them out randomly on the ground plane (adjust range as needed)
+                const x = getRandomInt(-100, 100);
+                const z = getRandomInt(-100, 100);
+                mesh.position.x = x;
+                mesh.position.z = z;
+
+                const resourceState = {
+                    type: type, // Keep the original simple type ('tree' or 'rock')
+                    mesh: mesh,
+                    collider: new THREE.Box3().setFromObject(mesh),
+                     data: { type: type } // Store original simple data if needed
+                };
+                resources.push(resourceState);
+                scene.add(mesh);
+                interactableObjects.push(mesh); // Add to raycasting targets
+                 mesh.userData.state = resourceState; // Link back to game state
+            }
+        }
+
+        function spawnEnemy3D() {
+            if (enemies.length >= MAX_ENEMIES) return;
+
+            const mesh = createEnemyMesh();
+            // Spawn enemies off-screen (further away in 3D)
+             const angle = Math.random() * Math.PI * 2;
+             const radius = 120; // Spawn distance
+             const x = Math.cos(angle) * radius;
+             const z = Math.sin(angle) * radius;
+             mesh.position.set(x, ENEMY_SIZE.height / 2, z); // Place on ground
+
+            const enemyState = {
+                mesh: mesh,
+                collider: new THREE.Box3().setFromObject(mesh),
+                health: ENEMY_HEALTH,
+                maxHealth: ENEMY_HEALTH,
+                speed: ENEMY_SPEED + (Math.random() * 1.0 - 0.5), // More speed variation
+                attackCooldown: 0,
+                target: new THREE.Vector3() // Target position for movement
+            };
+             enemies.push(enemyState);
+             scene.add(mesh);
+             interactableObjects.push(mesh); // Add to raycasting targets
+             lastEnemySpawnTime = Date.now();
+             mesh.userData.state = enemyState; // Link back to game state
+        }
+
+
+        // --- Input Handling ---
+        function handleKeyDown(e) {
+            if (gameOver) return;
+            switch (e.key.toLowerCase()) {
+                case 'w': player.moving.forward = true; break;
+                case 's': player.moving.backward = true; break;
+                case 'a': player.moving.left = true; break;
+                case 'd': player.moving.right = true; break;
+                // case ' ': player.moving.up = true; break; // Basic Jump
+                // case 'shift': player.moving.down = true; break; // Basic Crouch/Down
+                case 'escape': if (player.isBuilding) cancelBuilding(); break;
+                case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+                    equipItemFromSlot(parseInt(e.key) - 1);
+                    break;
+            }
+        }
+
+        function handleKeyUp(e) {
+            switch (e.key.toLowerCase()) {
+                 case 'w': player.moving.forward = false; break;
+                 case 's': player.moving.backward = false; break;
+                 case 'a': player.moving.left = false; break;
+                 case 'd': player.moving.right = false; break;
+                 // case ' ': player.moving.up = false; break;
+                 // case 'shift': player.moving.down = false; break;
+            }
+        }
+
+        function handleMouseMove(e) {
+             // Calculate mouse position in normalized device coordinates (-1 to +1)
+             const rect = renderer.domElement.getBoundingClientRect();
+             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+             // Update build ghost position if building
+             if (player.isBuilding && player.buildGhost.mesh) {
+                 raycaster.setFromCamera(mouse, camera);
+                 const intersects = raycaster.intersectObject(groundPlane); // Raycast only to ground
+                 if (intersects.length > 0) {
+                     const point = intersects[0].point;
+                      player.buildGhost.position.copy(point); // Store intersection point
+                      player.buildGhost.mesh.position.copy(point);
+
+                      // Adjust Y based on building type height
+                      const buildingData = getBuildingData3D(player.isBuilding);
+                      player.buildGhost.mesh.position.y = buildingData.size.height / 2;
+
+                     // Check validity (distance, collision)
+                     const ghostCollider = new THREE.Box3().setFromObject(player.buildGhost.mesh);
+                     player.buildGhost.valid = canPlaceBuilding3D(player.buildGhost.position, ghostCollider);
+                     player.buildGhost.mesh.material.color.set(player.buildGhost.valid ? 0x00ff00 : 0xff0000); // Green/Red
+                     player.buildGhost.mesh.visible = true;
+                 } else {
+                     player.buildGhost.mesh.visible = false; // Hide if mouse not over ground
+                 }
+             }
+        }
+
+        function handleCanvasClick(e) {
+            if (gameOver) return;
+
+            // --- Building Placement ---
+             if (player.isBuilding) {
+                 if (player.buildGhost.valid) {
+                     placeBuilding3D();
+                 } else {
+                     logMessage("Cannot place building here (obstructed or too far).", "error");
+                 }
+                 return; // Don't process other interactions
+             }
+
+            // --- Raycasting for Interaction ---
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactableObjects);
+
+            if (intersects.length > 0) {
+                const intersectedObject = intersects[0].object; // Closest intersected object's mesh
+                 // Traverse up to find the group if part of one (like trees)
+                 let mainObjectMesh = intersectedObject;
+                 while (mainObjectMesh.parent && mainObjectMesh.parent !== scene) {
+                     if (mainObjectMesh.userData.type) break; // Stop if we found the main object with type
+                     mainObjectMesh = mainObjectMesh.parent;
+                 }
+
+                 const dist = player.mesh.position.distanceTo(mainObjectMesh.position);
+                 const objectState = mainObjectMesh.userData.state; // Get linked game state
+
+                if (mainObjectMesh.userData.type === 'enemy' && dist <= PLAYER_REACH) {
+                     const enemyIndex = enemies.findIndex(e => e.mesh === mainObjectMesh);
+                    if (enemyIndex !== -1 && objectState) {
+                         attackEnemy(objectState, enemyIndex); // Pass the state object
+                    }
+                } else if (mainObjectMesh.userData.type === 'resource' && dist <= PLAYER_REACH) {
+                    const resourceIndex = resources.findIndex(r => r.mesh === mainObjectMesh);
+                     if (resourceIndex !== -1 && objectState) {
+                        gatherResource(objectState, resourceIndex); // Pass the state object
+                    }
+                 } else if (mainObjectMesh.userData.type === 'building' && dist <= PLAYER_REACH) {
+                    // Interact with building (e.g., repair, open UI) - Future
+                     logMessage(`Clicked on building: ${mainObjectMesh.userData.buildingType}`, "info");
+                 }
+            }
+        }
+
+         function handleRightClick(e) {
+            e.preventDefault();
+            if (gameOver) return;
+            if (player.isBuilding) {
+                cancelBuilding();
+            }
+        }
+
+         function onWindowResize() {
+            const width = rendererContainer.clientWidth;
+            const height = rendererContainer.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        // --- Action Functions (Adaptations) ---
+
+        function attackEnemy(enemyState, index) { // Takes enemy state object
+             let damageDealt = PLAYER_DAMAGE;
+             let toolName = "Fists";
+             if (player.equippedTool && tools[player.equippedTool]) {
+                 damageDealt = tools[player.equippedTool].damage;
+                 toolName = player.equippedTool;
+             }
+
+             enemyState.health -= damageDealt;
+             logMessage(`Attacked enemy with ${toolName}! (-${damageDealt} HP)`, 'info');
+
+             if (enemyState.health <= 0) {
+                 logMessage("Enemy defeated!", 'success');
+                 // Remove from scene and arrays
+                 scene.remove(enemyState.mesh);
+                 const meshIndex = interactableObjects.indexOf(enemyState.mesh);
+                 if (meshIndex > -1) interactableObjects.splice(meshIndex, 1);
+                 enemies.splice(index, 1);
+             }
+             // Could add visual feedback (flash red)
+             enemyState.mesh.material.color.set(0xffffff); // Flash white briefly
+             setTimeout(() => { if(enemyState.mesh) enemyState.mesh.material.color.set(0xff0000); }, 100);
+        }
+
+        function gatherResource(resourceState, index) { // Takes resource state object
+            const resType = resourceState.type; // 'tree' or 'rock'
+             const requiredToolType = resourceRequirements[resType];
+             let gatherAmount = 0;
+             let toolUsed = "Nothing";
+
+             // --- Logic largely same as 2D ---
+             let hasCorrectTool = false;
+             if (player.equippedTool && tools[player.equippedTool]) {
+                 const tool = tools[player.equippedTool];
+                 if (requiredToolType && player.equippedTool.toLowerCase().includes(requiredToolType.toLowerCase())) {
+                     hasCorrectTool = true; toolUsed = player.equippedTool; gatherAmount = BASE_GATHER_AMOUNT;
+                     if (tool.gatherBonus && tool.gatherBonus[resType.toLowerCase()]) { gatherAmount += tool.gatherBonus[resType.toLowerCase()]; }
+                 }
+             }
+             let canGather = false;
+             if (!hasCorrectTool && BASE_GATHER_AMOUNT > 0 && !requiredToolType) {
+                 canGather = true; gatherAmount = BASE_GATHER_AMOUNT; toolUsed = "Bare Hands";
+             } else if (!hasCorrectTool && BASE_GATHER_AMOUNT > 0 && requiredToolType) {
+                 canGather = true; gatherAmount = BASE_GATHER_AMOUNT; toolUsed = "Bare Hands";
+                 logMessage(`Need a ${requiredToolType} to gather ${resType} efficiently.`, 'warning');
+             } else if (hasCorrectTool) {
+                 canGather = true;
+             } else if (!requiredToolType) {
+                  logMessage(`Cannot gather ${resType} right now.`, 'error'); return;
+             } else {
+                 logMessage(`Cannot gather ${resType} without a ${requiredToolType}.`, 'error'); return;
+             }
+             // --- End of similar logic ---
+
+             if (canGather && gatherAmount > 0) {
+                 const resourceItemName = resType === 'tree' ? 'wood' : (resType === 'rock' ? 'stone' : resType);
+                 addItemToInventory(resourceItemName, gatherAmount);
+                 logMessage(`Gathered ${gatherAmount} ${resourceItemName} with ${toolUsed}.`, 'success');
+
+                 // Remove from scene and arrays
+                 scene.remove(resourceState.mesh);
+                 const meshIndex = interactableObjects.indexOf(resourceState.mesh);
+                 if (meshIndex > -1) interactableObjects.splice(meshIndex, 1);
+                 resources.splice(index, 1);
+
+                 updateInventoryUI();
+                 updateCraftingUI();
+             }
+        }
+
+        // Keep addItemToInventory, removeItemFromInventory, craftItem, equipItemFromSlot mostly the same
+         function addItemToInventory(itemName, quantity) { /* ... (same as 2D version) ... */
+            player.inventory[itemName] = (player.inventory[itemName] || 0) + quantity;
+          }
+         function removeItemFromInventory(itemName, quantity) { /* ... (same as 2D version, including unequip check) ... */
+            if (player.inventory[itemName] && player.inventory[itemName] >= quantity) { // Check if enough
+                player.inventory[itemName] -= quantity;
+                if (player.inventory[itemName] <= 0) {
+                    delete player.inventory[itemName];
+                    if (player.equippedTool === itemName) { player.equippedTool = null; updateEquippedToolUI(); }
+                }
+                return true; // Success
+            }
+            return false; // Item not found or not enough
+          }
+         function craftItem(recipeName) { /* ... (same as 2D version, calls startBuilding for 'building' type) ... */
+             const recipe = recipes[recipeName]; if (!recipe) return;
+             let canAfford = true; let missingResources = [];
+             for (const resource in recipe.cost) { if ((player.inventory[resource] || 0) < recipe.cost[resource]) { canAfford = false; missingResources.push(`${recipe.cost[resource]} ${resource}`); } }
+             if (!canAfford) { logMessage(`Cannot craft ${recipeName}. Need: ${missingResources.join(', ')}.`, 'error'); return; }
+             let requirementMet = true;
+             if (recipe.requires) {
+                 requirementMet = false;
+                 for (const building of buildings) {
+                     if (building.type === recipe.requires && player.mesh.position.distanceTo(building.mesh.position) < PLAYER_REACH * 1.2) { requirementMet = true; break; }
+                 }
+                 if (!requirementMet) { logMessage(`Need to be near a ${recipe.requires} to craft ${recipeName}.`, 'error'); return; }
+             }
+             for (const resource in recipe.cost) { if (!removeItemFromInventory(resource, recipe.cost[resource])) { logMessage(`Error deducting resource ${resource}. Crafting cancelled.`, 'error'); return; } }
+             const output = recipe.output;
+             if (output.type === 'tool' || output.type === 'food' || output.type === 'material') { addItemToInventory(output.item, 1); logMessage(`Crafted ${output.item}.`, 'success'); }
+             else if (output.type === 'building') { startBuilding(output.item); }
+             updateInventoryUI(); updateCraftingUI();
+          }
+         function equipItemFromSlot(slotIndex) { /* ... (same as 2D version) ... */
+            const inventoryTools = Object.keys(player.inventory).filter(item => tools[item]).sort();
+            if (slotIndex >= 0 && slotIndex < inventoryTools.length) {
+                const itemToEquip = inventoryTools[slotIndex];
+                if (player.equippedTool !== itemToEquip) { player.equippedTool = itemToEquip; logMessage(`Equipped ${itemToEquip}.`, 'info'); }
+                else { player.equippedTool = null; logMessage(`Unequipped ${itemToEquip}.`, 'info'); }
+                updateEquippedToolUI();
+            }
+          }
+
+        // --- Building 3D ---
+         function startBuilding(buildingName) {
+             if (player.isBuilding) { logMessage(`Already placing a ${player.isBuilding}. Cancel first.`, 'warning'); return; }
+
+             player.isBuilding = buildingName;
+             buildModeIndicatorSpan.textContent = `Building: ${buildingName}`;
+             buildModeIndicatorSpan.classList.add('build-mode');
+             logMessage(`Selected ${buildingName}. Move mouse, click to place. R-Click/ESC to cancel.`, 'info');
+
+             // Configure the ghost mesh
+             const buildingData = getBuildingData3D(buildingName);
+             player.buildGhost.mesh.geometry.dispose(); // Dispose old geometry
+             player.buildGhost.mesh.geometry = buildingData.geometry; // Use new geometry
+             player.buildGhost.mesh.material.color.set(0xff0000); // Start red (invalid until mouse moves)
+             player.buildGhost.mesh.visible = false; // Hide until mouse moves over ground
+             player.buildGhost.valid = false;
+         }
+
+         function cancelBuilding() {
+             if (!player.isBuilding) return;
+             logMessage("Building cancelled.", 'info');
+             player.isBuilding = null;
+             buildModeIndicatorSpan.textContent = '';
+             buildModeIndicatorSpan.classList.remove('build-mode');
+             player.buildGhost.mesh.visible = false; // Hide ghost
+         }
+
+        // Helper to get 3D building data (geometry, size)
+         function getBuildingData3D(buildingName) {
+             let size, geometry, blocksMovement = true;
+             switch(buildingName) {
+                 case 'Wooden Wall':
+                     size = WALL_SIZE;
+                     geometry = new THREE.BoxGeometry(size.width, size.height, size.depth);
+                     break;
+                 case 'Campfire':
+                     size = CAMPFIRE_SIZE;
+                     geometry = new THREE.CylinderGeometry(size.radius, size.radius * 0.9, size.height, 12);
+                     blocksMovement = false;
+                     break;
+                 default:
+                     size = { width: 1, height: 1, depth: 1};
+                     geometry = new THREE.BoxGeometry(1, 1, 1);
+             }
+             return { size: size, geometry: geometry, blocksMovement: blocksMovement };
+         }
+
+         function canPlaceBuilding3D(position, buildingCollider) {
+            // 1. Check distance
+            if (player.mesh.position.distanceTo(position) > BUILDING_PLACEMENT_RANGE) {
+                return false;
+            }
+
+            // 2. Check world bounds (optional, depends on world design)
+            // if (position.x < -250 || position.x > 250 || position.z < -250 || position.z > 250) return false;
+
+             // 3. Check collision with existing buildings
+             for (const building of buildings) {
+                 if (check3DCollision(buildingCollider, building.collider)) {
+                     return false;
+                 }
+             }
+             // 4. Check collision with resources
+             for (const res of resources) {
+                 if (check3DCollision(buildingCollider, res.collider)) {
+                     return false;
+                 }
+             }
+              // 5. Check collision with enemies (optional)
+              // for (const enemy of enemies) { if (check3DCollision(buildingCollider, enemy.collider)) return false; }
+              // 6. Check collision with player (optional)
+              // if (check3DCollision(buildingCollider, player.collider)) return false;
+
+            return true;
+         }
+
+         function placeBuilding3D() {
+            if (!player.isBuilding || !player.buildGhost.valid) return;
+
+            const type = player.isBuilding;
+            const buildingData = getBuildingData3D(type);
+             const mesh = createBuildingMesh(type); // Use the helper function
+            mesh.position.copy(player.buildGhost.position);
+            mesh.position.y = buildingData.size.height / 2; // Ensure correct height
+
+             const buildingState = {
+                 type: type,
+                 mesh: mesh,
+                 collider: new THREE.Box3().setFromObject(mesh),
+                 health: type === 'Wooden Wall' ? WALL_HEALTH : CAMPFIRE_HEALTH,
+                 maxHealth: type === 'Wooden Wall' ? WALL_HEALTH : CAMPFIRE_HEALTH,
+                 blocksMovement: buildingData.blocksMovement
+             };
+
+             buildings.push(buildingState);
+             scene.add(mesh);
+             interactableObjects.push(mesh); // Make it clickable
+             mesh.userData.state = buildingState; // Link back
+
+             logMessage(`Placed ${type}.`, 'success');
+
+             // Exit build mode
+             player.isBuilding = null;
+             buildModeIndicatorSpan.textContent = '';
+             buildModeIndicatorSpan.classList.remove('build-mode');
+             player.buildGhost.mesh.visible = false;
+         }
+
+        // --- Update Functions ---
+        function updatePlayerMovement(deltaTime) {
+            const moveSpeed = PLAYER_SPEED * deltaTime;
+            const rotationSpeed = Math.PI * deltaTime; // Radians per second
+
+            // Movement direction based on camera orientation
+            const forward = new THREE.Vector3();
+            const sideways = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0; // Project onto XZ plane
+            forward.normalize();
+             sideways.crossVectors(camera.up, forward).normalize(); // Get right vector
+
+            let moveDelta = new THREE.Vector3();
+
+            if (player.moving.forward) moveDelta.add(forward);
+            if (player.moving.backward) moveDelta.sub(forward);
+            if (player.moving.left) moveDelta.sub(sideways); // Strafe left
+            if (player.moving.right) moveDelta.add(sideways); // Strafe right
+
+             moveDelta.normalize().multiplyScalar(moveSpeed);
+
+             // --- Basic Collision Detection ---
+             const oldPosition = player.mesh.position.clone();
+             const newPosition = oldPosition.clone().add(moveDelta);
+             player.mesh.position.copy(newPosition); // Try moving
+             updateCollider(player); // Update collider to new potential position
+
+             let collisionDetected = false;
+             for (const building of buildings) {
+                 if (building.blocksMovement && check3DCollision(player.collider, building.collider)) {
+                     collisionDetected = true;
+                     break; // Stop checking after first collision
+                 }
+             }
+              // Add checks for resources if they should block
+             // for (const res of resources) { if (check3DCollision(player.collider, res.collider)) { collisionDetected = true; break; } }
+
+             if (collisionDetected) {
+                 player.mesh.position.copy(oldPosition); // Revert if collision
+                 updateCollider(player); // Reset collider to old position
+             }
+
+             // Keep player within world bounds (example)
+              player.mesh.position.x = Math.max(-245, Math.min(245, player.mesh.position.x));
+              player.mesh.position.z = Math.max(-245, Math.min(245, player.mesh.position.z));
+              player.mesh.position.y = PLAYER_SIZE.height / 2; // Keep player on ground (simple)
+
+             // Make player face movement direction (optional)
+             // if (moveDelta.lengthSq() > 0.001) {
+             //     player.mesh.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), moveDelta.normalize()), 0.1);
+             // }
+        }
+
+        function updateEnemyMovement(deltaTime) {
+            enemies.forEach((enemyState, index) => {
+                const enemyMesh = enemyState.mesh;
+                const distToPlayer = enemyMesh.position.distanceTo(player.mesh.position);
+
+                if (distToPlayer > ENEMY_ATTACK_RANGE * 0.95) {
+                     // Move towards player
+                     const direction = new THREE.Vector3().subVectors(player.mesh.position, enemyMesh.position).normalize();
+                     const moveStep = direction.multiplyScalar(enemyState.speed * deltaTime);
+
+                     // --- Basic Collision Avoidance (Very Crude) ---
+                     const oldPos = enemyMesh.position.clone();
+                     enemyMesh.position.add(moveStep);
+                     updateCollider(enemyState);
+
+                     let collision = false;
+                     for(const b of buildings) { if(b.blocksMovement && check3DCollision(enemyState.collider, b.collider)) { collision = true; break; }}
+                     // Add check against other enemies?
+
+                     if (collision) {
+                         enemyMesh.position.copy(oldPos); // Revert move if collision
+                         updateCollider(enemyState);
+                         // Maybe try a slight sideways move? (More complex AI needed)
+                     }
+                }
+                 // Keep enemy on ground
+                 enemyMesh.position.y = ENEMY_SIZE.height / 2;
+
+
+                 // Attack player if close
+                if (distToPlayer <= ENEMY_ATTACK_RANGE && !gameOver) {
+                    const now = Date.now();
+                    if (now - enemyState.attackCooldown > 1500) {
+                         player.health -= ENEMY_DAMAGE;
+                         player.health = Math.max(0, player.health);
+                         logMessage(`Hit by enemy! (-${ENEMY_DAMAGE} HP)`, 'warning');
+                         updateStatsUI();
+                         enemyState.attackCooldown = now;
+                         // Visual feedback for player hit? (Screen flash?)
+                     }
+                 }
+            });
+        }
+
+        function updateSurvivalAndSpawning(deltaTime) {
+            const now = Date.now();
+            // --- Survival ---
+            let statsChanged = false;
+            if (now - lastHungerTick > 1000) { player.hunger -= HUNGER_RATE; player.hunger = Math.max(0, player.hunger); lastHungerTick = now; statsChanged = true; if(player.hunger === 0) logMessage("Starving!", "warning"); }
+            if (now - lastThirstTick > 1000) { player.thirst -= THIRST_RATE; player.thirst = Math.max(0, player.thirst); lastThirstTick = now; statsChanged = true; if(player.thirst === 0) logMessage("Dehydrated!", "warning"); }
+
+            let survivalDamage = 0;
+            if (player.hunger <= 0) survivalDamage += STARVATION_DAMAGE_RATE * (deltaTime); // Damage scaled by delta time
+            if (player.thirst <= 0) survivalDamage += STARVATION_DAMAGE_RATE * (deltaTime);
+            if (survivalDamage > 0) { player.health -= survivalDamage; statsChanged = true; if (Math.random() < 0.02) logMessage("Losing health!", 'warning');}
+
+            if (player.health <= 0 && !gameOver) { gameOver = true; logMessage("GAME OVER!", 'error'); statsChanged = true; }
+            if (statsChanged) updateStatsUI();
+
+            // --- Spawning ---
+            if (now - lastEnemySpawnTime > ENEMY_SPAWN_INTERVAL) {
+                spawnEnemy3D();
+            }
+        }
+
+        // --- UI Update Functions (Keep as is, they target HTML) ---
+         function updateStatsUI() { /* ... (same as 2D version) ... */
+            healthValueSpan.textContent = Math.ceil(player.health);
+            healthBarFillSpan.style.width = `${Math.max(0, player.health / player.maxHealth) * 100}%`;
+            hungerValueSpan.textContent = Math.ceil(player.hunger);
+            hungerBarFillSpan.style.width = `${Math.max(0, player.hunger / player.maxHunger) * 100}%`;
+            thirstValueSpan.textContent = Math.ceil(player.thirst);
+            thirstBarFillSpan.style.width = `${Math.max(0, player.thirst / player.maxThirst) * 100}%`;
+         }
+         function updateInventoryUI() { /* ... (same as 2D version, including keybind display) ... */
+            inventoryListUl.innerHTML = ''; let count = 0; const sortedItems = Object.keys(player.inventory).sort();
+            sortedItems.forEach((item, index) => {
+                 if (player.inventory[item] > 0) {
+                    const li = document.createElement('li'); li.textContent = `(${index + 1}) ${item}: ${player.inventory[item]}`;
+                    if (tools[item]) {
+                         li.style.cursor = 'pointer'; li.title = 'Click or press number to equip/unequip';
+                         li.onclick = () => { const toolSlotIndex = Object.keys(player.inventory).filter(i => tools[i]).sort().indexOf(item); equipItemFromSlot(toolSlotIndex); };
+                         if (player.equippedTool === item) { li.style.fontWeight = 'bold'; li.style.backgroundColor = '#d1e7dd'; }
+                    } else { li.style.cursor = 'default'; }
+                    inventoryListUl.appendChild(li); count++;
+                }
+            });
+            if (count === 0) { inventoryListUl.innerHTML = '<li>Empty</li>'; }
+         }
+         function updateEquippedToolUI() { /* ... (same as 2D version) ... */
+             equippedToolSpan.textContent = player.equippedTool || 'None'; updateInventoryUI(); updateCraftingUI();
+         }
+         function updateCraftingUI() { /* ... (same as 2D version, including requirement check) ... */
+             craftingListUl.innerHTML = '';
+             for (const recipeName in recipes) {
+                 const recipe = recipes[recipeName]; const li = document.createElement('li'); const button = document.createElement('button'); button.textContent = recipeName; button.onclick = () => craftItem(recipeName);
+                 let canAfford = true; let costString = "Cost: "; let costs = [];
+                 for (const resource in recipe.cost) { const needed = recipe.cost[resource]; const owned = player.inventory[resource] || 0; costs.push(`${needed} ${resource} (${owned})`); if (owned < needed) { canAfford = false; } }
+                 costString += costs.join(', ');
+                 let requirementMet = true; let requirementString = "";
+                 if (recipe.requires) {
+                     requirementMet = false; requirementString = ` Requires: Nearby ${recipe.requires}`;
+                     for (const building of buildings) { if (building.type === recipe.requires && player.mesh.position.distanceTo(building.mesh.position) < PLAYER_REACH * 1.2) { requirementMet = true; requirementString += " (Met)"; break; } }
+                     if (!requirementMet) { requirementString += " (Not Met)"; }
+                 }
+                 button.disabled = !canAfford || !requirementMet; button.title = costString + requirementString;
+                 li.appendChild(button); craftingListUl.appendChild(li);
+             }
+             if (Object.keys(recipes).length === 0) { craftingListUl.innerHTML = '<li>No recipes known</li>'; }
+          }
+
+        // --- Game Loop (Animate) ---
+        function animate() {
+            if (gameOver) {
+                 // Optional: Add a Game Over overlay in 3D space or just rely on UI panel message
+                 return; // Stop the loop
+            }
+
+            requestAnimationFrame(animate);
+
+            const deltaTime = clock.getDelta(); // Time since last frame in seconds
+
+            // Update Game Logic
+            updatePlayerMovement(deltaTime);
+            updateEnemyMovement(deltaTime);
+            updateSurvivalAndSpawning(deltaTime); // Handles health loss, game over check, spawning
+
+            // Update Camera Position (Simple Third Person Follow)
+            if (player.mesh) {
+                 const targetPosition = new THREE.Vector3();
+                 player.mesh.getWorldPosition(targetPosition); // Get player's world position
+                 const desiredCameraPosition = targetPosition.clone().add(cameraOffset);
+                 camera.position.lerp(desiredCameraPosition, 0.1); // Smoothly move camera
+                 camera.lookAt(targetPosition); // Always look at the player
+            }
+
+            // Render the Scene
+            renderer.render(scene, camera);
+        }
+
+        // --- Start the Game ---
+        init();
+
+    </script>
+</body>
+</html>

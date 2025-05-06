@@ -1,0 +1,12 @@
+Next Steps (If You Want to Expand):
+Graphics: Replace rectangles with actual images (sprites).
+Crafting: Implement a crafting system (e.g., combine wood + stone -> axe).
+Building: Allow placing simple structures (walls, floors).
+More Complex AI: Give enemies varied behaviors.
+Sound: Add sound effects and music.
+Saving/Loading: Use localStorage to save game state.
+World Generation: Generate a larger, more interesting map instead of a static rectangle.
+Day/Night Cycle: Implement time passing and its effects.
+More Survival: Add hunger, thirst, temperature.
+Tool Usage: Require specific tools (like an axe) to gather certain resources.
+This example provides a fundamental structure, but building a full game like "The Infected" is a massive undertaking. Have fun experimenting with this basic version!
