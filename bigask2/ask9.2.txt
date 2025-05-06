@@ -1,4 +1,4 @@
-Write me an 3d open-world 3rd-person survival game in html5 and the library three.min.js 
+Write me an 3d open-world in 3rd-person view. This survival game is written in html5 and the library three.min.js 
 
 The game world includes trees(atleast 1000), rocks(atleast 1000), water, animated animals, scrap metal, nails, and tall grass and fog. The land has some roaming hills but there are many flat areas for building. There are Barrels scattered throughout the map can be searched for additional loot, Located throughout the map are empty buildings with large door openning contain searchable crates containig loot. All tress, stones and buildings are collideable. There is no weather system or day and night cycle. The world starts a 1000x1000 and varries in elevation with lower areas for water. Water should be using Water.js so the water looks the best. The animals on the map are chickens, rabbits, wolves and bears. These animals should look like what they are. If an animal chases you in to water the animal will drown and die.
 
