@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoHaven - A Morterra-inspired Game</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', sans-serif;
+      background-color: #1a2d34;
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+    
+    .game-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      background-color: #0f1c21;
+      padding: 10px;
+      border-bottom: 2px solid #2a4d59;
+    }
+    
+    .resources {
+      display: flex;
+      gap: 20px;
+    }
+    
+    .resource {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .resource-icon {
+      width: 24px;
+      height: 24px;
+      background-color: #4a9268;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+    
+    .game-area {
+      display: flex;
+      flex: 1;
+    }
+    
+    .world-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background-color: #2a4d59;
+    }
+    
+    .tile {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background-color: #5a7d8a;
+      border: 1px solid #2a4d59;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .tile:hover {
+      transform: scale(1.05);
+      z-index: 10;
+    }
+    
+    .sidebar {
+      width: 250px;
+      background-color: #152228;
+      padding: 15px;
+      overflow-y: auto;
+    }
+    
+    .sidebar-title {
+      font-size: 20px;
+      margin-bottom: 15px;
+      color: #8bc34a;
+      text-align: center;
+    }
+    
+    .tool-btn {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      background-color: #2a4d59;
+      border: none;
+      border-radius: 5px;
+      color: #e0e0e0;
+      cursor: pointer;
+      text-align: left;
+      transition: background-color 0.2s;
+    }
+    
+    .tool-btn:hover {
+      background-color: #3a6d79;
+    }
+    
+    .tool-btn.active {
+      background-color: #4a9268;
+    }
+    
+    .tool-icon {
+      margin-right: 10px;
+    }
+    
+    .info-panel {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #1a2d34;
+      border-radius: 5px;
+    }
+    
+    .crafting-panel {
+      margin-top: 20px;
+    }
+    
+    .craft-item {
+      padding: 10px;
+      margin-bottom: 8px;
+      background-color: #2a4d59;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    
+    .craft-item:hover {
+      background-color: #3a6d79;
+    }
+    
+    .craft-requirements {
+      font-size: 12px;
+      color: #8bc34a;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .modal-content {
+      background-color: #152228;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 500px;
+      width: 100%;
+    }
+    
+    .close-btn {
+      float: right;
+      background: none;
+      border: none;
+      color: #e0e0e0;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    
+    .menu-btn {
+      background-color: #4a9268;
+      border: none;
+      padding: 8px 15px;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .ecosystem-stat {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    
+    .stat-icon {
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      background-color: #4a9268;
+      border-radius: 50%;
+    }
+    
+    .progress-bar {
+      height: 10px;
+      background-color: #2a4d59;
+      border-radius: 5px;
+      margin-top: 5px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 10px;
+      background-color: #8bc34a;
+      width: 50%;
+      border-radius: 5px;
+      transition: width 0.5s;
+    }
+    
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #4a9268;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 50;
+    }
+    
+    /* Entity styles */
+    .tree {
+      color: #8bc34a;
+      font-size: 30px;
+    }
+    
+    .water {
+      background-color: #3498db;
+    }
+    
+    .rock {
+      color: #95a5a6;
+      font-size: 26px;
+    }
+    
+    .animal {
+      color: #e67e22;
+      font-size: 24px;
+    }
+    
+    .plant {
+      color: #2ecc71;
+      font-size: 22px;
+    }
+    
+    .pollution {
+      background-color: rgba(231, 76, 60, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <div class="top-bar">
+      <div class="resources">
+        <div class="resource">
+          <div class="resource-icon">🌱</div>
+          <div class="resource-value" id="seeds">20</div>
+        </div>
+        <div class="resource">
+          <div class="resource-icon">🪓</div>
+          <div class="resource-value" id="wood">15</div>
+        </div>
+        <div class="resource">
+          <div class="resource-icon">💧</div>
+          <div class="resource-value" id="water">25</div>
+        </div>
+        <div class="resource">
+          <div class="resource-icon">🪨</div>
+          <div class="resource-value" id="stone">10</div>
+        </div>
+      </div>
+      <div>
+        <button class="menu-btn" id="menu-btn">Menu</button>
+      </div>
+    </div>
+    
+    <div class="game-area">
+      <div class="world-container" id="world">
+        <!-- Tiles will be generated here -->
+      </div>
+      
+      <div class="sidebar">
+        <div class="sidebar-title">EcoHaven Tools</div>
+        
+        <button class="tool-btn active" data-tool="plant">
+          <span class="tool-icon">🌱</span> Plant Tree
+        </button>
+        <button class="tool-btn" data-tool="water">
+          <span class="tool-icon">💧</span> Create Water
+        </button>
+        <button class="tool-btn" data-tool="animal">
+          <span class="tool-icon">🦊</span> Introduce Animal
+        </button>
+        <button class="tool-btn" data-tool="remove">
+          <span class="tool-icon">❌</span> Remove
+        </button>
+        <button class="tool-btn" data-tool="inspect">
+          <span class="tool-icon">🔍</span> Inspect
+        </button>
+        
+        <div class="info-panel">
+          <h3>Ecosystem Health</h3>
+          <div class="ecosystem-stat">
+            <div class="stat-icon"></div>
+            <div>Biodiversity</div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="biodiversity-bar"></div>
+          </div>
+          
+          <div class="ecosystem-stat">
+            <div class="stat-icon"></div>
+            <div>Water Quality</div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="water-quality-bar"></div>
+          </div>
+          
+          <div class="ecosystem-stat">
+            <div class="stat-icon"></div>
+            <div>Air Quality</div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="air-quality-bar"></div>
+          </div>
+        </div>
+        
+        <div class="crafting-panel">
+          <h3>Crafting</h3>
+          <div class="craft-item" data-item="composter">
+            <div>Composter</div>
+            <div class="craft-requirements">Requires: 5 Wood, 3 Stone</div>
+          </div>
+          <div class="craft-item" data-item="pond">
+            <div>Wildlife Pond</div>
+            <div class="craft-requirements">Requires: 10 Water, 5 Stone</div>
+          </div>
+          <div class="craft-item" data-item="birdhouse">
+            <div>Birdhouse</div>
+            <div class="craft-requirements">Requires: 3 Wood</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Main Menu Modal -->
+  <div class="modal" id="menu-modal">
+    <div class="modal-content">
+      <button class="close-btn">&times;</button>
+      <h2>EcoHaven Menu</h2>
+      <button class="tool-btn" id="continue-btn">Continue Game</button>
+      <button class="tool-btn" id="new-game-btn">New Game</button>
+      <button class="tool-btn" id="tutorial-btn">Tutorial</button>
+      <button class="tool-btn" id="settings-btn">Settings</button>
+    </div>
+  </div>
+  
+  <!-- Tutorial Modal -->
+  <div class="modal" id="tutorial-modal">
+    <div class="modal-content">
+      <button class="close-btn">&times;</button>
+      <h2>How to Play</h2>
+      <p>Welcome to EcoHaven, an ecological restoration game!</p>
+      <p><strong>Goal:</strong> Create a balanced ecosystem by planting trees, introducing animal species, and maintaining water sources.</p>
+      <p><strong>Tools:</strong></p>
+      <ul>
+        <li><strong>Plant Tree:</strong> Use seeds to grow trees which produce oxygen and support wildlife.</li>
+        <li><strong>Create Water:</strong> Add water sources to your ecosystem.</li>
+        <li><strong>Introduce Animal:</strong> Add animals that help maintain ecological balance.</li>
+        <li><strong>Remove:</strong> Clear elements from your ecosystem.</li>
+        <li><strong>Inspect:</strong> Check the status of ecosystem elements.</li>
+      </ul>
+      <p><strong>Crafting:</strong> Build special structures to enhance your ecosystem.</p>
+      <p>Balance is key! Monitor your ecosystem health metrics and adjust accordingly.</p>
+    </div>
+  </div>
+  
+  <!-- Inspect Modal -->
+  <div class="modal" id="inspect-modal">
+    <div class="modal-content">
+      <button class="close-btn">&times;</button>
+      <h2 id="inspect-title">Tree</h2>
+      <div id="inspect-details">
+        <p><strong>Health:</strong> <span id="inspect-health">Good</span></p>
+        <p><strong>Age:</strong> <span id="inspect-age">Young</span></p>
+        <p><strong>Status:</strong> <span id="inspect-status">Growing</span></p>
+        <p><strong>Effects:</strong> <span id="inspect-effects">Produces oxygen, supports birds</span></p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Notification Element -->
+  <div class="notification" id="notification"></div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Game state
+      const gameState = {
+        resources: {
+          seeds: 20,
+          wood: 15,
+          water: 25,
+          stone: 10
+        },
+        ecosystem: {
+          biodiversity: 20,
+          waterQuality: 40,
+          airQuality: 30
+        },
+        selectedTool: 'plant',
+        world: [],
+        worldSize: { width: 10, height: 10 },
+        tileSize: 60
+      };
+      
+      // Initialize the world
+      function initWorld() {
+        const worldContainer = document.getElementById('world');
+        worldContainer.innerHTML = '';
+        gameState.world = [];
+        
+        for (let y = 0; y < gameState.worldSize.height; y++) {
+          const row = [];
+          for (let x = 0; x < gameState.worldSize.width; x++) {
+            const tile = document.createElement('div');
+            tile.className = 'tile';
+            tile.style.left = (x * gameState.tileSize) + 'px';
+            tile.style.top = (y * gameState.tileSize) + 'px';
+            
+            tile.dataset.x = x;
+            tile.dataset.y = y;
+            
+            // Random terrain generation
+            const terrainType = Math.random();
+            if (terrainType > 0.95) {
+              tile.classList.add('water');
+              tile.innerHTML = '💧';
+              row.push({ type: 'water', health: 100 });
+            } else if (terrainType > 0.90) {
+              tile.innerHTML = '🪨';
+              tile.classList.add('rock');
+              row.push({ type: 'rock', health: 100 });
+            } else if (terrainType > 0.85) {
+              tile.innerHTML = '🌳';
+              tile.classList.add('tree');
+              row.push({ type: 'tree', health: 100 });
+            } else {
+              row.push({ type: 'empty', health: 100 });
+            }
+            
+            tile.addEventListener('click', () => handleTileClick(x, y));
+            worldContainer.appendChild(tile);
+          }
+          gameState.world.push(row);
+        }
+        updateResourceDisplay();
+        updateEcosystemMetrics();
+      }
+      
+      // Handle tile clicks based on selected tool
+      function handleTileClick(x, y) {
+        const tile = gameState.world[y][x];
+        const tileElement = document.querySelector(`.tile[data-x="${x}"][data-y="${y}"]`);
+        
+        switch (gameState.selectedTool) {
+          case 'plant':
+            if (tile.type === 'empty' && gameState.resources.seeds >= 2) {
+              gameState.resources.seeds -= 2;
+              tileElement.innerHTML = '🌳';
+              tileElement.classList.add('tree');
+              tile.type = 'tree';
+              gameState.ecosystem.airQuality += 5;
+              gameState.ecosystem.biodiversity += 3;
+              showNotification('Tree planted! Air quality improving.');
+            } else if (tile.type !== 'empty') {
+              showNotification('Cannot plant here. Clear the area first.');
+            } else {
+              showNotification('Not enough seeds!');
+            }
+            break;
+            
+          case 'water':
+            if (tile.type === 'empty' && gameState.resources.water >= 5) {
+              gameState.resources.water -= 5;
+              tileElement.innerHTML = '💧';
+              tileElement.classList.add('water');
+              tile.type = 'water';
+              gameState.ecosystem.waterQuality += 5;
+              gameState.ecosystem.biodiversity += 2;
+              showNotification('Water source created!');
+            } else if (tile.type !== 'empty') {
+              showNotification('Cannot create water here. Clear the area first.');
+            } else {
+              showNotification('Not enough water resources!');
+            }
+            break;
+            
+          case 'animal':
+            if ((tile.type === 'empty' || tile.type === 'tree') && hasAdjacentTree(x, y) && gameState.resources.wood >= 3) {
+              gameState.resources.wood -= 3;
+              const animals = ['🦊', '🦌', '🐦', '🐿️', '🦉'];
+              const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+              tileElement.innerHTML = randomAnimal;
+              tileElement.classList.add('animal');
+              tile.type = 'animal';
+              tile.species = randomAnimal;
+              gameState.ecosystem.biodiversity += 8;
+              showNotification(`A ${getAnimalName(randomAnimal)} has been introduced!`);
+            } else if (!hasAdjacentTree(x, y)) {
+              showNotification('Animals need trees nearby to survive!');
+            } else if (gameState.resources.wood < 3) {
+              showNotification('Not enough wood! Animals need habitat resources.');
+            } else {
+              showNotification('Cannot introduce animals here.');
+            }
+            break;
+            
+          case 'remove':
+            if (tile.type !== 'empty') {
+              const oldType = tile.type;
+              
+              // Resource gain from removal
+              if (oldType === 'tree') {
+                gameState.resources.wood += 3;
+                gameState.resources.seeds += 1;
+                gameState.ecosystem.airQuality -= 5;
+              } else if (oldType === 'water') {
+                gameState.resources.water += 2;
+                gameState.ecosystem.waterQuality -= 3;
+              } else if (oldType === 'rock') {
+                gameState.resources.stone += 2;
+              }
+              
+              // Clear the tile
+              tileElement.innerHTML = '';
+              tileElement.className = 'tile';
+              tile.type = 'empty';
+              
+              // Environmental impact
+              if (oldType === 'animal' || oldType === 'tree') {
+                gameState.ecosystem.biodiversity -= 3;
+              }
+              
+              showNotification(`${oldType.charAt(0).toUpperCase() + oldType.slice(1)} removed.`);
+            }
+            break;
+            
+          case 'inspect':
+            openInspectModal(tile);
+            break;
+        }
+        
+        capEcosystemValues();
+        updateResourceDisplay();
+        updateEcosystemMetrics();
+      }
+      
+      // Check if a tile has an adjacent tree
+      function hasAdjacentTree(x, y) {
+        const directions = [
+          { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+          { dx: 0, dy: -1 }, { dx: 0, dy: 1 }
+        ];
+        
+        for (const dir of directions) {
+          const newX = x + dir.dx;
+          const newY = y + dir.dy;
+          
+          if (newX >= 0 && newX < gameState.worldSize.width && 
+              newY >= 0 && newY < gameState.worldSize.height &&
+              gameState.world[newY][newX].type === 'tree') {
+            return true;
+          }
+        }
+        return false;
+      }
+      
+      // Get animal name from emoji
+      function getAnimalName(emoji) {
+        const animalNames = {
+          '🦊': 'fox',
+          '🦌': 'deer',
+          '🐦': 'bird',
+          '🐿️': 'squirrel',
+          '🦉': 'owl'
+        };
+        return animalNames[emoji] || 'animal';
+      }
+      
+      // Update resource display
+      function updateResourceDisplay() {
+        document.getElementById('seeds').textContent = gameState.resources.seeds;
+        document.getElementById('wood').textContent = gameState.resources.wood;
+        document.getElementById('water').textContent = gameState.resources.water;
+        document.getElementById('stone').textContent = gameState.resources.stone;
+      }
+      
+      // Update ecosystem metrics
+      function updateEcosystemMetrics() {
+        document.getElementById('biodiversity-bar').style.width = `${gameState.ecosystem.biodiversity}%`;
+        document.getElementById('water-quality-bar').style.width = `${gameState.ecosystem.waterQuality}%`;
+        document.getElementById('air-quality-bar').style.width = `${gameState.ecosystem.airQuality}%`;
+      }
+      
+      // Ensure ecosystem values stay within 0-100 range
+      function capEcosystemValues() {
+        for (const key in gameState.ecosystem) {
+          gameState.ecosystem[key] = Math.max(0, Math.min(100, gameState.ecosystem[key]));
+        }
+      }
+      
+      // Display notification
+      function showNotification(message) {
+        const notification = document.getElementById('notification');
+        notification.textContent = message;
+        notification.style.opacity = 1;
+        
+        setTimeout(() => {
+          notification.style.opacity = 0;
+        }, 3000);
+      }
+      
+      // Open inspection modal
+      function openInspectModal(tile) {
+        const modal = document.getElementById('inspect-modal');
+        const title = document.getElementById('inspect-title');
+        const health = document.getElementById('inspect-health');
+        const age = document.getElementById('inspect-age');
+        const status = document.getElementById('inspect-status');
+        const effects = document.getElementById('inspect-effects');
+        
+        if (tile.type === 'empty') {
+          title.textContent = 'Empty Land';
+          health.textContent = 'N/A';
+          age.textContent = 'N/A';
+          status.textContent = 'Available for planting';
+          effects.textContent = 'None';
+        } else if (tile.type === 'tree') {
+          title.textContent = 'Tree';
+          health.textContent = `${tile.health}%`;
+          age.textContent = getAgeName(tile.health);
+          status.textContent = tile.health > 80 ? 'Thriving' : (tile.health > 40 ? 'Stable' : 'Struggling');
+          effects.textContent = 'Produces oxygen, provides habitat, improves soil';
+        } else if (tile.type === 'water') {
+          title.textContent = 'Water Source';
+          health.textContent = `${tile.health}%`;
+          status.textContent = tile.health > 70 ? 'Clean' : (tile.health > 30 ? 'Slightly polluted' : 'Polluted');
+          age.textContent = 'N/A';
+          effects.textContent = 'Hydrates plants, supports aquatic life';
+        } else if (tile.type === 'rock') {
+          title.textContent = 'Rock Formation';
+          health.textContent = 'N/A';
+          age.textContent = 'Ancient';
+          status.textContent = 'Stable';
+          effects.textContent = 'Provides shelter, stabilizes soil';
+        } else if (tile.type === 'animal') {
+          title.textContent = getAnimalName(tile.species).charAt(0).toUpperCase() + getAnimalName(tile.species).slice(1);
+          health.textContent = `${tile.health}%`;
+          age.textContent = getAgeName(tile.health);
+          status.textContent = tile.health > 80 ? 'Thriving' : (tile.health > 40 ? 'Stable' : 'Struggling');
+          effects.textContent = 'Maintains biodiversity, controls populations';
+        }
+        
+        modal.style.display = 'flex';
+      }
+      
+      // Get age name based on health
+      function getAgeName(health) {
+        if (health > 90) return 'Young';
+        if (health > 70) return 'Mature';
+        if (health > 40) return 'Old';
+        return 'Ancient';
+      }
+      
+      // Tool selection
+      const toolButtons = document.querySelectorAll('.tool-btn[data-tool]');
+      toolButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          toolButtons.forEach(btn => btn.classList.remove('active'));
+          button.classList.add('active');
+          gameState.selectedTool = button.dataset.tool;
+        });
+      });
+      
+      // Crafting system
+      const craftItems = document.querySelectorAll('.craft-item');
+      craftItems.forEach(item => {
+        item.addEventListener('click', () => {
+          const craftType = item.dataset.item;
+          
+          if (craftType === 'composter' && gameState.resources.wood >= 5 && gameState.resources.stone >= 3) {
+            gameState.resources.wood -= 5;
+            gameState.resources.stone -= 3;
+            gameState.resources.seeds += 10;
+            showNotification('Composter built! +10 seeds generated.');
+          } else if (craftType === 'pond' && gameState.resources.water >= 10 && gameState.resources.stone >= 5) {
+            gameState.resources.water -= 10;
+            gameState.resources.stone -= 5;
+            gameState.ecosystem.waterQuality += 15;
+            gameState.ecosystem.biodiversity += 10;
+            showNotification('Wildlife pond created! Water quality improved.');
+          } else if (craftType === 'birdhouse' && gameState.resources.wood >= 3) {
+            gameState.resources.wood -= 3;
+            gameState.ecosystem.biodiversity += 8;
+            showNotification('Birdhouse built! More birds are visiting your ecosystem.');
+          } else {
+            showNotification('Not enough resources for crafting!');
+          }
+          
+          updateResourceDisplay();
+          updateEcosystemMetrics();
+        });
+      });
+      
+      // Main menu handling
+      const menuBtn = document.getElementById('menu-btn');
+      const menuModal = document.getElementById('menu-modal');
+      menuBtn.addEventListener('click', () => {
+        menuModal.style.display = 'flex';
+      });
+      
+      // Tutorial button
+      const tutorialBtn = document.getElementById('tutorial-btn');
+      const tutorialModal = document.getElementById('tutorial-modal');
+      tutorialBtn.addEventListener('click', () => {
+        menuModal.style.display = 'none';
+        tutorialModal.style.display = 'flex';
+      });
+      
+      // Continue game
+      const continueBtn = document.getElementById('continue-btn');
+      continueBtn.addEventListener('click', () => {
+        menuModal.style.display = 'none';
+      });
+      
+      // New game
+      const newGameBtn = document.getElementById('new-game-btn');
+      newGameBtn.addEventListener('click', () => {
+        menuModal.style.display = 'none';
+        initWorld();
+        showNotification('New game started!');
+      });
+      
+      // Close buttons for modals
+      const closeButtons = document.querySelectorAll('.close-btn');
+      closeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('.modal').forEach(modal => {
+            modal.style.display = 'none';
+          });
+        });
+      });
+      
+      // Resource generation over time
+      setInterval(() => {
+        let treeCount = 0;
+        let waterCount = 0;
+        let animalCount = 0;
+        
+        // Count entities
+        for (let y = 0; y < gameState.worldSize.height; y++) {
+          for (let x = 0; x < gameState.worldSize.width; x++) {
+            const tile = gameState.world[y][x];
+            if (tile.type === 'tree') treeCount++;
+            if (tile.type === 'water') waterCount++;
+            if (tile.type === 'animal') animalCount++;
+          }
+        }
+        
+        // Resource generation
+        if (treeCount > 0) {
+          gameState.resources.seeds += Math.floor(treeCount / 3);
+          gameState.resources.wood += Math.floor(treeCount / 5);
+        }
+        
+        if (waterCount > 0) {
+          gameState.resources.water += Math.floor(waterCount / 2);
+        }
+        
+        // Environmental effects
+        if (animalCount > 0 && treeCount > 0) {
+          gameState.ecosystem.biodiversity += 1;
+        }
+        
+        if (waterCount > 0) {
+          gameState.ecosystem.waterQuality = Math.min(100, gameState.ecosystem.waterQuality + 1);
+        }
+        
+        if (treeCount > 0) {
+          gameState.ecosystem.airQuality = Math.min(100, gameState.ecosystem.airQuality + 1);
+        }
+        
+        updateResourceDisplay();
+        updateEcosystemMetrics();
+      }, 10000); // Every 10 seconds
+      
+      // Initialize the game
+      initWorld();
+    });
+  </script>
+</body>
+</html>
