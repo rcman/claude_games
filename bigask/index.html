@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+        }
+        #progressBar {
+            width: 50%;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        #progressFill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        #inventory, #craftingMenu, #buildingMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+            z-index: 100;
+            width: 70%;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+        .inventory-grid, .crafting-grid, .building-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .inventory-slot, .crafting-item, .building-item {
+            width: 60px;
+            height: 60px;
+            background-color: #333;
+            border: 1px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+        }
+        .inventory-slot img, .crafting-item img, .building-item img {
+            max-width: 50px;
+            max-height: 50px;
+        }
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            font-size: 10px;
+            border-radius: 3px;
+        }
+        #quickBar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            z-index: 10;
+        }
+        .quick-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border: 1px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .quick-slot img {
+            max-width: 50px;
+            max-height: 50px;
+        }
+        .selected {
+            border: 2px solid #4CAF50;
+        }
+        #interactionPrompt {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            z-index: 10;
+        }
+        #playerStats {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        .stat-bar {
+            width: 150px;
+            height: 15px;
+            background-color: #333;
+            border-radius: 7px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        .stat-fill {
+            height: 100%;
+            border-radius: 7px;
+        }
+        #health-fill {
+            background-color: #e74c3c;
+        }
+        #hunger-fill {
+            background-color: #f39c12;
+        }
+        #thirst-fill {
+            background-color: #3498db;
+        }
+        #campfireMenu, #craftingTableMenu, #forgeMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+            z-index: 100;
+        }
+        .structure-slots {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .progress-circle {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            transform: rotate(-90deg);
+        }
+        .progress-circle circle {
+            fill: none;
+            stroke-width: 5;
+        }
+        .progress-bg {
+            stroke: #333;
+        }
+        .progress-fill {
+            stroke: #4CAF50;
+            stroke-dasharray: 157; /* 2π × 25 (radius) */
+            stroke-dashoffset: 157; /* Start at full offset (empty) */
+            transition: stroke-dashoffset 0.1s linear;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>Loading Survival Game</h1>
+        <div id="progressBar">
+            <div id="progressFill"></div>
+        </div>
+        <p id="loadingText">Preparing world...</p>
+    </div>
+
+    <div id="playerStats">
+        <div>Health</div>
+        <div class="stat-bar">
+            <div id="health-fill" class="stat-fill" style="width: 100%"></div>
+        </div>
+        <div>Hunger</div>
+        <div class="stat-bar">
+            <div id="hunger-fill" class="stat-fill" style="width: 100%"></div>
+        </div>
+        <div>Thirst</div>
+        <div class="stat-bar">
+            <div id="thirst-fill" class="stat-fill" style="width: 100%"></div>
+        </div>
+    </div>
+
+    <div id="quickBar"></div>
+    <div id="interactionPrompt"></div>
+
+    <div id="inventory">
+        <h2>Inventory</h2>
+        <div class="inventory-grid" id="inventoryGrid"></div>
+    </div>
+
+    <div id="craftingMenu">
+        <h2>Crafting</h2>
+        <div class="crafting-grid" id="craftingGrid"></div>
+    </div>
+
+    <div id="buildingMenu">
+        <h2>Building</h2>
+        <div class="building-grid" id="buildingGrid"></div>
+    </div>
+
+    <div id="campfireMenu">
+        <h2>Campfire</h2>
+        <div class="structure-slots" id="campfireSlots"></div>
+    </div>
+
+    <div id="craftingTableMenu">
+        <h2>Crafting Table</h2>
+        <div class="structure-slots" id="craftingTableSlots"></div>
+    </div>
+
+    <div id="forgeMenu">
+        <h2>Forge</h2>
+        <div class="structure-slots" id="forgeSlots"></div>
+    </div>
+
+    <!-- Load libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"></script>
+
+    <!-- Load game modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/water.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/building.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/structures.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

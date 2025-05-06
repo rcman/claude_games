@@ -1,0 +1,436 @@
+// js/player.js
+import { PointerLockControls } from 'https://threejs.org/examples/jsm/controls/PointerLockControls.js';
+
+class Player {
+    constructor(game) {
+        this.game = game;
+        
+        this.health = 100;
+        this.maxHealth = 100;
+        this.hunger = 100;
+        this.maxHunger = 100;
+        this.thirst = 100;
+        this.maxThirst = 100;
+        
+        this.moveSpeed = 4;
+        this.runSpeed = 7;
+        this.jumpHeight = 1.2; // Realistic jump height
+        this.gravity = -30; // Negative for downward force
+        
+        this.velocity = new THREE.Vector3();
+        this.direction = new THREE.Vector3();
+        this.isOnGround = false;
+        this.isRunning = false;
+        
+        this.moveForward = false;
+        this.moveBackward = false;
+        this.moveLeft = false;
+        this.moveRight = false;
+        this.wantsToJump = false;
+        
+        this.height = 1.8;
+        this.radius = 0.4; // For collision capsule
+        
+        // Player object (contains camera)
+        this.playerObject = new THREE.Object3D();
+        this.playerObject.position.set(0, this.height, 0); // Start at player height
+        this.game.scene.add(this.playerObject);
+        this.game.camera.position.set(0,0,0); // Camera is at the origin of playerObject
+        this.playerObject.add(this.game.camera);
+
+        this.controls = new PointerLockControls(this.game.camera, this.game.renderer.domElement);
+        // Need to add playerObject to scene BEFORE adding camera to it for controls to work relative to world
+        // this.game.scene.add(this.controls.getObject()); // This is playerObject
+        
+        this.position = this.playerObject.position; // Player's base position
+        
+        this.hungerDecreaseRate = 0.2; // Per second
+        this.thirstDecreaseRate = 0.3; // Per second
+        
+        this.isAttacking = false;
+        this.attackCooldown = 0;
+        this.attackCooldownTime = 0.5;
+        
+        this.equippedItem = null; // Will be an object from ItemData
+        this.toolMesh = null; // Visual representation of the tool
+        this.createToolModel();
+
+        this.raycaster = new THREE.Raycaster();
+        this.interactionDistance = 3; // Max distance for interacting/harvesting
+        this.attackDistance = 2.5; // Max distance for melee attacking
+    }
+
+    createToolModel() {
+        // Placeholder, will be updated by equipItem
+        const toolGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.5);
+        const toolMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8, metalness: 0.2 });
+        this.toolMesh = new THREE.Mesh(toolGeometry, toolMaterial);
+        this.toolMesh.position.set(0.3, -0.25, -0.4); // Relative to camera
+        this.toolMesh.visible = false;
+        this.game.camera.add(this.toolMesh); // Attach to camera
+    }
+
+    spawn() {
+        const spawnPos = this.findSpawnPosition();
+        this.playerObject.position.copy(spawnPos);
+        this.playerObject.position.y += this.height; // Ensure feet are on ground
+        
+        this.health = this.maxHealth;
+        this.hunger = this.maxHunger;
+        this.thirst = this.maxThirst;
+        this.velocity.set(0,0,0);
+        
+        this.updateStatsUI();
+        if (!this.controls.isLocked) {
+            this.controls.lock();
+        }
+    }
+
+    findSpawnPosition() {
+        const worldSize = this.game.world.size;
+        for (let i = 0; i < 20; i++) { // Try a few times
+            const x = Math.random() * worldSize / 2 - worldSize / 4;
+            const z = Math.random() * worldSize / 2 - worldSize / 4;
+            const y = this.game.world.getHeightAt(x, z);
+            if (y > this.game.world.waterLevel + 0.5) { // Spawn on land
+                return new THREE.Vector3(x, y, z);
+            }
+        }
+        return new THREE.Vector3(0, this.game.world.getHeightAt(0,0) + this.height, 0); // Fallback
+    }
+
+    onKeyDown(event) {
+        if (!this.controls.isLocked && event.key !== 'Escape' && event.key.toLowerCase() !== 'e' && event.key.toLowerCase() !== 'c' && event.key.toLowerCase() !== 'b') return;
+
+        switch (event.code) {
+            case 'KeyW': this.moveForward = true; break;
+            case 'KeyS': this.moveBackward = true; break;
+            case 'KeyA': this.moveLeft = true; break;
+            case 'KeyD': this.moveRight = true; break;
+            case 'Space': if (this.isOnGround) this.wantsToJump = true; break;
+            case 'ShiftLeft': this.isRunning = true; break;
+            case 'KeyR': // Rotate building ghost
+                if (this.game.building.ghostObject) {
+                    this.game.building.rotateGhost();
+                }
+                break;
+            case 'KeyF': // General interaction or use equipped item action
+                 this.performPrimaryAction();
+                 break;
+
+        }
+    }
+
+    onKeyUp(event) {
+        switch (event.code) {
+            case 'KeyW': this.moveForward = false; break;
+            case 'KeyS': this.moveBackward = false; break;
+            case 'KeyA': this.moveLeft = false; break;
+            case 'KeyD': this.moveRight = false; break;
+            case 'ShiftLeft': this.isRunning = false; break;
+        }
+    }
+    
+    performPrimaryAction() { // Corresponds to left mouse click or F key
+        if (this.game.building.ghostObject && this.game.building.selectedBuildable) {
+            if (this.game.building.placeBuildable()) {
+                this.game.ui.showNotification("Placed " + this.game.building.selectedBuildable.name);
+                // Keep selected buildable if player has more, otherwise cancel.
+                if (!this.game.inventory.hasItem(this.game.building.selectedBuildable.id, 1)) {
+                     this.game.building.cancelPlacement();
+                }
+            } else {
+                this.game.ui.showNotification("Cannot place here.");
+            }
+            return;
+        }
+        
+        // If not building, perform attack/harvest
+        if (this.attackCooldown > 0) return;
+        this.isAttacking = true;
+        this.attackCooldown = this.attackCooldownTime;
+        this.animateToolSwing();
+
+        // Raycast for interaction
+        this.raycaster.setFromCamera({ x: 0, y: 0 }, this.game.camera); // Center of screen
+        const intersects = this.raycaster.intersectObjects(this.game.scene.children, true);
+
+        let targetHit = false;
+        if (intersects.length > 0) {
+            for (const hit of intersects) {
+                if (hit.object === this.playerObject || (this.toolMesh && hit.object === this.toolMesh)) continue; // Ignore self/tool
+                if (hit.object.userData.isWater) continue;
+
+
+                const distance = hit.distance;
+                const object = hit.object.parent && hit.object.parent.userData.type ? hit.object.parent : hit.object; // Handle GLTF children
+
+                if (object.userData.type === 'resource' && distance <= this.interactionDistance) {
+                    this.game.resources.harvestResource(object, hit.point, this.equippedItem);
+                    targetHit = true;
+                    break;
+                } else if (object.userData.type === 'animal' && distance <= this.attackDistance) {
+                    this.game.animals.attackAnimal(object, this.equippedItem ? (getItemData(this.equippedItem.id).damage || 1) : 1);
+                    targetHit = true;
+                    break;
+                }
+                 // Prevent interacting through walls / very close objects by checking the first non-player hit
+                if (object !== this.playerObject && (!this.toolMesh || object !== this.toolMesh)) break;
+
+            }
+        }
+         if (!targetHit && this.equippedItem && getItemData(this.equippedItem.id).type === 'tool') {
+             // Air swing sound or something
+         }
+    }
+    
+    performAction(itemData) { // Called by inventory.useEquippedItem for tools/weapons
+        // This is now mostly handled by performPrimaryAction.
+        // Could be used for special tool actions in the future.
+        console.log("Player performing action with:", itemData ? itemData.name : "Bare hands");
+    }
+
+
+    animateToolSwing() {
+        if (!this.toolMesh || !this.toolMesh.visible) return;
+
+        const startRotation = this.toolMesh.rotation.clone();
+        const swingAngle = -Math.PI / 2; // Swing down
+
+        // Quick swing animation using GSAP or a simple tween
+        let progress = 0;
+        const duration = this.attackCooldownTime * 0.6; // Swing part of the cooldown
+        const animate = () => {
+            progress += this.game.clock.getDelta() / duration;
+            if (progress >= 1) {
+                this.toolMesh.rotation.copy(startRotation);
+                this.isAttacking = false;
+                return;
+            }
+            // Parabolic swing: out and back
+            const currentAngle = Math.sin(progress * Math.PI) * swingAngle;
+            this.toolMesh.rotation.x = startRotation.x + currentAngle;
+            requestAnimationFrame(animate);
+        };
+        animate();
+    }
+
+    updateMovement(deltaTime) {
+        const speed = (this.isRunning ? this.runSpeed : this.moveSpeed) * deltaTime;
+        const previousY = this.playerObject.position.y;
+
+        // Apply gravity
+        if (!this.isOnGround) {
+            this.velocity.y += this.gravity * deltaTime;
+        }
+
+        // Movement
+        this.direction.set(0, 0, 0);
+        if (this.moveForward) this.direction.z = -1;
+        if (this.moveBackward) this.direction.z = 1;
+        if (this.moveLeft) this.direction.x = -1;
+        if (this.moveRight) this.direction.x = 1;
+
+        if (this.direction.lengthSq() > 0) {
+            this.direction.normalize();
+            // Move relative to camera look direction
+            this.playerObject.translateX(this.direction.x * speed);
+            this.playerObject.translateZ(this.direction.z * speed);
+        }
+        
+        // Jumping
+        if (this.wantsToJump && this.isOnGround) {
+            this.velocity.y = Math.sqrt(2 * this.jumpHeight * Math.abs(this.gravity)); // Kinematic equation: v^2 = u^2 + 2as => v = sqrt(2as)
+            this.isOnGround = false;
+            this.wantsToJump = false;
+        }
+        
+        this.playerObject.position.y += this.velocity.y * deltaTime;
+
+        // Ground collision
+        const groundHeight = this.game.world.getHeightAt(this.playerObject.position.x, this.playerObject.position.z);
+        const playerFeetY = this.playerObject.position.y - this.height / 2;
+
+        if (playerFeetY <= groundHeight) {
+            this.playerObject.position.y = groundHeight + this.height / 2;
+            this.velocity.y = 0;
+            this.isOnGround = true;
+        } else {
+            this.isOnGround = false;
+        }
+
+        // Simple world bounds collision
+        const worldBoundary = this.game.world.size / 2 - 1;
+        this.playerObject.position.x = Math.max(-worldBoundary, Math.min(worldBoundary, this.playerObject.position.x));
+        this.playerObject.position.z = Math.max(-worldBoundary, Math.min(worldBoundary, this.playerObject.position.z));
+
+        // Update camera to follow player object's y if not using PointerLockControls for Y.
+        // this.game.camera.position.y = this.playerObject.position.y; // This might not be needed if camera is child
+
+        if (this.isRunning && this.direction.lengthSq() > 0) {
+            this.hunger -= this.hungerDecreaseRate * 1.5 * deltaTime; // Faster when running
+            this.thirst -= this.thirstDecreaseRate * 1.5 * deltaTime;
+        }
+    }
+
+
+    updateStats(deltaTime) {
+        this.hunger = Math.max(0, this.hunger - this.hungerDecreaseRate * deltaTime);
+        this.thirst = Math.max(0, this.thirst - this.thirstDecreaseRate * deltaTime);
+        
+        if (this.hunger <= 0) {
+            this.takeDamage(0.5 * deltaTime, "starvation"); // Damage per second
+        }
+        if (this.thirst <= 0) {
+            this.takeDamage(0.75 * deltaTime, "dehydration"); // Damage per second
+        }
+        
+        if (this.health <= 0 && !this.game.paused) { // Ensure die is called once
+            this.die();
+        }
+        this.updateStatsUI();
+    }
+
+    updateStatsUI() {
+        document.getElementById('health-fill').style.width = `${(this.health / this.maxHealth) * 100}%`;
+        document.getElementById('hunger-fill').style.width = `${(this.hunger / this.maxHunger) * 100}%`;
+        document.getElementById('thirst-fill').style.width = `${(this.thirst / this.maxThirst) * 100}%`;
+    }
+    
+    updateEquippedItem() {
+        const inventoryItem = this.game.inventory.getSelectedItem();
+        if (inventoryItem) {
+            this.equippedItem = getItemData(inventoryItem.id);
+            this.toolMesh.visible = true;
+            // TODO: Change toolMesh geometry/material based on equippedItem.type or specific ID
+            // For now, just change color slightly
+            if (this.equippedItem.type === 'tool') this.toolMesh.material.color.setHex(0xCD853F); // Peru
+            else if (this.equippedItem.type === 'weapon') this.toolMesh.material.color.setHex(0x708090); // SlateGray
+            else if (this.equippedItem.type === 'placeable') this.toolMesh.material.color.setHex(0x8FBC8F); // DarkSeaGreen
+            else this.toolMesh.material.color.setHex(0xD2B48C); // Tan
+
+            if (this.equippedItem.lightSource) {
+                if (!this.toolMesh.userData.light) {
+                    const light = new THREE.PointLight(
+                        this.equippedItem.lightSource.color,
+                        this.equippedItem.lightSource.intensity,
+                        this.equippedItem.lightSource.distance
+                    );
+                    this.toolMesh.add(light); // Add to toolmesh so it moves with it
+                    this.toolMesh.userData.light = light;
+                }
+                this.toolMesh.userData.light.visible = true;
+            } else if (this.toolMesh.userData.light) {
+                this.toolMesh.userData.light.visible = false;
+            }
+
+        } else {
+            this.equippedItem = null;
+            this.toolMesh.visible = false;
+            if (this.toolMesh.userData.light) {
+                this.toolMesh.userData.light.visible = false;
+            }
+        }
+    }
+
+
+    eat(foodData) { // foodData is from ItemData
+        this.hunger = Math.min(this.maxHunger, this.hunger + (foodData.hungerValue || 0));
+        this.thirst = Math.min(this.maxThirst, this.thirst + (foodData.thirstValue || 0));
+        this.health = Math.min(this.maxHealth, this.health + (foodData.healthValue || 0));
+        this.updateStatsUI();
+    }
+
+    drink(beverageData) {
+        this.thirst = Math.min(this.maxThirst, this.thirst + (beverageData.thirstValue || 0));
+        this.hunger = Math.min(this.maxHunger, this.hunger + (beverageData.hungerValue || 0));
+        this.health = Math.min(this.maxHealth, this.health + (beverageData.healthValue || 0));
+        this.updateStatsUI();
+    }
+
+    takeDamage(amount, source = "unknown") {
+        this.health = Math.max(0, this.health - amount);
+        this.flashDamage();
+        this.updateStatsUI();
+        console.log(`Player took ${amount} damage from ${source}. Health: ${this.health}`);
+        // if (this.health <= 0) this.die(); // Checked in updateStats to avoid multiple calls
+    }
+
+    flashDamage() {
+        const overlay = document.createElement('div');
+        // ... (keep existing flashDamage logic)
+        overlay.style.position = 'fixed'; // Use fixed for full screen overlay
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = '9999'; // Very high z-index
+        overlay.style.opacity = '1';
+        document.body.appendChild(overlay);
+        
+        setTimeout(() => {
+            overlay.style.transition = 'opacity 0.5s ease-out';
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                if (overlay.parentNode) {
+                     overlay.parentNode.removeChild(overlay);
+                }
+            }, 500);
+        }, 50); // Start fading out quickly
+    }
+
+    die() {
+        console.log("Player died.");
+        this.game.paused = true;
+        this.controls.unlock();
+        
+        const gameOverDiv = document.createElement('div');
+        // ... (keep existing die logic)
+        gameOverDiv.id = "gameOverScreen";
+        gameOverDiv.style.position = 'fixed';
+        gameOverDiv.style.top = '50%';
+        gameOverDiv.style.left = '50%';
+        gameOverDiv.style.transform = 'translate(-50%, -50%)';
+        gameOverDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+        gameOverDiv.style.color = 'white';
+        gameOverDiv.style.padding = '30px';
+        gameOverDiv.style.border = '2px solid #555';
+        gameOverDiv.style.borderRadius = '10px';
+        gameOverDiv.style.textAlign = 'center';
+        gameOverDiv.style.zIndex = '10000';
+        gameOverDiv.innerHTML = `
+            <h2 style="color: #e74c3c; font-size: 2em;">You Died</h2>
+            <p>You survived for ${Math.floor(this.game.gameTime)} seconds.</p>
+            <button id="respawnButton" style="padding: 12px 25px; margin-top: 25px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 1em;">Respawn</button>
+        `;
+        document.body.appendChild(gameOverDiv);
+        
+        document.getElementById('respawnButton').addEventListener('click', () => {
+            document.body.removeChild(gameOverDiv);
+            this.respawn(); // This will re-lock controls
+        }, { once: true }); // Ensure event listener is removed
+    }
+
+    respawn() {
+        this.spawn(); // Resets stats and position
+        this.game.paused = false;
+        // Controls are locked in spawn() if not already
+    }
+
+    update(deltaTime) {
+        if (this.game.paused) return;
+
+        if (this.attackCooldown > 0) {
+            this.attackCooldown -= deltaTime;
+        } else {
+            this.isAttacking = false;
+        }
+        
+        if (this.controls.isLocked) {
+            this.updateMovement(deltaTime);
+        }
+        this.updateStats(deltaTime);
+    }
+}
