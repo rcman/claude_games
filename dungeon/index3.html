@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>BabylonJS Dungeon Crawler</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #uiOverlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #healthBar {
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            margin-top: 5px;
+        }
+        #healthFill {
+            height: 100%;
+            background-color: #e74c3c;
+            border-radius: 10px;
+            width: 100%;
+        }
+        #minimap {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 150px; /* Corresponds to minimapScale * 10 if scale is 15 */
+            height: 150px;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 5px;
+        }
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: block;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="uiOverlay">
+        <div>Level: <span id="levelDisplay">1</span></div>
+        <div>Health:</div>
+        <div id="healthBar"><div id="healthFill"></div></div>
+    </div>
+    <div id="minimap"></div>
+    <div id="instructions">
+        <h2>Dungeon Crawler</h2>
+        <p>Navigate through the dungeon, find the exit to proceed to the next level.</p>
+        <p>WASD or Arrow keys to move</p>
+        <p>Mouse to look around</p>
+        <p>Click to interact</p>
+        <button id="startButton">Start Game</button>
+    </div>
+
+    <!-- Import BabylonJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.16.0/babylon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.16.0/babylon.gui.min.js"></script>
+    <script>
+        // Game configuration
+        const config = {
+            dungeonSize: 25, // Increased to better see chunking effect
+            cellSize: 4,
+            wallHeight: 4,
+            playerHeight: 1.8,
+            playerSpeed: 1.5,
+            playerHealth: 100,
+            minimapScale: 15, // Shows a 15x15 grid on minimap
+            levels: 3,
+            chunkLoadRadius: 7, // Load 7 cells in each direction (15x15 total active cells)
+            torchLight: {
+                intensity: 2.0,
+                range: 16,
+                diffuse: new BABYLON.Color3(1.0, 0.7, 0.3),
+                specular: new BABYLON.Color3(1.0, 0.7, 0.3),
+                flickerSpeed: 0.05,
+                flickerRange: 0.2
+            }
+        };
+
+        // Game state
+        const gameState = {
+            level: 1,
+            health: config.playerHealth,
+            dungeon: null,
+            playerPosition: { x: 0, z: 0 }, // Player's current grid cell
+            isGameStarted: false,
+            torchLight: null,
+            torchFlame: null,
+            torchTime: 0,
+            loadedCells: new Set(), // Stores "x,z" strings of loaded cells
+            materials: {} // Cache for shared materials
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('startButton').addEventListener('click', startGame);
+        });
+
+        function startGame() {
+            document.getElementById('instructions').classList.add('hidden');
+            gameState.isGameStarted = true;
+            initGame();
+        }
+
+        function initGame() {
+            const canvas = document.getElementById("renderCanvas");
+            const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+            const scene = createScene(engine, canvas);
+            engine.runRenderLoop(() => scene.render());
+            window.addEventListener("resize", () => engine.resize());
+        }
+
+        function createScene(engine, canvas) {
+            const scene = new BABYLON.Scene(engine);
+            scene.ambientColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+            
+            const hemisphericLight = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            hemisphericLight.intensity = 0.2;
+            
+            const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, config.playerHeight, 0), scene);
+            camera.attachControl(canvas, true);
+            camera.speed = config.playerSpeed;
+            camera.inertia = 0.3;
+            camera.angularSensibility = 1000;
+            camera.applyGravity = true;
+            camera.checkCollisions = true;
+            camera.ellipsoid = new BABYLON.Vector3(0.5, 1, 0.5);
+            camera.keysUp.push(87); camera.keysDown.push(83);
+            camera.keysLeft.push(65); camera.keysRight.push(68);
+            
+            scene.gravity = new BABYLON.Vector3(0, -9.81, 0);
+            scene.collisionsEnabled = true;
+            
+            // Pre-create shared materials
+            gameState.materials.floor = createProceduralMaterial("floorMat", scene, {
+                baseColor: new BABYLON.Color3(0.3, 0.3, 0.35), pattern: "stone", roughness: 0.8
+            });
+            gameState.materials.wall = createProceduralMaterial("wallMat", scene, {
+                baseColor: new BABYLON.Color3(0.5, 0.45, 0.4), pattern: "brick", roughness: 0.9
+            });
+            gameState.materials.ceiling = createProceduralMaterial("ceilingMat", scene, {
+                baseColor: new BABYLON.Color3(0.2, 0.2, 0.25), pattern: "noise", roughness: 0.7
+            });
+            gameState.materials.exit = new BABYLON.StandardMaterial("exitMat", scene);
+            gameState.materials.exit.diffuseColor = new BABYLON.Color3(0.1, 0.5, 0.1);
+            gameState.materials.exit.emissiveColor = new BABYLON.Color3(0, 0.5, 0);
+            
+            gameState.dungeon = generateDungeon(config.dungeonSize);
+            
+            const startPos = findStartPosition(gameState.dungeon);
+            camera.position.x = startPos.x * config.cellSize + config.cellSize / 2;
+            camera.position.z = startPos.z * config.cellSize + config.cellSize / 2;
+            gameState.playerPosition = { x: startPos.x, z: startPos.z }; // Store initial grid position
+            
+            createTorchLight(scene, camera);
+            
+            updateActiveChunks(scene, gameState.playerPosition); // Initial chunk load
+            updateMinimap(gameState.dungeon, gameState.playerPosition);
+            
+            scene.registerBeforeRender(function() {
+                const currentGridX = Math.floor(camera.position.x / config.cellSize);
+                const currentGridZ = Math.floor(camera.position.z / config.cellSize);
+                
+                if (currentGridX !== gameState.playerPosition.x || currentGridZ !== gameState.playerPosition.z) {
+                    gameState.playerPosition = { x: currentGridX, z: currentGridZ };
+                    updateMinimap(gameState.dungeon, gameState.playerPosition);
+                    updateActiveChunks(scene, gameState.playerPosition); // Update chunks on move
+                    
+                    if (gameState.dungeon[currentGridZ] && gameState.dungeon[currentGridZ][currentGridX] === 2) {
+                        nextLevel(scene, camera);
+                    }
+                }
+                updateTorchEffect(scene);
+            });
+            return scene;
+        }
+
+        function updateActiveChunks(scene, playerGridPos) {
+            const newLoadedCellsKeySet = new Set();
+            const cellsToLoad = [];
+            const radius = config.chunkLoadRadius;
+
+            // Determine cells that should be loaded
+            for (let dz = -radius; dz <= radius; dz++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const cellX = playerGridPos.x + dx;
+                    const cellZ = playerGridPos.z + dz;
+
+                    if (cellX >= 0 && cellX < config.dungeonSize && cellZ >= 0 && cellZ < config.dungeonSize) {
+                        const cellKey = `${cellX},${cellZ}`;
+                        newLoadedCellsKeySet.add(cellKey);
+                        if (!gameState.loadedCells.has(cellKey)) {
+                            cellsToLoad.push({ x: cellX, z: cellZ });
+                        }
+                    }
+                }
+            }
+
+            // Unload cells that are no longer in range
+            gameState.loadedCells.forEach(loadedCellKey => {
+                if (!newLoadedCellsKeySet.has(loadedCellKey)) {
+                    const [x, z] = loadedCellKey.split(',').map(Number);
+                    disposeCellMeshes(scene, x, z);
+                }
+            });
+
+            // Load new cells
+            cellsToLoad.forEach(cellPos => {
+                // Only create meshes for floor or exit cells
+                if (gameState.dungeon[cellPos.z] && (gameState.dungeon[cellPos.z][cellPos.x] === 0 || gameState.dungeon[cellPos.z][cellPos.x] === 2)) {
+                    createCellMeshes(scene, cellPos.x, cellPos.z, gameState.dungeon, gameState.materials);
+                }
+            });
+
+            gameState.loadedCells = newLoadedCellsKeySet;
+        }
+
+        function getCellMeshBaseName(cellX, cellZ) {
+            return `cell_${cellX}_${cellZ}`;
+        }
+
+        function createCellMeshes(scene, cellX, cellZ, dungeon, materials) {
+            const cellType = dungeon[cellZ][cellX];
+            const posX = cellX * config.cellSize; // Top-left X of the cell
+            const posZ = cellZ * config.cellSize; // Top-left Z of the cell
+            const baseName = getCellMeshBaseName(cellX, cellZ);
+
+            // Create floor
+            const floor = BABYLON.MeshBuilder.CreateBox(`${baseName}_floor`, {
+                width: config.cellSize, height: 0.1, depth: config.cellSize
+            }, scene);
+            floor.position = new BABYLON.Vector3(posX + config.cellSize / 2, 0, posZ + config.cellSize / 2);
+            floor.material = materials.floor;
+            floor.checkCollisions = true;
+
+            // Create ceiling
+            const ceiling = BABYLON.MeshBuilder.CreateBox(`${baseName}_ceiling`, {
+                width: config.cellSize, height: 0.1, depth: config.cellSize
+            }, scene);
+            ceiling.position = new BABYLON.Vector3(posX + config.cellSize / 2, config.wallHeight, posZ + config.cellSize / 2);
+            ceiling.material = materials.ceiling;
+            ceiling.checkCollisions = true;
+
+            if (cellType === 2) { // Exit cell
+                const exitMarker = BABYLON.MeshBuilder.CreateCylinder(`${baseName}_exitmarker`, {
+                    height: 0.1, diameter: config.cellSize * 0.6
+                }, scene);
+                exitMarker.position = new BABYLON.Vector3(posX + config.cellSize / 2, 0.05, posZ + config.cellSize / 2);
+                exitMarker.material = materials.exit;
+                
+                const exitLight = new BABYLON.PointLight(`${baseName}_exitlight`, new BABYLON.Vector3(
+                    posX + config.cellSize / 2, config.wallHeight / 2, posZ + config.cellSize / 2
+                ), scene);
+                exitLight.diffuse = new BABYLON.Color3(0, 1, 0);
+                exitLight.intensity = 0.7;
+                exitLight.range = config.cellSize * 2;
+            }
+
+            // Add walls by checking neighbors in the `dungeon` data
+            // North wall (at Z = posZ)
+            if (cellZ === 0 || dungeon[cellZ - 1][cellX] === 1) {
+                createWallSegment(scene, posX, posZ, "north", materials.wall, baseName);
+            }
+            // East wall (at X = posX + cellSize)
+            if (cellX === dungeon[cellZ].length - 1 || dungeon[cellZ][cellX + 1] === 1) {
+                createWallSegment(scene, posX + config.cellSize, posZ, "east", materials.wall, baseName);
+            }
+            // South wall (at Z = posZ + cellSize)
+            if (cellZ === dungeon.length - 1 || dungeon[cellZ + 1][cellX] === 1) {
+                createWallSegment(scene, posX, posZ + config.cellSize, "south", materials.wall, baseName);
+            }
+            // West wall (at X = posX)
+            if (cellX === 0 || dungeon[cellZ][cellX - 1] === 1) {
+                createWallSegment(scene, posX, posZ, "west", materials.wall, baseName);
+            }
+        }
+        
+        function createWallSegment(scene, startX, startZ, direction, material, baseNamePrefix) {
+            let wall;
+            const wallName = `${baseNamePrefix}_wall_${direction}`;
+            const wallThickness = 0.1;
+
+            if (direction === "north") { // Wall along Z=startZ, from X=startX to X=startX+cellSize
+                wall = BABYLON.MeshBuilder.CreateBox(wallName, {
+                    width: config.cellSize, height: config.wallHeight, depth: wallThickness
+                }, scene);
+                wall.position = new BABYLON.Vector3(
+                    startX + config.cellSize / 2,
+                    config.wallHeight / 2,
+                    startZ + wallThickness / 2 
+                );
+            } else if (direction === "south") { // Wall along Z=startZ, from X=startX to X=startX+cellSize
+                wall = BABYLON.MeshBuilder.CreateBox(wallName, {
+                    width: config.cellSize, height: config.wallHeight, depth: wallThickness
+                }, scene);
+                wall.position = new BABYLON.Vector3(
+                    startX + config.cellSize / 2,
+                    config.wallHeight / 2,
+                    startZ - wallThickness / 2 
+                );
+            } else if (direction === "east") { // Wall along X=startX, from Z=startZ to Z=startZ+cellSize
+                wall = BABYLON.MeshBuilder.CreateBox(wallName, {
+                    width: wallThickness, height: config.wallHeight, depth: config.cellSize
+                }, scene);
+                wall.position = new BABYLON.Vector3(
+                    startX - wallThickness / 2, 
+                    config.wallHeight / 2,
+                    startZ + config.cellSize / 2
+                );
+            } else { // west: Wall along X=startX, from Z=startZ to Z=startZ+cellSize
+                wall = BABYLON.MeshBuilder.CreateBox(wallName, {
+                    width: wallThickness, height: config.wallHeight, depth: config.cellSize
+                }, scene);
+                wall.position = new BABYLON.Vector3(
+                    startX + wallThickness / 2, 
+                    config.wallHeight / 2,
+                    startZ + config.cellSize / 2
+                );
+            }
+            
+            wall.material = material;
+            wall.checkCollisions = true;
+            return wall;
+        }
+
+        function disposeCellMeshes(scene, cellX, cellZ) {
+            const baseName = getCellMeshBaseName(cellX, cellZ);
+            const meshNamesToDispose = [
+                `${baseName}_floor`,
+                `${baseName}_ceiling`,
+                `${baseName}_exitmarker`,
+                `${baseName}_wall_north`,
+                `${baseName}_wall_east`,
+                `${baseName}_wall_south`,
+                `${baseName}_wall_west`,
+            ];
+            const lightNameToDispose = `${baseName}_exitlight`;
+
+            meshNamesToDispose.forEach(name => {
+                const mesh = scene.getMeshByName(name);
+                if (mesh) mesh.dispose();
+            });
+
+            const light = scene.getLightByName(lightNameToDispose);
+            if (light) light.dispose();
+        }
+
+        function createTorchLight(scene, camera) {
+            const torchLight = new BABYLON.PointLight("torchLight", 
+                new BABYLON.Vector3(camera.position.x, camera.position.y - 0.5, camera.position.z), scene);
+            torchLight.diffuse = config.torchLight.diffuse;
+            torchLight.specular = config.torchLight.specular;
+            torchLight.intensity = config.torchLight.intensity;
+            torchLight.range = config.torchLight.range;
+            torchLight.parent = camera;
+            torchLight.position = new BABYLON.Vector3(0.3, -0.5, 0.5);
+            
+            const torchFlame = BABYLON.MeshBuilder.CreateSphere("torchFlame", { diameter: 0.2 }, scene);
+            const flameMaterial = new BABYLON.StandardMaterial("flameMaterial", scene);
+            flameMaterial.diffuseColor = new BABYLON.Color3(1, 0.6, 0);
+            flameMaterial.emissiveColor = new BABYLON.Color3(1, 0.4, 0);
+            flameMaterial.specularColor = new BABYLON.Color3(1, 0.4, 0);
+            torchFlame.material = flameMaterial;
+            torchFlame.parent = camera;
+            torchFlame.position = new BABYLON.Vector3(0.3, -0.5, 0.5);
+            
+            gameState.torchLight = torchLight;
+            gameState.torchFlame = torchFlame;
+        }
+
+        function updateTorchEffect(scene) {
+            gameState.torchTime += scene.getEngine().getDeltaTime() / 1000;
+            if (gameState.torchLight) {
+                const flicker = 
+                    Math.sin(gameState.torchTime * 10 * config.torchLight.flickerSpeed) * 0.3 + 
+                    Math.sin(gameState.torchTime * 5.5 * config.torchLight.flickerSpeed) * 0.2 + 
+                    Math.sin(gameState.torchTime * 2.0 * config.torchLight.flickerSpeed) * 0.1;
+                const baseIntensity = config.torchLight.intensity;
+                const flickerAmount = config.torchLight.flickerRange;
+                gameState.torchLight.intensity = baseIntensity * (1 + flicker * flickerAmount);
+                gameState.torchLight.range = config.torchLight.range * (1 + flicker * 0.1);
+                if (gameState.torchFlame) {
+                    gameState.torchFlame.scaling.setAll(1 + flicker * 0.2);
+                }
+            }
+        }
+
+        function generateDungeon(size) {
+            const dungeon = Array(size).fill(null).map(() => Array(size).fill(1));
+            const stack = [];
+            const start = { x: 1, z: 1 };
+            dungeon[start.z][start.x] = 0; // 0 = floor
+            stack.push(start);
+            
+            const directions = [ { x: 0, z: -2 }, { x: 2, z: 0 }, { x: 0, z: 2 }, { x: -2, z: 0 } ];
+            
+            while (stack.length > 0) {
+                const current = stack[stack.length - 1];
+                const validNeighbors = [];
+                for (const dir of directions) {
+                    const nx = current.x + dir.x;
+                    const nz = current.z + dir.z;
+                    if (nx > 0 && nx < size - 1 && nz > 0 && nz < size - 1 && dungeon[nz][nx] === 1) {
+                        validNeighbors.push({ x: nx, z: nz, dx: dir.x / 2, dz: dir.z / 2 });
+                    }
+                }
+                if (validNeighbors.length > 0) {
+                    const next = validNeighbors[Math.floor(Math.random() * validNeighbors.length)];
+                    dungeon[current.z + next.dz][current.x + next.dx] = 0;
+                    dungeon[next.z][next.x] = 0;
+                    stack.push(next);
+                } else {
+                    stack.pop();
+                }
+            }
+            
+            let exitPlaced = false;
+            while (!exitPlaced) {
+                const x = Math.floor(Math.random() * (size - 2)) + 1;
+                const z = Math.floor(Math.random() * (size - 2)) + 1;
+                const distanceFromStart = Math.sqrt(Math.pow(x - start.x, 2) + Math.pow(z - start.z, 2));
+                if (dungeon[z][x] === 0 && distanceFromStart > size / 2) {
+                    dungeon[z][x] = 2; // 2 = exit
+                    exitPlaced = true;
+                }
+            }
+            return dungeon;
+        }
+
+        function createProceduralMaterial(name, scene, options) {
+            const material = new BABYLON.StandardMaterial(name, scene);
+            const textureSize = 512;
+            const texture = new BABYLON.DynamicTexture(name + "_texture", textureSize, scene, true);
+            const ctx = texture.getContext();
+            
+            ctx.fillStyle = options.baseColor.toHexString();
+            ctx.fillRect(0, 0, textureSize, textureSize);
+            
+            if (options.pattern === "brick") {
+                ctx.fillStyle = "rgba(0,0,0,0.1)";
+                const brickWidth = 64, brickHeight = 32;
+                for (let y = 0; y < textureSize; y += brickHeight) {
+                    const offset = (Math.floor(y / brickHeight) % 2) * (brickWidth / 2);
+                    for (let x = 0; x < textureSize; x += brickWidth) {
+                        ctx.strokeRect(x + offset, y, brickWidth, brickHeight); // Use strokeRect for lines
+                    }
+                }
+                addNoiseToTexture(ctx, textureSize, 0.05);
+            } else if (options.pattern === "stone") {
+                ctx.globalAlpha = 0.1;
+                const stoneCount = 20;
+                for (let i = 0; i < stoneCount; i++) {
+                    const x = Math.random() * textureSize, y = Math.random() * textureSize;
+                    const w = 50 + Math.random() * 70, h = 30 + Math.random() * 50;
+                    ctx.fillStyle = "rgba(0,0,0," + (0.05 + Math.random() * 0.1) + ")";
+                    ctx.fillRect(x, y, w, h);
+                }
+                ctx.globalAlpha = 1.0;
+                addNoiseToTexture(ctx, textureSize, 0.1);
+            } else if (options.pattern === "noise") {
+                addNoiseToTexture(ctx, textureSize, 0.2);
+            }
+            
+            texture.update();
+            material.diffuseTexture = texture;
+            material.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+            material.roughness = options.roughness || 0.5;
+            return material;
+        }
+
+        function addNoiseToTexture(ctx, size, intensity) {
+            const imageData = ctx.getImageData(0, 0, size, size);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const noise = (Math.random() - 0.5) * intensity * 255;
+                data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise));
+                data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise));
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function findStartPosition(dungeon) {
+            return { x: 1, z: 1 };
+        }
+
+        function updateMinimap(dungeon, playerPosition) {
+            const minimapDiv = document.getElementById('minimap');
+            let canvas = minimapDiv.querySelector('canvas');
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.width = minimapDiv.clientWidth; // Use div's actual size
+                canvas.height = minimapDiv.clientHeight;
+                minimapDiv.innerHTML = ''; 
+                minimapDiv.appendChild(canvas);
+            }
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const cellSizeOnMap = Math.min(canvas.width, canvas.height) / config.minimapScale;
+            
+            const viewCenterXOnMap = Math.floor(config.minimapScale / 2);
+            const viewCenterZOnMap = Math.floor(config.minimapScale / 2);
+
+            for (let mz = 0; mz < config.minimapScale; mz++) { // minimap z
+                for (let mx = 0; mx < config.minimapScale; mx++) { // minimap x
+                    const worldX = playerPosition.x - viewCenterXOnMap + mx;
+                    const worldZ = playerPosition.z - viewCenterZOnMap + mz;
+                    
+                    if (worldX >= 0 && worldX < dungeon[0].length && worldZ >= 0 && worldZ < dungeon.length) {
+                        const cellType = dungeon[worldZ][worldX];
+                        if (cellType === 0) ctx.fillStyle = '#555'; // Floor
+                        else if (cellType === 1) ctx.fillStyle = '#222'; // Wall
+                        else if (cellType === 2) ctx.fillStyle = '#0f0'; // Exit
+                        ctx.fillRect(mx * cellSizeOnMap, mz * cellSizeOnMap, cellSizeOnMap, cellSizeOnMap);
+                    } else {
+                         ctx.fillStyle = '#111'; // Out of bounds
+                         ctx.fillRect(mx * cellSizeOnMap, mz * cellSizeOnMap, cellSizeOnMap, cellSizeOnMap);
+                    }
+                }
+            }
+            
+            ctx.fillStyle = '#f00'; // Player
+            ctx.beginPath();
+            ctx.arc(viewCenterXOnMap * cellSizeOnMap + cellSizeOnMap / 2, 
+                    viewCenterZOnMap * cellSizeOnMap + cellSizeOnMap / 2, 
+                    cellSizeOnMap / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function nextLevel(scene, camera) {
+            gameState.level++;
+            document.getElementById('levelDisplay').textContent = gameState.level;
+            
+            if (gameState.level > config.levels) {
+                alert("Congratulations! You've completed all " + config.levels + " levels!");
+                gameState.level = 1;
+                document.getElementById('levelDisplay').textContent = gameState.level;
+            }
+            
+            // Dispose all currently loaded cell meshes from the old level
+            gameState.loadedCells.forEach(cellKey => {
+                const [x, z] = cellKey.split(',').map(Number);
+                disposeCellMeshes(scene, x, z);
+            });
+            gameState.loadedCells.clear();
+            
+            gameState.dungeon = generateDungeon(config.dungeonSize);
+            
+            const startPos = findStartPosition(gameState.dungeon);
+            camera.position.x = startPos.x * config.cellSize + config.cellSize / 2;
+            camera.position.z = startPos.z * config.cellSize + config.cellSize / 2;
+            gameState.playerPosition = { x: startPos.x, z: startPos.z };
+            
+            updateActiveChunks(scene, gameState.playerPosition); // Load initial chunks for new level
+            updateMinimap(gameState.dungeon, gameState.playerPosition);
+        }
+    </script>
+</body>
+</html>
