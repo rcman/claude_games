@@ -1,0 +1,58 @@
+Write me an 3d open-world 3rd-person survival game in html5 and the library three.min.js 
+
+The game world includes trees(atleast 1000), rocks(atleast 1000), water, animated animals, scrap metal, nails, and tall grass and fog. The land has some roaming hills but there are many flat areas for building. There are Barrels scattered throughout the map can be searched for additional loot, Located throughout the map are empty buildings with large door openning contain searchable crates containig loot. All tress, stones and buildings are collideable. There is no weather system or day and night cycle. The world starts a 1000x1000 and varries in elevation with lower areas for water. Water should be using Water.js so the water looks the best. The animals on the map are chickens, rabbits, wolves and bears. These animals should look like what they are. If an animal chases you in to water the animal will drown and die.
+
+Resource Gathering & Crafting
+
+The player can gather materials from the environment:
+
+    Trees can be chopped with an axe to collect wood.
+    Rocks can be mined with a pick-axe to gather stones.
+    Fiber can be harvested to craft rope.
+    Scrap metal can be collected and later refined in a forge.
+    Animals provide meat, leather, and fat when hunted.
+
+    The player's crafting menu contains:
+
+    Axe
+    Pick-axe
+    Campfire(can be placed on ground or foundation)
+    Crafting table(this item can be placed on a foundation)
+    Forge (this item can be placed on a foundation)
+    Rope (from havested fiber)
+
+Crafting System:
+
+    When crafting, resources are automatically pulled from both the quick bar and inventory.
+    Crafted items are placed in the first available quick-slot; if no slots are open, they are sent to the player’s inventory.
+    Boil & Water Purification (this takes 15seconds)
+    Placing raw meat on a campfire takes 15 seconds per piece to cook. = Water must be boiled in a canteen in a campfire. Pressing E on the campfire opens the campfile inventory slots which has 4. You can please meat to cook, water to boil.
+
+Player Inventory & Controls
+
+The player starts with:
+
+    Axe
+    Pick-axe
+    Knife
+    Canteen which can be filled with water
+
+Inventory Management:
+
+Pressing the letter I opens the inventory on screen Right clicking moves items between the inventory and quick bar.
+
+World Features
+
+    Dynamic Wildlife: Animals move and roam around the map in real time.
+    Searchable Loot: Barrels. Crates are located inside empty buildings contain valuable loot.
+
+Building System
+
+    can be accessed with the letter B
+    build in game foundations, walls, walls with windows, walls with doorways, doors and ceilings all of equal size.
+    foundations are plaed and snap to world grid.
+    walls, walls with windows, walls with doorways only snap to foundations
+    Ceiling snap like foundations but at wall height
+    all items can be rotated with the mouse wheel
+	
+	Split these files in to several smaller files for ease of use.

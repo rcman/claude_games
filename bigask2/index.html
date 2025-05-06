@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Survival Game</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+        }
+        #progressBar {
+            width: 50%;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        #progressFill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        #inventory, #craftingMenu, #buildingMenu, #storageMenu { /* Added #storageMenu */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.85); /* Slightly more opaque */
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+            z-index: 100;
+            width: 70%;
+            max-width: 600px; /* Max width for larger screens */
+            max-height: 80%;
+            overflow-y: auto;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        .inventory-grid, .crafting-grid, .building-grid, .storage-grid { /* Added .storage-grid */
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); /* Responsive columns */
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .inventory-slot, .crafting-item, .building-item {
+            width: 60px;
+            height: 60px;
+            background-color: #333;
+            border: 1px solid #555;
+            display: flex;
+            flex-direction: column; /* Allow text below image */
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+            font-size: 10px; /* For item names below image */
+            overflow: hidden; /* Prevent text overflow */
+            text-align: center;
+        }
+        .inventory-slot:hover, .crafting-item:hover, .building-item:hover {
+            border-color: #888;
+            background-color: #444;
+        }
+        .inventory-slot img, .crafting-item img, .building-item img {
+            max-width: 40px; /* Smaller image for text */
+            max-height: 40px;
+            margin-bottom: 2px;
+        }
+        .item-name-tooltip { /* For items that only show icon in grid */
+            display: none;
+            position: absolute;
+            bottom: 100%; /* Position above the slot */
+            left: 50%;
+            transform: translateX(-50%) translateY(-5px); /* Adjust as needed */
+            background-color: rgba(0,0,0,0.9);
+            color: white;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            white-space: nowrap;
+            z-index: 1002;
+        }
+        .inventory-slot:hover .item-name-tooltip {
+            display: block;
+        }
+        .unavailable {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .tooltip-text { /* For crafting/building requirements */
+            display: none;
+            position: fixed; /* Use fixed to avoid being clipped by parent */
+            background-color: rgba(0,0,0,0.9);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1002; /* High z-index */
+            pointer-events: none; /* Prevent tooltip from capturing mouse events */
+            border: 1px solid #555;
+        }
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            font-size: 10px;
+            border-radius: 3px;
+        }
+        #quickBar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            z-index: 10;
+        }
+        .quick-slot {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border: 1px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .quick-slot img {
+            max-width: 50px;
+            max-height: 50px;
+        }
+        .selected {
+            border: 2px solid #4CAF50 !important; /* Ensure it overrides other borders */
+        }
+        #interactionPrompt {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7); /* More visible */
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            display: none;
+            z-index: 10;
+            font-size: 14px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        #playerStats {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        .stat-bar {
+            width: 150px;
+            height: 15px;
+            background-color: #333;
+            border-radius: 7px;
+            margin: 5px 0;
+            overflow: hidden;
+            border: 1px solid #222;
+        }
+        .stat-fill {
+            height: 100%;
+            border-radius: 7px 0 0 7px; /* Round only left if not full */
+            transition: width 0.3s ease-out;
+        }
+        #health-fill { background-color: #e74c3c; }
+        #hunger-fill { background-color: #f39c12; }
+        #thirst-fill { background-color: #3498db; }
+
+        #campfireMenu, #craftingTableMenu, #forgeMenu { /* Can be combined with main menu styles */
+            /* These are mostly covered by the general #inventory, #craftingMenu styles now */
+        }
+        .structure-slots {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); /* Larger slots for structures */
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .structure-slots .inventory-slot { /* Override for structure slots if needed */
+            width: 80px;
+            height: 80px;
+        }
+        .structure-slots .inventory-slot img {
+            max-width: 60px;
+            max-height: 60px;
+        }
+
+        .progress-circle {
+            position: absolute;
+            width: 100%; /* Fill slot */
+            height: 100%;
+            transform: rotate(-90deg);
+            top: 0; left: 0;
+        }
+        .progress-circle circle {
+            fill: none;
+            stroke-width: 8; /* Thicker progress */
+        }
+        .progress-bg { stroke: #555; } /* Darker bg */
+        .progress-fill {
+            stroke: #4CAF50;
+            stroke-dasharray: 157; /* 2π × 25 (radius of circle in SVG viewport) */
+            stroke-dashoffset: 157; 
+            transition: stroke-dashoffset 0.1s linear;
+        }
+        /* Close button for menus */
+        .close-menu-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            font-size: 16px;
+            line-height: 25px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .close-menu-btn:hover {
+            background: #c0392b;
+        }
+        /* Recipe option in popup */
+        .recipe-option {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: center;
+        }
+        .recipe-option:last-child {
+            border-bottom: none;
+        }
+        .recipe-option:hover {
+            background-color: #555;
+        }
+
+        /* Storage Menu Specific */
+        #storageMenu .inventory-grid { /* Player's inventory side */
+            margin-bottom: 20px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 20px;
+        }
+        #storageMenu h3 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>Loading Survival Game</h1>
+        <div id="progressBar">
+            <div id="progressFill"></div>
+        </div>
+        <p id="loadingText">Preparing world...</p>
+    </div>
+
+    <div id="playerStats">
+        <div>Health</div>
+        <div class="stat-bar">
+            <div id="health-fill" class="stat-fill" style="width: 100%"></div>
+        </div>
+        <div>Hunger</div>
+        <div class="stat-bar">
+            <div id="hunger-fill" class="stat-fill" style="width: 100%"></div>
+        </div>
+        <div>Thirst</div>
+        <div class="stat-bar">
+            <div id="thirst-fill" class="stat-fill" style="width: 100%"></div>
+        </div>
+    </div>
+
+    <div id="quickBar"></div>
+    <div id="interactionPrompt"></div>
+
+    <div id="inventory">
+        <button class="close-menu-btn" onclick="gameInstance.ui.toggleInventory()">X</button>
+        <h2>Inventory</h2>
+        <div class="inventory-grid" id="inventoryGrid"></div>
+    </div>
+
+    <div id="craftingMenu">
+        <button class="close-menu-btn" onclick="gameInstance.ui.toggleCraftingMenu()">X</button>
+        <h2>Crafting</h2>
+        <div class="crafting-grid" id="craftingGrid"></div>
+    </div>
+
+    <div id="buildingMenu">
+        <button class="close-menu-btn" onclick="gameInstance.ui.toggleBuildingMenu()">X</button>
+        <h2>Building</h2>
+        <div class="building-grid" id="buildingGrid"></div>
+    </div>
+    
+    <!-- Storage Menu -->
+    <div id="storageMenu">
+        <!-- Content will be generated by UI.js -->
+    </div>
+
+
+    <div id="campfireMenu">
+        <!-- Content generated by StructuresSystem/UI.js -->
+    </div>
+
+    <div id="craftingTableMenu">
+        <!-- This might be unused if craftingMenu is repurposed, or can be its own structure -->
+        <!-- Content generated by StructuresSystem/UI.js -->
+    </div>
+
+    <div id="forgeMenu">
+        <!-- Content generated by StructuresSystem/UI.js -->
+    </div>
+
+    <!-- Load libraries -->
+    <script src="three.min.js"></script>
+    <script src="Stats.min.js"></script>
+
+    <!-- Load game modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/items.js"></script> <!-- Moved items.js up -->
+    <script src="js/water.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/resources.js" type="module"></script> <!-- Added type="module" for GLTFLoader import -->
+    <script src="js/player.js" type="module"></script> <!-- Added type="module" for PointerLockControls import -->
+    <script src="js/inventory.js"></script>
+    <script src="js/crafting.js"></script>
+    <script src="js/building.js" type="module"></script> <!-- Added type="module" for GLTFLoader import -->
+    <script src="js/animals.js" type="module"></script> <!-- Added type="module" for GLTFLoader import -->
+    <script src="js/structures.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js" type="module"></script> <!-- game.js might import from module files or use globals -->
+</body>
+</html>
