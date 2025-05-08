@@ -1,0 +1,784 @@
+{
+  "metadata": {
+    "version": 4.5,
+    "type": "Object",
+    "generator": "Object3D.toJSON"
+  },
+  "geometries": [
+    {
+      "uuid": "trunk-geometry",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.5,
+      "radiusBottom": 0.8,
+      "height": 4.0,
+      "radialSegments": 12,
+      "heightSegments": 8
+    },
+    {
+      "uuid": "branch-geometry-1",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.2,
+      "radiusBottom": 0.4,
+      "height": 3.0,
+      "radialSegments": 8,
+      "heightSegments": 4
+    },
+    {
+      "uuid": "branch-geometry-2",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.15,
+      "radiusBottom": 0.3,
+      "height": 2.5,
+      "radialSegments": 8,
+      "heightSegments": 4
+    },
+    {
+      "uuid": "branch-geometry-3",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.1,
+      "radiusBottom": 0.2,
+      "height": 2.0,
+      "radialSegments": 8,
+      "heightSegments": 4
+    },
+    {
+      "uuid": "twig-geometry",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.03,
+      "radiusBottom": 0.08,
+      "height": 1.0,
+      "radialSegments": 5,
+      "heightSegments": 2
+    },
+    {
+      "uuid": "leaf-geometry",
+      "type": "PlaneGeometry",
+      "width": 0.3,
+      "height": 0.5,
+      "widthSegments": 1,
+      "heightSegments": 1
+    },
+    {
+      "uuid": "apple-geometry",
+      "type": "SphereGeometry",
+      "radius": 0.12,
+      "widthSegments": 16,
+      "heightSegments": 16
+    }
+  ],
+  "materials": [
+    {
+      "uuid": "trunk-material",
+      "type": "MeshStandardMaterial",
+      "color": 6371115,
+      "roughness": 0.8,
+      "metalness": 0.1,
+      "emissive": 0,
+      "side": 2
+    },
+    {
+      "uuid": "branch-material",
+      "type": "MeshStandardMaterial",
+      "color": 5324825,
+      "roughness": 0.7,
+      "metalness": 0.1,
+      "emissive": 0,
+      "side": 2
+    },
+    {
+      "uuid": "leaf-material",
+      "type": "MeshStandardMaterial",
+      "color": 2330612,
+      "roughness": 0.6,
+      "metalness": 0.05,
+      "emissive": 0,
+      "side": 2,
+      "transparent": true,
+      "opacity": 0.95
+    },
+    {
+      "uuid": "apple-material-red",
+      "type": "MeshStandardMaterial",
+      "color": 15277667,
+      "roughness": 0.4,
+      "metalness": 0.2,
+      "emissive": 0,
+      "side": 2
+    },
+    {
+      "uuid": "apple-material-green",
+      "type": "MeshStandardMaterial",
+      "color": 5025616,
+      "roughness": 0.4,
+      "metalness": 0.2,
+      "emissive": 0,
+      "side": 2
+    }
+  ],
+  "object": {
+    "uuid": "apple-tree",
+    "type": "Group",
+    "name": "AppleTree",
+    "layers": 1,
+    "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    "children": [
+      {
+        "uuid": "trunk",
+        "type": "Mesh",
+        "name": "Trunk",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        "geometry": "trunk-geometry",
+        "material": "trunk-material"
+      },
+      {
+        "uuid": "branches-level-1",
+        "type": "Group",
+        "name": "BranchesL1",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1],
+        "children": [
+          {
+            "uuid": "branch-1-1",
+            "type": "Mesh",
+            "name": "Branch1-1",
+            "layers": 1,
+            "matrix": [0.866, 0, 0.5, 0, 0, 1, 0, 0, -0.5, 0, 0.866, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-2",
+            "type": "Mesh",
+            "name": "Branch1-2",
+            "layers": 1,
+            "matrix": [0.5, 0, 0.866, 0, 0, 1, 0, 0, -0.866, 0, 0.5, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-3",
+            "type": "Mesh",
+            "name": "Branch1-3",
+            "layers": 1,
+            "matrix": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-4",
+            "type": "Mesh",
+            "name": "Branch1-4",
+            "layers": 1,
+            "matrix": [-0.5, 0, 0.866, 0, 0, 1, 0, 0, -0.866, 0, -0.5, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-5",
+            "type": "Mesh",
+            "name": "Branch1-5",
+            "layers": 1,
+            "matrix": [-0.866, 0, 0.5, 0, 0, 1, 0, 0, -0.5, 0, -0.866, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-6",
+            "type": "Mesh",
+            "name": "Branch1-6",
+            "layers": 1,
+            "matrix": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-7",
+            "type": "Mesh",
+            "name": "Branch1-7",
+            "layers": 1,
+            "matrix": [-0.866, 0, -0.5, 0, 0, 1, 0, 0, 0.5, 0, -0.866, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-1-8",
+            "type": "Mesh",
+            "name": "Branch1-8",
+            "layers": 1,
+            "matrix": [-0.5, 0, -0.866, 0, 0, 1, 0, 0, 0.866, 0, -0.5, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-1",
+            "material": "branch-material"
+          }
+        ]
+      },
+      {
+        "uuid": "branches-level-2",
+        "type": "Group",
+        "name": "BranchesL2",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 3.5, 0, 1],
+        "children": [
+          {
+            "uuid": "branch-2-1",
+            "type": "Mesh",
+            "name": "Branch2-1",
+            "layers": 1,
+            "matrix": [0.643, 0.643, 0.416, 0, -0.766, 0.643, 0, 0, -0.267, -0.416, 0.909, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-2",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-2-2",
+            "type": "Mesh",
+            "name": "Branch2-2",
+            "layers": 1,
+            "matrix": [0.342, 0.766, 0.545, 0, -0.939, 0.342, 0, 0, -0.186, -0.545, 0.838, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-2",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-2-3",
+            "type": "Mesh",
+            "name": "Branch2-3",
+            "layers": 1,
+            "matrix": [0, 0.883, 0.469, 0, -1, 0, 0, 0, 0, -0.469, 0.883, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-2",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-2-4",
+            "type": "Mesh",
+            "name": "Branch2-4",
+            "layers": 1,
+            "matrix": [-0.342, 0.766, 0.545, 0, -0.939, -0.342, 0, 0, 0.186, -0.545, 0.838, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-2",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-2-5",
+            "type": "Mesh",
+            "name": "Branch2-5",
+            "layers": 1,
+            "matrix": [-0.643, 0.643, 0.416, 0, -0.766, -0.643, 0, 0, 0.267, -0.416, 0.909, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-2",
+            "material": "branch-material"
+          }
+        ]
+      },
+      {
+        "uuid": "branches-level-3",
+        "type": "Group",
+        "name": "BranchesL3",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.5, 3.2, 1.2, 1],
+        "children": [
+          {
+            "uuid": "branch-3-1",
+            "type": "Mesh",
+            "name": "Branch3-1",
+            "layers": 1,
+            "matrix": [0.766, 0.342, 0.545, 0, -0.643, 0.766, 0, 0, -0.416, -0.545, 0.726, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-3",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-3-2",
+            "type": "Mesh",
+            "name": "Branch3-2",
+            "layers": 1,
+            "matrix": [0.5, 0.5, 0.707, 0, -0.866, 0.5, 0, 0, -0.354, -0.707, 0.612, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-3",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "branch-3-3",
+            "type": "Mesh",
+            "name": "Branch3-3",
+            "layers": 1,
+            "matrix": [0.174, 0.643, 0.746, 0, -0.984, 0.174, 0, 0, -0.13, -0.746, 0.653, 0, 0, 0, 0, 1],
+            "geometry": "branch-geometry-3",
+            "material": "branch-material"
+          }
+        ]
+      },
+      {
+        "uuid": "foliage-group",
+        "type": "Group",
+        "name": "Foliage",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        "children": [
+          {
+            "uuid": "leaf-cluster-1",
+            "type": "Group",
+            "name": "LeafCluster1",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.5, 3.0, 1.5, 1],
+            "children": [
+              {
+                "uuid": "leaf-1-1",
+                "type": "Mesh",
+                "name": "Leaf1-1",
+                "layers": 1,
+                "matrix": [0.866, 0.5, 0, 0, -0.5, 0.866, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-1-2",
+                "type": "Mesh",
+                "name": "Leaf1-2",
+                "layers": 1,
+                "matrix": [0.5, 0.866, 0, 0, -0.866, 0.5, 0, 0, 0, 0, 1, 0, 0.1, 0.1, 0.1, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-1-3",
+                "type": "Mesh",
+                "name": "Leaf1-3",
+                "layers": 1,
+                "matrix": [0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0.2, 0.05, 0.2, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-1-4",
+                "type": "Mesh",
+                "name": "Leaf1-4",
+                "layers": 1,
+                "matrix": [-0.5, 0.866, 0, 0, -0.866, -0.5, 0, 0, 0, 0, 1, 0, 0.15, -0.05, 0.15, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-1-5",
+                "type": "Mesh",
+                "name": "Leaf1-5",
+                "layers": 1,
+                "matrix": [-0.866, 0.5, 0, 0, -0.5, -0.866, 0, 0, 0, 0, 1, 0, 0.05, -0.15, 0.05, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              }
+            ]
+          },
+          {
+            "uuid": "leaf-cluster-2",
+            "type": "Group",
+            "name": "LeafCluster2",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.2, 3.5, 1.8, 1],
+            "children": [
+              {
+                "uuid": "leaf-2-1",
+                "type": "Mesh",
+                "name": "Leaf2-1",
+                "layers": 1,
+                "matrix": [0.766, 0.643, 0, 0, -0.643, 0.766, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-2-2",
+                "type": "Mesh",
+                "name": "Leaf2-2",
+                "layers": 1,
+                "matrix": [0.342, 0.939, 0, 0, -0.939, 0.342, 0, 0, 0, 0, 1, 0, 0.12, 0.08, 0.12, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-2-3",
+                "type": "Mesh",
+                "name": "Leaf2-3",
+                "layers": 1,
+                "matrix": [-0.174, 0.984, 0, 0, -0.984, -0.174, 0, 0, 0, 0, 1, 0, 0.18, 0.02, 0.18, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-2-4",
+                "type": "Mesh",
+                "name": "Leaf2-4",
+                "layers": 1,
+                "matrix": [-0.643, 0.766, 0, 0, -0.766, -0.643, 0, 0, 0, 0, 1, 0, 0.15, -0.06, 0.15, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-2-5",
+                "type": "Mesh",
+                "name": "Leaf2-5",
+                "layers": 1,
+                "matrix": [-0.939, 0.342, 0, 0, -0.342, -0.939, 0, 0, 0, 0, 1, 0, 0.05, -0.12, 0.05, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              }
+            ]
+          },
+          {
+            "uuid": "leaf-cluster-3",
+            "type": "Group",
+            "name": "LeafCluster3",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.8, 4.2, -1.3, 1],
+            "children": [
+              {
+                "uuid": "leaf-3-1",
+                "type": "Mesh",
+                "name": "Leaf3-1",
+                "layers": 1,
+                "matrix": [0.906, 0.423, 0, 0, -0.423, 0.906, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-3-2",
+                "type": "Mesh",
+                "name": "Leaf3-2",
+                "layers": 1,
+                "matrix": [0.573, 0.819, 0, 0, -0.819, 0.573, 0, 0, 0, 0, 1, 0, 0.08, 0.1, 0.08, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-3-3",
+                "type": "Mesh",
+                "name": "Leaf3-3",
+                "layers": 1,
+                "matrix": [0.087, 0.996, 0, 0, -0.996, 0.087, 0, 0, 0, 0, 1, 0, 0.16, 0.06, 0.16, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-3-4",
+                "type": "Mesh",
+                "name": "Leaf3-4",
+                "layers": 1,
+                "matrix": [-0.423, 0.906, 0, 0, -0.906, -0.423, 0, 0, 0, 0, 1, 0, 0.15, -0.04, 0.15, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-3-5",
+                "type": "Mesh",
+                "name": "Leaf3-5",
+                "layers": 1,
+                "matrix": [-0.819, 0.573, 0, 0, -0.573, -0.819, 0, 0, 0, 0, 1, 0, 0.08, -0.12, 0.08, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              }
+            ]
+          },
+          {
+            "uuid": "leaf-cluster-4",
+            "type": "Group",
+            "name": "LeafCluster4",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -0.9, 3.8, -1.6, 1],
+            "children": [
+              {
+                "uuid": "leaf-4-1",
+                "type": "Mesh",
+                "name": "Leaf4-1",
+                "layers": 1,
+                "matrix": [0.866, 0.5, 0, 0, -0.5, 0.866, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-4-2",
+                "type": "Mesh",
+                "name": "Leaf4-2",
+                "layers": 1,
+                "matrix": [0.5, 0.866, 0, 0, -0.866, 0.5, 0, 0, 0, 0, 1, 0, 0.1, 0.1, 0.1, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-4-3",
+                "type": "Mesh",
+                "name": "Leaf4-3",
+                "layers": 1,
+                "matrix": [0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0.2, 0.05, 0.2, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-4-4",
+                "type": "Mesh",
+                "name": "Leaf4-4",
+                "layers": 1,
+                "matrix": [-0.5, 0.866, 0, 0, -0.866, -0.5, 0, 0, 0, 0, 1, 0, 0.15, -0.05, 0.15, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-4-5",
+                "type": "Mesh",
+                "name": "Leaf4-5",
+                "layers": 1,
+                "matrix": [-0.866, 0.5, 0, 0, -0.5, -0.866, 0, 0, 0, 0, 1, 0, 0.05, -0.15, 0.05, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              }
+            ]
+          },
+          {
+            "uuid": "leaf-cluster-5",
+            "type": "Group",
+            "name": "LeafCluster5",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -2.1, 2.9, 0.3, 1],
+            "children": [
+              {
+                "uuid": "leaf-5-1",
+                "type": "Mesh",
+                "name": "Leaf5-1",
+                "layers": 1,
+                "matrix": [0.939, 0.342, 0, 0, -0.342, 0.939, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-5-2",
+                "type": "Mesh",
+                "name": "Leaf5-2",
+                "layers": 1,
+                "matrix": [0.642, 0.766, 0, 0, -0.766, 0.642, 0, 0, 0, 0, 1, 0, 0.12, 0.08, 0.12, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-5-3",
+                "type": "Mesh",
+                "name": "Leaf5-3",
+                "layers": 1,
+                "matrix": [0.174, 0.984, 0, 0, -0.984, 0.174, 0, 0, 0, 0, 1, 0, 0.18, 0.02, 0.18, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-5-4",
+                "type": "Mesh",
+                "name": "Leaf5-4",
+                "layers": 1,
+                "matrix": [-0.342, 0.939, 0, 0, -0.939, -0.342, 0, 0, 0, 0, 1, 0, 0.15, -0.06, 0.15, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              },
+              {
+                "uuid": "leaf-5-5",
+                "type": "Mesh",
+                "name": "Leaf5-5",
+                "layers": 1,
+                "matrix": [-0.766, 0.642, 0, 0, -0.642, -0.766, 0, 0, 0, 0, 1, 0, 0.05, -0.12, 0.05, 1],
+                "geometry": "leaf-geometry",
+                "material": "leaf-material"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uuid": "apple-group",
+        "type": "Group",
+        "name": "Apples",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        "children": [
+          {
+            "uuid": "apple-1",
+            "type": "Mesh",
+            "name": "Apple1",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.8, 3.2, 1.6, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-red"
+          },
+          {
+            "uuid": "apple-2",
+            "type": "Mesh",
+            "name": "Apple2",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.5, 3.3, 1.9, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-red"
+          },
+          {
+            "uuid": "apple-3",
+            "type": "Mesh",
+            "name": "Apple3",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.0, 4.1, -1.4, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-red"
+          },
+          {
+            "uuid": "apple-4",
+            "type": "Mesh",
+            "name": "Apple4",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.1, 3.9, -1.8, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-red"
+          },
+          {
+            "uuid": "apple-5",
+            "type": "Mesh",
+            "name": "Apple5",
+            "layers": 1,
+            "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -2.3, 2.8, 0.4, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-red"
+          },
+          {
+            "uuid": "apple-6",
+            "type": "Mesh",
+            "name": "Apple6",
+            "layers": 1,
+            "matrix": [0.9, 0, 0, 0, 0, 0.9, 0, 0, 0, 0, 0.9, 0, 2.0, 2.7, 1.2, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-green"
+          },
+          {
+            "uuid": "apple-7",
+            "type": "Mesh",
+            "name": "Apple7",
+            "layers": 1,
+            "matrix": [0.85, 0, 0, 0, 0, 0.85, 0, 0, 0, 0, 0.85, 0, -0.8, 4.2, 1.3, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-green"
+          },
+          {
+            "uuid": "apple-8",
+            "type": "Mesh",
+            "name": "Apple8",
+            "layers": 1,
+            "matrix": [0.95, 0, 0, 0, 0, 0.95, 0, 0, 0, 0, 0.95, 0, 0.7, 3.7, -1.9, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-green"
+          },
+          {
+            "uuid": "apple-9",
+            "type": "Mesh",
+            "name": "Apple9",
+            "layers": 1,
+            "matrix": [0.9, 0, 0, 0, 0, 0.9, 0, 0, 0, 0, 0.9, 0, -1.9, 3.4, -0.7, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-green"
+          },
+          {
+            "uuid": "apple-10",
+            "type": "Mesh",
+            "name": "Apple10",
+            "layers": 1,
+            "matrix": [0.85, 0, 0, 0, 0, 0.85, 0, 0, 0, 0, 0.85, 0, 1.3, 3.8, 0.9, 1],
+            "geometry": "apple-geometry",
+            "material": "apple-material-green"
+          }
+        ]
+      },
+      {
+        "uuid": "twigs-group",
+        "type": "Group",
+        "name": "Twigs",
+        "layers": 1,
+        "matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        "children": [
+          {
+            "uuid": "twig-1",
+            "type": "Mesh",
+            "name": "Twig1",
+            "layers": 1,
+            "matrix": [0.766, 0.342, 0.545, 0, -0.643, 0.766, 0, 0, -0.416, -0.545, 0.726, 0, 1.6, 3.4, 1.5, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-2",
+            "type": "Mesh",
+            "name": "Twig2",
+            "layers": 1,
+            "matrix": [0.5, 0.5, 0.707, 0, -0.866, 0.5, 0, 0, -0.354, -0.707, 0.612, 0, -1.4, 3.5, 1.7, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-3",
+            "type": "Mesh",
+            "name": "Twig3",
+            "layers": 1,
+            "matrix": [0.174, 0.643, 0.746, 0, -0.984, 0.174, 0, 0, -0.13, -0.746, 0.653, 0, 0.9, 4.3, -1.5, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-4",
+            "type": "Mesh",
+            "name": "Twig4",
+            "layers": 1,
+            "matrix": [0.342, 0.766, 0.545, 0, -0.939, 0.342, 0, 0, -0.186, -0.545, 0.838, 0, -1.0, 4.0, -1.7, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-5",
+            "type": "Mesh",
+            "name": "Twig5",
+            "layers": 1,
+            "matrix": [0.643, 0.643, 0.416, 0, -0.766, 0.643, 0, 0, -0.267, -0.416, 0.909, 0, -2.2, 3.0, 0.3, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-6",
+            "type": "Mesh",
+            "name": "Twig6",
+            "layers": 1,
+            "matrix": [0.766, 0.342, 0.545, 0, -0.643, 0.766, 0, 0, -0.416, -0.545, 0.726, 0, 1.9, 2.8, 1.0, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-7",
+            "type": "Mesh",
+            "name": "Twig7",
+            "layers": 1,
+            "matrix": [0.5, 0.5, 0.707, 0, -0.866, 0.5, 0, 0, -0.354, -0.707, 0.612, 0, -0.9, 4.3, 1.2, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-8",
+            "type": "Mesh",
+            "name": "Twig8",
+            "layers": 1,
+            "matrix": [0.174, 0.643, 0.746, 0, -0.984, 0.174, 0, 0, -0.13, -0.746, 0.653, 0, 0.6, 3.8, -1.8, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-9",
+            "type": "Mesh",
+            "name": "Twig9",
+            "layers": 1,
+            "matrix": [0.342, 0.766, 0.545, 0, -0.939, 0.342, 0, 0, -0.186, -0.545, 0.838, 0, -1.8, 3.5, -0.6, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          },
+          {
+            "uuid": "twig-10",
+            "type": "Mesh",
+            "name": "Twig10",
+            "layers": 1,
+            "matrix": [0.643, 0.643, 0.416, 0, -0.766, 0.643, 0, 0, -0.267, -0.416, 0.909, 0, 1.2, 3.9, 0.8, 1],
+            "geometry": "twig-geometry",
+            "material": "branch-material"
+          }
+        ]
+      }
+    ]
+  }
+}

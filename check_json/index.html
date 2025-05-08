@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Custom JSON Model Viewer</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #modelSelector {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        #animationControls {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Three.js Custom JSON Model Viewer</div>
+    
+    <div id="modelSelector">
+        <h3>Model Controls</h3>
+        <div>
+            <label for="modelFile">Upload JSON model:</label>
+            <input type="file" id="modelFile" accept=".json" multiple>
+        </div>
+        <div id="modelList">
+            <h4>Loaded Models:</h4>
+            <ul id="loadedModels"></ul>
+        </div>
+    </div>
+    
+    <div id="animationControls">
+        <h3>Animation Controls</h3>
+        <div id="animationList">
+            <!-- Animation controls will be added here dynamically -->
+        </div>
+    </div>
+    
+    <div id="controls">
+        <h3>Navigation Controls</h3>
+        <p>Left Click + Drag: Rotate camera</p>
+        <p>Right Click + Drag: Pan camera</p>
+        <p>Scroll: Zoom in/out</p>
+    </div>
+
+    <!-- Import maps polyfill -->
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/es-module-shims/1.5.1/es-module-shims.min.js"></script>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.150.1/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        // Initialize Three.js scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x333333);
+        
+        // Create camera
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+        
+        // Create renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Add orbit controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.25;
+        
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight2.position.set(-1, -1, -1);
+        scene.add(directionalLight2);
+        
+        // Add grid helper
+        const gridHelper = new THREE.GridHelper(10, 10);
+        scene.add(gridHelper);
+        
+        // Add axes helper
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Model management
+        const loadedObjects = [];
+        const modelListElement = document.getElementById('loadedModels');
+        const animationListElement = document.getElementById('animationList');
+        
+        // Animation mixer
+        let mixer = null;
+        const clock = new THREE.Clock();
+        let animations = {};
+        
+        // Custom JSON parser for the specific format
+        function parseCustomJSON(json) {
+            // Create a group to hold the entire model
+            const rootGroup = new THREE.Group();
+            rootGroup.name = json.name || 'Model';
+            
+            // Set position, rotation, scale if available
+            if (json.position) rootGroup.position.set(...json.position);
+            if (json.rotation) rootGroup.rotation.set(...json.rotation);
+            if (json.scale) rootGroup.scale.set(...json.scale);
+            
+            // Object mapping to keep track of created objects by name
+            const objectsByName = {
+                [rootGroup.name]: rootGroup
+            };
+            
+            // Process geometry helper function
+            function createGeometry(geomData) {
+                const params = geomData.parameters || {};
+                
+                switch (geomData.type) {
+                    case 'BoxGeometry':
+                        return new THREE.BoxGeometry(
+                            params.width || 1, 
+                            params.height || 1, 
+                            params.depth || 1
+                        );
+                    case 'SphereGeometry':
+                        return new THREE.SphereGeometry(
+                            params.radius || 1,
+                            params.widthSegments || 32,
+                            params.heightSegments || 16
+                        );
+                    case 'CylinderGeometry':
+                        return new THREE.CylinderGeometry(
+                            params.radiusTop || 1,
+                            params.radiusBottom || 1,
+                            params.height || 1,
+                            params.radialSegments || 32
+                        );
+                    // Add more geometry types as needed
+                    default:
+                        console.warn(`Geometry type ${geomData.type} not supported, using BoxGeometry`);
+                        return new THREE.BoxGeometry(1, 1, 1);
+                }
+            }
+            
+            // Process material helper function
+            function createMaterial(matData) {
+                const params = matData || {};
+                
+                switch (params.type) {
+                    case 'MeshStandardMaterial':
+                        return new THREE.MeshStandardMaterial({
+                            color: params.color || 0xcccccc,
+                            roughness: params.roughness !== undefined ? params.roughness : 0.7,
+                            metalness: params.metalness !== undefined ? params.metalness : 0.2
+                        });
+                    case 'MeshBasicMaterial':
+                        return new THREE.MeshBasicMaterial({
+                            color: params.color || 0xcccccc
+                        });
+                    // Add more material types as needed
+                    default:
+                        return new THREE.MeshStandardMaterial({
+                            color: params.color || 0xcccccc
+                        });
+                }
+            }
+            
+            // Recursive function to process the node hierarchy
+            function processNode(nodeData, parent) {
+                let object;
+                
+                // Create the appropriate object based on type
+                switch (nodeData.type) {
+                    case 'Mesh':
+                        const geometry = createGeometry(nodeData.geometry);
+                        const material = createMaterial(nodeData.material);
+                        object = new THREE.Mesh(geometry, material);
+                        break;
+                    case 'Group':
+                    default:
+                        object = new THREE.Group();
+                        break;
+                }
+                
+                // Set name and add to parent
+                object.name = nodeData.name || 'Object';
+                objectsByName[object.name] = object;
+                
+                // Set transform properties
+                if (nodeData.position) object.position.set(...nodeData.position);
+                if (nodeData.rotation) object.rotation.set(...nodeData.rotation);
+                if (nodeData.scale) object.scale.set(...nodeData.scale);
+                
+                // Add to parent
+                parent.add(object);
+                
+                // Process children recursively
+                if (Array.isArray(nodeData.children)) {
+                    nodeData.children.forEach(childData => {
+                        processNode(childData, object);
+                    });
+                }
+                
+                return object;
+            }
+            
+            // Process all the children of the root
+            if (Array.isArray(json.children)) {
+                json.children.forEach(childData => {
+                    processNode(childData, rootGroup);
+                });
+            }
+            
+            // Process animations if present
+            if (Array.isArray(json.animations)) {
+                const animationClips = [];
+                
+                json.animations.forEach(animData => {
+                    const tracks = [];
+                    
+                    if (Array.isArray(animData.tracks)) {
+                        animData.tracks.forEach(trackData => {
+                            const nodeName = trackData.name.split('.')[0];
+                            const propertyName = trackData.name.split('.')[1];
+                            
+                            // Ensure the node exists
+                            const targetNode = objectsByName[nodeName];
+                            if (!targetNode) {
+                                console.warn(`Target node ${nodeName} not found for animation track`);
+                                return;
+                            }
+                            
+                            // Process different track types
+                            let track;
+                            
+                            if (trackData.type === 'vector') {
+                                // Create times array
+                                const times = [];
+                                const values = [];
+                                
+                                trackData.keys.forEach(key => {
+                                    times.push(key.time);
+                                    values.push(...key.value);
+                                });
+                                
+                                // Create the appropriate track based on property name
+                                switch (propertyName) {
+                                    case 'position':
+                                        track = new THREE.VectorKeyframeTrack(
+                                            `${nodeName}.position`,
+                                            times,
+                                            values
+                                        );
+                                        break;
+                                    case 'rotation':
+                                        track = new THREE.VectorKeyframeTrack(
+                                            `${nodeName}.rotation`,
+                                            times,
+                                            values
+                                        );
+                                        break;
+                                    case 'scale':
+                                        track = new THREE.VectorKeyframeTrack(
+                                            `${nodeName}.scale`,
+                                            times,
+                                            values
+                                        );
+                                        break;
+                                }
+                            }
+                            
+                            if (track) {
+                                tracks.push(track);
+                            }
+                        });
+                    }
+                    
+                    if (tracks.length > 0) {
+                        const clip = new THREE.AnimationClip(
+                            animData.name || 'Animation',
+                            animData.duration || -1,
+                            tracks
+                        );
+                        animationClips.push(clip);
+                    }
+                });
+                
+                if (animationClips.length > 0) {
+                    // Create a mixer for the model
+                    const newMixer = new THREE.AnimationMixer(rootGroup);
+                    
+                    // Store animations for later use
+                    const modelAnimations = {};
+                    
+                    // Create and store actions for each clip
+                    animationClips.forEach(clip => {
+                        const action = newMixer.clipAction(clip);
+                        modelAnimations[clip.name] = { 
+                            action: action,
+                            playing: false
+                        };
+                    });
+                    
+                    return { 
+                        model: rootGroup, 
+                        mixer: newMixer,
+                        animations: modelAnimations
+                    };
+                }
+            }
+            
+            return { model: rootGroup };
+        }
+        
+        // Make parser available to the file input handler
+        window.loadCustomModel = function(jsonData, fileName) {
+            try {
+                // Parse the custom JSON
+                const result = parseCustomJSON(jsonData);
+                const model = result.model;
+                const modelMixer = result.mixer;
+                const modelAnimations = result.animations || {};
+                
+                // Position models so they don't overlap
+                model.position.x = (loadedObjects.length % 3) * 3 - 3;
+                model.position.z = Math.floor(loadedObjects.length / 3) * 3 - 3;
+                
+                // Add to scene
+                scene.add(model);
+                
+                // Store reference to loaded object
+                const modelIndex = loadedObjects.length;
+                loadedObjects.push({
+                    name: fileName,
+                    object: model,
+                    visible: true,
+                    mixer: modelMixer,
+                    animations: modelAnimations
+                });
+                
+                // Add to UI list
+                const listItem = document.createElement('li');
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = true;
+                checkbox.addEventListener('change', function() {
+                    loadedObjects[modelIndex].visible = this.checked;
+                    loadedObjects[modelIndex].object.visible = this.checked;
+                });
+                
+                const modelName = document.createElement('span');
+                modelName.textContent = fileName;
+                
+                listItem.appendChild(checkbox);
+                listItem.appendChild(modelName);
+                modelListElement.appendChild(listItem);
+                
+                // Add animation controls if available
+                if (modelMixer && Object.keys(modelAnimations).length > 0) {
+                    // Create animation controls section for this model
+                    const animSection = document.createElement('div');
+                    animSection.className = 'model-anim-controls';
+                    
+                    const animTitle = document.createElement('h4');
+                    animTitle.textContent = `${fileName} Animations:`;
+                    animSection.appendChild(animTitle);
+                    
+                    // Add controls for each animation
+                    Object.entries(modelAnimations).forEach(([animName, animData]) => {
+                        const animControl = document.createElement('div');
+                        
+                        const animButton = document.createElement('button');
+                        animButton.textContent = 'Play';
+                        animButton.addEventListener('click', function() {
+                            // Toggle animation
+                            const isPlaying = !animData.playing;
+                            animData.playing = isPlaying;
+                            
+                            if (isPlaying) {
+                                animData.action.reset();
+                                animData.action.play();
+                                animButton.textContent = 'Stop';
+                            } else {
+                                animData.action.stop();
+                                animButton.textContent = 'Play';
+                            }
+                        });
+                        
+                        const animLabel = document.createElement('span');
+                        animLabel.textContent = ` ${animName}`;
+                        
+                        animControl.appendChild(animButton);
+                        animControl.appendChild(animLabel);
+                        animSection.appendChild(animControl);
+                    });
+                    
+                    animationListElement.appendChild(animSection);
+                }
+                
+                // Adjust camera to view all models
+                updateCameraPosition();
+                
+            } catch (error) {
+                console.error("Error loading model:", error);
+                alert(`Failed to load model ${fileName}: ${error.message}`);
+            }
+        };
+        
+        // File upload handler
+        document.getElementById('modelFile').addEventListener('change', function(event) {
+            const files = event.target.files;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const jsonContent = JSON.parse(e.target.result);
+                        window.loadCustomModel(jsonContent, file.name);
+                    } catch (error) {
+                        console.error("Error parsing JSON:", error);
+                        alert(`Failed to parse ${file.name}: ${error.message}`);
+                    }
+                };
+                
+                reader.readAsText(file);
+            }
+        });
+        
+        function updateCameraPosition() {
+            if (loadedObjects.length > 0) {
+                // Calculate bounding box of all objects
+                const boundingBox = new THREE.Box3();
+                
+                for (const obj of loadedObjects) {
+                    if (obj.visible) {
+                        const objectBox = new THREE.Box3().setFromObject(obj.object);
+                        boundingBox.union(objectBox);
+                    }
+                }
+                
+                // Calculate center and size
+                const center = boundingBox.getCenter(new THREE.Vector3());
+                const size = boundingBox.getSize(new THREE.Vector3());
+                
+                // Position camera to view all objects
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                let distance = maxDim / (2 * Math.tan(fov / 2));
+                
+                // Add some padding
+                distance *= 1.5;
+                
+                // Update camera
+                camera.position.copy(center);
+                camera.position.z += distance;
+                camera.lookAt(center);
+                controls.target.copy(center);
+            }
+        }
+        
+        // Sample model for demonstration
+        function loadSampleZombie() {
+            // This is just a placeholder to demonstrate the structure
+            // In a real application, you'd either:
+            // 1. Load a sample model from a file
+            // 2. Create a simple model with animations for demonstration
+            const sampleZombie = {
+                "name": "Zombie",
+                "type": "Group",
+                "children": [
+                    {
+                        "name": "Body",
+                        "type": "Mesh",
+                        "geometry": {
+                            "type": "BoxGeometry",
+                            "parameters": {
+                                "width": 1,
+                                "height": 2,
+                                "depth": 0.5
+                            }
+                        },
+                        "material": {
+                            "type": "MeshStandardMaterial",
+                            "color": "#4A7043"
+                        },
+                        "position": [0, 0, 0]
+                    }
+                ]
+            };
+            
+            // Uncomment to load a sample model
+            // window.loadCustomModel(sampleZombie, 'Sample Zombie.json');
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update mixers
+            const deltaTime = clock.getDelta();
+            for (const obj of loadedObjects) {
+                if (obj.mixer) {
+                    obj.mixer.update(deltaTime);
+                }
+            }
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize
+        loadSampleZombie();
+        animate();
+        
+        // Load the zombie model from the global window object if available
+        if (window.zombieJsonData) {
+            window.loadCustomModel(window.zombieJsonData, 'zombie_anim.json');
+        }
+    </script>
+</body>
+</html>

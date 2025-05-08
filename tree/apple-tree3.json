@@ -1,0 +1,847 @@
+{
+  "metadata": {
+    "version": 4.5,
+    "type": "Object",
+    "generator": "Wooden Apple Tree Model"
+  },
+  "geometries": [
+    {
+      "uuid": "trunk-geo",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.5,
+      "radiusBottom": 0.8,
+      "height": 5,
+      "radialSegments": 8
+    },
+    {
+      "uuid": "branch-geo-primary",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.15,
+      "radiusBottom": 0.3,
+      "height": 3.0,
+      "radialSegments": 8
+    },
+    {
+      "uuid": "branch-geo-secondary",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.08,
+      "radiusBottom": 0.16,
+      "height": 2.2,
+      "radialSegments": 8
+    },
+    {
+      "uuid": "branch-geo-tertiary",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.04,
+      "radiusBottom": 0.08,
+      "height": 1.5,
+      "radialSegments": 8
+    },
+    {
+      "uuid": "apple-geo",
+      "type": "SphereGeometry",
+      "radius": 0.4,
+      "widthSegments": 16,
+      "heightSegments": 16
+    },
+    {
+      "uuid": "ground-geo",
+      "type": "PlaneGeometry",
+      "width": 30,
+      "height": 30
+    }
+  ],
+  "materials": [
+    {
+      "uuid": "trunk-mat",
+      "type": "MeshStandardMaterial",
+      "color": 9127699,
+      "roughness": 0.8,
+      "metalness": 0.1
+    },
+    {
+      "uuid": "branch-mat-primary",
+      "type": "MeshStandardMaterial",
+      "color": 8476797,
+      "roughness": 0.75,
+      "metalness": 0.1
+    },
+    {
+      "uuid": "branch-mat-secondary",
+      "type": "MeshStandardMaterial",
+      "color": 7896086,
+      "roughness": 0.7,
+      "metalness": 0.1
+    },
+    {
+      "uuid": "branch-mat-tertiary",
+      "type": "MeshStandardMaterial",
+      "color": 7307171,
+      "roughness": 0.65,
+      "metalness": 0.1
+    },
+    {
+      "uuid": "apple-mat",
+      "type": "MeshStandardMaterial",
+      "color": 16711680,
+      "roughness": 0.5,
+      "metalness": 0.1,
+      "emissive": 2097152
+    },
+    {
+      "uuid": "ground-mat",
+      "type": "MeshStandardMaterial",
+      "color": 5666118,
+      "roughness": 0.9,
+      "metalness": 0.0,
+      "side": 2
+    }
+  ],
+  "object": {
+    "uuid": "apple-tree",
+    "type": "Group",
+    "name": "AppleTree",
+    "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+    "children": [
+      {
+        "uuid": "trunk",
+        "type": "Mesh",
+        "name": "Trunk",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,2.5,0,1],
+        "castShadow": true,
+        "receiveShadow": true,
+        "geometry": "trunk-geo",
+        "material": "trunk-mat"
+      },
+      {
+        "uuid": "ground",
+        "type": "Mesh",
+        "name": "Ground",
+        "matrix": [1,0,0,0, 0,0,-1,0, 0,1,0,0, 0,0,0,1],
+        "receiveShadow": true,
+        "geometry": "ground-geo",
+        "material": "ground-mat"
+      },
+      {
+        "uuid": "branch-system-1",
+        "type": "Group",
+        "name": "BranchSystem1",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,4.5,0,1],
+        "children": [
+          {
+            "uuid": "branch-1-primary",
+            "type": "Mesh",
+            "name": "Branch1Primary",
+            "matrix": [0.9,0,0.4,0, 0,1,0,0, -0.4,0,0.9,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-1-secondary-1",
+            "type": "Mesh",
+            "name": "Branch1Secondary1",
+            "matrix": [0.7,0.5,0.5,0, -0.5,0.85,0.1,0, -0.5,-0.1,0.85,0, 2.0,0.2,1.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-1-secondary-2",
+            "type": "Mesh",
+            "name": "Branch1Secondary2",
+            "matrix": [0.8,-0.4,0.4,0, 0.4,0.9,0.1,0, -0.4,-0.1,0.9,0, 2.1,0.0,0.9,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-1-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch1Tertiary1",
+            "matrix": [0.6,0.7,0.3,0, -0.7,0.65,0.2,0, -0.3,-0.2,0.93,0, 3.3,0.8,1.5,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-1-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch1Tertiary2",
+            "matrix": [0.75,-0.6,0.2,0, 0.6,0.7,0.3,0, -0.2,-0.3,0.93,0, 3.4,-0.6,1.3,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-1-apple-1",
+            "type": "Mesh",
+            "name": "branch-1-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 4.2,1.2,1.6,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-1-apple-2",
+            "type": "Mesh",
+            "name": "branch-1-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 4.0,-1.0,1.4,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-1-apple-3",
+            "type": "Mesh",
+            "name": "branch-1-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 3.1,0.3,1.8,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-2",
+        "type": "Group",
+        "name": "BranchSystem2",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,5.0,0,1],
+        "children": [
+          {
+            "uuid": "branch-2-primary",
+            "type": "Mesh",
+            "name": "Branch2Primary",
+            "matrix": [0.2,0,-0.98,0, 0,1,0,0, 0.98,0,0.2,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-2-secondary-1",
+            "type": "Mesh",
+            "name": "Branch2Secondary1",
+            "matrix": [0.1,0.4,-0.9,0, -0.4,0.9,0.1,0, 0.9,0.1,0.4,0, -2.3,0.3,-0.5,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-2-secondary-2",
+            "type": "Mesh",
+            "name": "Branch2Secondary2",
+            "matrix": [0.3,-0.3,-0.9,0, 0.3,0.95,0.1,0, 0.9,-0.1,0.4,0, -2.4,-0.2,-0.4,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-2-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch2Tertiary1",
+            "matrix": [0.0,0.7,-0.7,0, -0.7,0.5,0.5,0, 0.7,0.5,0.5,0, -3.5,0.9,-1.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-2-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch2Tertiary2",
+            "matrix": [0.2,-0.6,-0.8,0, 0.6,0.7,-0.3,0, 0.8,0.3,0.5,0, -3.6,-0.8,-0.8,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-2-apple-1",
+            "type": "Mesh",
+            "name": "branch-2-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -4.3,1.2,-1.2,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-2-apple-2",
+            "type": "Mesh",
+            "name": "branch-2-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -4.5,-1.3,-1.0,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-2-apple-3",
+            "type": "Mesh",
+            "name": "branch-2-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.9,0.0,-1.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-3",
+        "type": "Group",
+        "name": "BranchSystem3",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,4.7,0,1],
+        "children": [
+          {
+            "uuid": "branch-3-primary",
+            "type": "Mesh",
+            "name": "Branch3Primary",
+            "matrix": [-0.7,0,0.7,0, 0,1,0,0, -0.7,0,-0.7,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-3-secondary-1",
+            "type": "Mesh",
+            "name": "Branch3Secondary1",
+            "matrix": [-0.8,0.4,0.4,0, -0.4,0.5,-0.7,0, -0.4,-0.7,-0.5,0, -1.5,0.3,-1.5,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-3-secondary-2",
+            "type": "Mesh",
+            "name": "Branch3Secondary2",
+            "matrix": [-0.6,-0.3,0.7,0, 0.3,0.6,-0.7,0, -0.7,0.7,0.1,0, -1.6,-0.2,-1.6,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-3-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch3Tertiary1",
+            "matrix": [-0.9,0.3,0.3,0, -0.3,0.2,-0.9,0, -0.3,-0.9,-0.2,0, -2.8,0.7,-2.8,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-3-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch3Tertiary2",
+            "matrix": [-0.5,-0.5,0.7,0, 0.5,0.5,-0.7,0, -0.7,0.7,0.3,0, -2.9,-0.7,-2.9,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-3-apple-1",
+            "type": "Mesh",
+            "name": "branch-3-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.5,1.0,-3.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-3-apple-2",
+            "type": "Mesh",
+            "name": "branch-3-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.6,-1.1,-3.6,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-3-apple-3",
+            "type": "Mesh",
+            "name": "branch-3-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.3,-0.3,-3.1,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-4",
+        "type": "Group",
+        "name": "BranchSystem4",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,5.2,0,1],
+        "children": [
+          {
+            "uuid": "branch-4-primary",
+            "type": "Mesh",
+            "name": "Branch4Primary",
+            "matrix": [0.0,0,1.0,0, 0,1,0,0, -1.0,0,0.0,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-4-secondary-1",
+            "type": "Mesh",
+            "name": "Branch4Secondary1",
+            "matrix": [0.0,0.4,0.9,0, -0.4,0.9,-0.1,0, -0.9,-0.1,0.4,0, 0.0,0.3,-2.3,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-4-secondary-2",
+            "type": "Mesh",
+            "name": "Branch4Secondary2",
+            "matrix": [0.0,-0.4,0.9,0, 0.4,0.9,0.1,0, -0.9,0.1,0.4,0, 0.0,-0.3,-2.4,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-4-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch4Tertiary1",
+            "matrix": [0.2,0.6,0.8,0, -0.7,0.7,0.1,0, -0.7,-0.3,0.6,0, 0.3,0.9,-3.5,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-4-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch4Tertiary2",
+            "matrix": [-0.2,-0.6,0.8,0, 0.7,0.7,0.1,0, -0.7,0.3,0.6,0, -0.3,-0.9,-3.6,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-4-apple-1",
+            "type": "Mesh",
+            "name": "branch-4-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0.5,1.4,-4.3,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-4-apple-2",
+            "type": "Mesh",
+            "name": "branch-4-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -0.5,-1.5,-4.4,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-4-apple-3",
+            "type": "Mesh",
+            "name": "branch-4-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0.0,0.0,-4.2,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-5",
+        "type": "Group",
+        "name": "BranchSystem5",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,5.4,0,1],
+        "children": [
+          {
+            "uuid": "branch-5-primary",
+            "type": "Mesh",
+            "name": "Branch5Primary",
+            "matrix": [0.5,0,0.86,0, 0,1,0,0, -0.86,0,0.5,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-5-secondary-1",
+            "type": "Mesh",
+            "name": "Branch5Secondary1",
+            "matrix": [0.6,0.4,0.7,0, -0.4,0.9,-0.1,0, -0.7,-0.1,0.7,0, 1.1,0.3,-1.9,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-5-secondary-2",
+            "type": "Mesh",
+            "name": "Branch5Secondary2",
+            "matrix": [0.6,-0.4,0.7,0, 0.4,0.9,0.1,0, -0.7,-0.1,0.7,0, 1.1,-0.3,-1.9,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-5-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch5Tertiary1",
+            "matrix": [0.5,0.6,0.6,0, -0.6,0.8,-0.1,0, -0.6,-0.1,0.8,0, 2.2,0.9,-3.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-5-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch5Tertiary2",
+            "matrix": [0.5,-0.6,0.6,0, 0.6,0.8,0.1,0, -0.6,-0.1,0.8,0, 2.2,-0.9,-3.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-5-apple-1",
+            "type": "Mesh",
+            "name": "branch-5-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.8,1.3,-3.8,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-5-apple-2",
+            "type": "Mesh",
+            "name": "branch-5-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.8,-1.3,-3.8,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-5-apple-3",
+            "type": "Mesh",
+            "name": "branch-5-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 1.8,0.1,-3.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-6",
+        "type": "Group",
+        "name": "BranchSystem6",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,4.9,0,1],
+        "children": [
+          {
+            "uuid": "branch-6-primary",
+            "type": "Mesh",
+            "name": "Branch6Primary",
+            "matrix": [0.86,0,-0.5,0, 0,1,0,0, 0.5,0,0.86,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-6-secondary-1",
+            "type": "Mesh",
+            "name": "Branch6Secondary1",
+            "matrix": [0.9,0.3,-0.3,0, -0.3,0.9,0.3,0, 0.3,-0.3,0.9,0, 1.9,0.3,1.1,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-6-secondary-2",
+            "type": "Mesh",
+            "name": "Branch6Secondary2",
+            "matrix": [0.9,-0.3,-0.3,0, 0.3,0.9,-0.3,0, 0.3,0.3,0.9,0, 1.9,-0.3,1.1,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-6-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch6Tertiary1",
+            "matrix": [0.8,0.5,-0.3,0, -0.5,0.8,0.3,0, 0.3,-0.3,0.9,0, 3.1,0.8,2.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-6-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch6Tertiary2",
+            "matrix": [0.8,-0.5,-0.3,0, 0.5,0.8,-0.3,0, 0.3,0.3,0.9,0, 3.1,-0.8,2.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-6-apple-1",
+            "type": "Mesh",
+            "name": "branch-6-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 3.9,1.2,2.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-6-apple-2",
+            "type": "Mesh",
+            "name": "branch-6-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 3.9,-1.2,2.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-6-apple-3",
+            "type": "Mesh",
+            "name": "branch-6-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 4.2,0.0,1.7,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-vertical",
+        "type": "Group",
+        "name": "BranchSystemVertical",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,5.0,0,1],
+        "children": [
+         {
+            "uuid": "branch-vertical-primary",
+            "type": "Mesh",
+            "name": "BranchVerticalPrimary",
+            "matrix": [0,1,0,0, -1,0,0,0, 0,0,1,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-vertical-secondary-1",
+            "type": "Mesh",
+            "name": "BranchVerticalSecondary1",
+            "matrix": [0.3,0.9,0.3,0, -0.9,0.3,0.3,0, 0.3,-0.3,0.9,0, 0.3,2.0,0.1,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-vertical-secondary-2",
+            "type": "Mesh",
+            "name": "BranchVerticalSecondary2",
+            "matrix": [-0.3,0.9,-0.3,0, -0.9,-0.3,0.3,0, 0.3,-0.3,-0.9,0, -0.3,2.0,-0.1,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-vertical-tertiary-1",
+            "type": "Mesh",
+            "name": "BranchVerticalTertiary1",
+            "matrix": [0.2,0.9,0.4,0, -0.9,0.2,0.4,0, 0.4,-0.4,0.8,0, 0.8,3.3,0.3,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-vertical-tertiary-2",
+            "type": "Mesh",
+            "name": "BranchVerticalTertiary2",
+            "matrix": [-0.2,0.9,-0.4,0, -0.9,-0.2,0.4,0, 0.4,-0.4,-0.8,0, -0.8,3.3,-0.3,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-vertical-apple-1",
+            "type": "Mesh",
+            "name": "branch-vertical-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 1.2,4.0,0.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-vertical-apple-2",
+            "type": "Mesh",
+            "name": "branch-vertical-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -1.2,4.0,-0.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-vertical-apple-3",
+            "type": "Mesh",
+            "name": "branch-vertical-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0.0,4.5,0.0,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-7",
+        "type": "Group",
+        "name": "BranchSystem7",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,4.6,0,1],
+        "children": [
+          {
+            "uuid": "branch-7-primary",
+            "type": "Mesh",
+            "name": "Branch7Primary",
+            "matrix": [-0.5,0,-0.86,0, 0,1,0,0, 0.86,0,-0.5,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-7-secondary-1",
+            "type": "Mesh",
+            "name": "Branch7Secondary1",
+            "matrix": [-0.6,0.4,-0.7,0, -0.4,0.9,0.1,0, 0.7,0.1,-0.7,0, -1.1,0.3,-1.9,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-7-secondary-2",
+            "type": "Mesh",
+            "name": "Branch7Secondary2",
+            "matrix": [-0.6,-0.4,-0.7,0, 0.4,0.9,-0.1,0, 0.7,-0.1,-0.7,0, -1.1,-0.3,-1.9,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-7-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch7Tertiary1",
+            "matrix": [-0.5,0.6,-0.6,0, -0.6,0.8,0.1,0, 0.6,0.1,-0.8,0, -2.2,0.9,-3.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-7-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch7Tertiary2",
+            "matrix": [-0.5,-0.6,-0.6,0, 0.6,0.8,-0.1,0, 0.6,-0.1,-0.8,0, -2.2,-0.9,-3.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-7-apple-1",
+            "type": "Mesh",
+            "name": "branch-7-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.8,1.3,-3.8,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-7-apple-2",
+            "type": "Mesh",
+            "name": "branch-7-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.8,-1.3,-3.8,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-7-apple-3",
+            "type": "Mesh",
+            "name": "branch-7-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -1.8,0.1,-3.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      },
+      {
+        "uuid": "branch-system-8",
+        "type": "Group",
+        "name": "BranchSystem8",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,5.1,0,1],
+        "children": [
+          {
+            "uuid": "branch-8-primary",
+            "type": "Mesh",
+            "name": "Branch8Primary",
+            "matrix": [-0.86,0,0.5,0, 0,1,0,0, -0.5,0,-0.86,0, 0,0,0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-primary",
+            "material": "branch-mat-primary"
+          },
+          {
+            "uuid": "branch-8-secondary-1",
+            "type": "Mesh",
+            "name": "Branch8Secondary1",
+            "matrix": [-0.9,0.3,0.3,0, -0.3,0.9,-0.3,0, -0.3,0.3,0.9,0, -1.9,0.3,1.1,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-8-secondary-2",
+            "type": "Mesh",
+            "name": "Branch8Secondary2",
+            "matrix": [-0.9,-0.3,0.3,0, 0.3,0.9,0.3,0, -0.3,-0.3,0.9,0, -1.9,-0.3,1.1,1],
+            "castShadow": true,
+            "geometry": "branch-geo-secondary",
+            "material": "branch-mat-secondary"
+          },
+          {
+            "uuid": "branch-8-tertiary-1",
+            "type": "Mesh",
+            "name": "Branch8Tertiary1",
+            "matrix": [-0.8,0.5,0.3,0, -0.5,0.8,-0.3,0, -0.3,0.3,0.9,0, -3.1,0.8,2.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-8-tertiary-2",
+            "type": "Mesh",
+            "name": "Branch8Tertiary2",
+            "matrix": [-0.8,-0.5,0.3,0, 0.5,0.8,0.3,0, -0.3,-0.3,0.9,0, -3.1,-0.8,2.0,1],
+            "castShadow": true,
+            "geometry": "branch-geo-tertiary",
+            "material": "branch-mat-tertiary"
+          },
+          {
+            "uuid": "branch-8-apple-1",
+            "type": "Mesh",
+            "name": "branch-8-apple-1",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.9,1.2,2.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-8-apple-2",
+            "type": "Mesh",
+            "name": "branch-8-apple-2",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.9,-1.2,2.5,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          },
+          {
+            "uuid": "branch-8-apple-3",
+            "type": "Mesh",
+            "name": "branch-8-apple-3",
+            "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -4.2,0.0,1.7,1],
+            "castShadow": true,
+            "geometry": "apple-geo",
+            "material": "apple-mat"
+          }
+        ]
+      }
+    ]
+  }
+}

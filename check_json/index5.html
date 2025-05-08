@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apple Tree 3D Model</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        canvas { width: 100%; height: 100vh; display: block; }
+        #loading { 
+            position: fixed; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            background-color: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 100;
+        }
+        #error {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background-color: rgba(255,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+            font-family: Arial, sans-serif;
+            max-width: 80%;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading 3D Model...</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.8); // Increased intensity
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Increased intensity
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true; // Enable shadows
+        scene.add(directionalLight);
+
+        // Add a simple ground plane
+        const groundGeometry = new THREE.PlaneGeometry(50, 50);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x3A5F0B, // Green ground
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Camera position
+        camera.position.set(0, 3, 8); // Adjusted position
+        camera.lookAt(0, 1, 0);
+
+        // Instead of loading from JSON, let's create a simple tree model
+        function createTree() {
+            // Create a group to hold all tree parts
+            const treeGroup = new THREE.Group();
+            
+            // Create trunk (brown cylinder)
+            const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x8B4513,
+                roughness: 0.9 
+            });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 0.75; // Half the height of trunk
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+            
+            // Create tree foliage (green spheres)
+            const foliageMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x2E8B57,
+                roughness: 0.8 
+            });
+            
+            // Main foliage
+            const mainFoliageGeometry = new THREE.SphereGeometry(1.2, 12, 12);
+            const mainFoliage = new THREE.Mesh(mainFoliageGeometry, foliageMaterial);
+            mainFoliage.position.y = 2.2;
+            mainFoliage.castShadow = true;
+            treeGroup.add(mainFoliage);
+            
+            // Additional foliage parts for more natural look
+            const foliagePositions = [
+                { x: 0.7, y: 1.8, z: 0.2, r: 0.8 },
+                { x: -0.7, y: 1.9, z: 0.5, r: 0.7 },
+                { x: 0.3, y: 2.7, z: -0.5, r: 0.7 },
+                { x: -0.3, y: 2.5, z: 0.6, r: 0.6 }
+            ];
+            
+            foliagePositions.forEach(pos => {
+                const geometry = new THREE.SphereGeometry(pos.r, 10, 10);
+                const foliage = new THREE.Mesh(geometry, foliageMaterial);
+                foliage.position.set(pos.x, pos.y, pos.z);
+                foliage.castShadow = true;
+                treeGroup.add(foliage);
+            });
+            
+            // Add some apples (red spheres)
+            const appleMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xFF0000,
+                roughness: 0.5,
+                metalness: 0.2
+            });
+            
+            const applePositions = [
+                { x: 1.0, y: 2.0, z: 0.5 },
+                { x: -0.8, y: 2.2, z: 0.3 },
+                { x: 0.5, y: 2.8, z: -0.4 },
+                { x: -0.4, y: 1.8, z: -0.7 },
+                { x: 0.2, y: 2.5, z: 0.8 }
+            ];
+            
+            applePositions.forEach(pos => {
+                const geometry = new THREE.SphereGeometry(0.12, 8, 8);
+                const apple = new THREE.Mesh(geometry, appleMaterial);
+                apple.position.set(pos.x, pos.y, pos.z);
+                apple.castShadow = true;
+                treeGroup.add(apple);
+            });
+            
+            return treeGroup;
+        }
+
+        // Create and add the tree
+        const tree = createTree();
+        scene.add(tree);
+        
+        // Hide loading message
+        document.getElementById('loading').style.display = 'none';
+
+        // Controls for rotating the scene (simple version)
+        let rotationSpeed = 0;
+        let isRotating = false;
+        document.addEventListener('mousedown', () => { isRotating = true; });
+        document.addEventListener('mouseup', () => { isRotating = false; });
+        document.addEventListener('mousemove', (event) => {
+            if (isRotating) {
+                rotationSpeed = event.movementX * 0.002;
+            }
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Apply rotation if needed
+            if (Math.abs(rotationSpeed) > 0.0001) {
+                tree.rotation.y += rotationSpeed;
+                // Dampen rotation
+                rotationSpeed *= 0.95;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

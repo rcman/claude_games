@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Clone - Sunny Afternoon</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #inventory, #crafting { margin-bottom: 10px; }
+        button { margin: 5px; padding: 5px 10px; }
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 12px;
+            display: none; /* Set to "block" to enable debug display */
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="inventory">
+            <h3>Inventory</h3>
+            <p>Wood: <span id="wood">0</span></p>
+            <p>Stone: <span id="stone">0</span></p>
+        </div>
+        <div id="crafting">
+            <h3>Crafting</h3>
+            <button onclick="craftItem('wall')">Craft Wall (10 Wood, 5 Stone)</button>
+        </div>
+        <div id="controls">
+            <h3>Controls</h3>
+            <p>WASD: Move</p>
+            <p>Right-click + Mouse: Look around</p>
+            <p>Left-click: Gather resources</p>
+            <p>World Size: <span id="world-size"></span> units</p>
+        </div>
+    </div>
+    
+    <div id="debug"></div>
+    <div id="key-indicator" style="position:absolute; top:10px; right:10px; padding:5px; background:rgba(0,0,0,0.7); color:white; font-family:monospace; border-radius:5px;">
+        <div>W: <span id="indicator-w" style="color:red;">OFF</span></div>
+        <div>S: <span id="indicator-s" style="color:red;">OFF</span></div>
+        <div>A: <span id="indicator-a" style="color:red;">OFF</span></div>
+        <div>D: <span id="indicator-d" style="color:red;">OFF</span></div>
+    </div>
+
+    <script src="three.min.js"></script>
+    <script>
+        // World size definition - MUST be defined FIRST before any references
+        const WORLD_SIZE = 1000; // Defines the width and depth of the world in units
+        const WORLD_DETAIL = 75; // Defines how many segments the terrain has (higher = more detailed terrain)
+        
+        // Debug flag - set to true to enable debugging
+        const DEBUG = true;
+        const debugEl = document.getElementById('debug');
+        
+        // Key indicators for visual feedback
+        const keyIndicator = {
+            KeyW: document.getElementById('indicator-w'),
+            KeyS: document.getElementById('indicator-s'),
+            KeyA: document.getElementById('indicator-a'),
+            KeyD: document.getElementById('indicator-d')
+        };
+        
+        function updateKeyIndicators(keyState) {
+            if(keyState.KeyW) {
+                keyIndicator.KeyW.textContent = 'ON';
+                keyIndicator.KeyW.style.color = 'lime';
+            } else {
+                keyIndicator.KeyW.textContent = 'OFF';
+                keyIndicator.KeyW.style.color = 'red';
+            }
+            
+            if(keyState.KeyS) {
+                keyIndicator.KeyS.textContent = 'ON';
+                keyIndicator.KeyS.style.color = 'lime';
+            } else {
+                keyIndicator.KeyS.textContent = 'OFF';
+                keyIndicator.KeyS.style.color = 'red';
+            }
+            
+            if(keyState.KeyA) {
+                keyIndicator.KeyA.textContent = 'ON';
+                keyIndicator.KeyA.style.color = 'lime';
+            } else {
+                keyIndicator.KeyA.textContent = 'OFF';
+                keyIndicator.KeyA.style.color = 'red';
+            }
+            
+            if(keyState.KeyD) {
+                keyIndicator.KeyD.textContent = 'ON';
+                keyIndicator.KeyD.style.color = 'lime';
+            } else {
+                keyIndicator.KeyD.textContent = 'OFF';
+                keyIndicator.KeyD.style.color = 'red';
+            }
+        }
+        
+        function debugLog(msg) {
+            if (DEBUG) {
+                console.log(msg);
+                debugEl.style.display = 'block';
+                debugEl.textContent = JSON.stringify(msg);
+                
+                // Update key indicators
+                if(typeof msg === 'object' && ('W' in msg)) {
+                    updateKeyIndicators({
+                        KeyW: msg.W,
+                        KeyS: msg.S,
+                        KeyA: msg.A,
+                        KeyD: msg.D
+                    });
+                }
+            }
+        }
+        
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        // Create sunny sky background
+        const skyColor = new THREE.Color(0x87CEEB); // Bright blue sky
+        scene.background = skyColor;
+        
+        // Add fog to create depth and atmosphere - adjust based on world size
+        scene.fog = new THREE.Fog(skyColor, WORLD_SIZE * 0.2, WORLD_SIZE);
+        
+        // Lighting for sunny afternoon
+        const ambientLight = new THREE.AmbientLight(0xFFFFE0, 0.6); // Warm ambient light
+        scene.add(ambientLight);
+        
+        // Sun directional light (bright and slightly yellow)
+        const sunLight = new THREE.DirectionalLight(0xFFFFC0, 1.2);
+        sunLight.position.set(10, 30, -10); // Position the sun high in the sky at afternoon angle
+        sunLight.castShadow = true;
+        
+        // Configure shadow properties - adjusted based on world size
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = WORLD_SIZE * 1.5;
+        sunLight.shadow.camera.left = -WORLD_SIZE/2;
+        sunLight.shadow.camera.right = WORLD_SIZE/2;
+        sunLight.shadow.camera.top = WORLD_SIZE/2;
+        sunLight.shadow.camera.bottom = -WORLD_SIZE/2;
+        scene.add(sunLight);
+        
+        // Enable shadows in the renderer
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Terrain with grass texture
+        const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, WORLD_DETAIL, WORLD_DETAIL);
+        const grassColor = 0x90EE90; // Light green for grass in sunny weather
+        const material = new THREE.MeshStandardMaterial({ 
+            color: grassColor, 
+            side: THREE.DoubleSide,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const terrain = new THREE.Mesh(geometry, material);
+        terrain.rotation.x = Math.PI / 2;
+        terrain.position.y = -0.5;
+        terrain.receiveShadow = true;
+
+        // Apply simple noise for terrain height
+        const vertices = terrain.geometry.attributes.position.array;
+        for (let i = 0; i < vertices.length; i += 3) {
+            vertices[i + 2] = Math.random() * 0.5; // Random height
+        }
+        terrain.geometry.attributes.position.needsUpdate = true;
+        scene.add(terrain);
+
+        // Player (simple cube for now)
+        const playerGeometry = new THREE.BoxGeometry(0.5, 1, 0.5);
+        const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+        const player = new THREE.Mesh(playerGeometry, playerMaterial);
+        player.position.set(0, 0, 0);
+        player.castShadow = true;
+        scene.add(player);
+        camera.position.set(0, 2, 5);
+        camera.lookAt(player.position);
+
+        // Resources (trees and rocks)
+        const resources = [];
+        const resourceTypes = {
+            tree: { 
+                color: 0x8B4513, 
+                size: 0.5, 
+                resources: { wood: 10 },
+                createMesh: function() {
+                    // Create a better looking tree
+                    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 1.2, 8);
+                    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                    trunk.castShadow = true;
+                    
+                    const leavesGeo = new THREE.ConeGeometry(0.8, 1.5, 8);
+                    const leavesMat = new THREE.MeshStandardMaterial({ 
+                        color: 0x228B22,
+                        roughness: 0.9
+                    });
+                    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                    leaves.position.y = 1.3;
+                    leaves.castShadow = true;
+                    
+                    const tree = new THREE.Group();
+                    tree.add(trunk);
+                    tree.add(leaves);
+                    return tree;
+                }
+            },
+            rock: { 
+                color: 0x808080, 
+                size: 0.7, 
+                resources: { stone: 8 },
+                createMesh: function() {
+                    const rockGeo = new THREE.DodecahedronGeometry(this.size, 0);
+                    const rockMat = new THREE.MeshStandardMaterial({ 
+                        color: this.color,
+                        roughness: 0.9,
+                        metalness: 0.1
+                    });
+                    const rock = new THREE.Mesh(rockGeo, rockMat);
+                    rock.castShadow = true;
+                    return rock;
+                }
+            }
+        };
+
+        // Spawn resources randomly - number of resources scales with world size
+        const resourceDensity = 0.005; // Adjust this value to change resource density
+        const numResources = Math.floor(WORLD_SIZE * WORLD_SIZE * resourceDensity);
+        
+        for (let i = 0; i < numResources; i++) {
+            const type = Math.random() > 0.5 ? 'tree' : 'rock';
+            const resource = resourceTypes[type].createMesh();
+            const posX = (Math.random() - 0.5) * (WORLD_SIZE * 0.8); // Keep resources within 80% of world bounds
+            const posZ = (Math.random() - 0.5) * (WORLD_SIZE * 0.8);
+            let posY = 0;
+            
+            // Place on terrain with correct height
+            for (let j = 0; j < vertices.length; j += 3) {
+                const terrainX = vertices[j];
+                const terrainZ = vertices[j + 1];
+                if (Math.abs(terrainX - posX) < 1 && Math.abs(terrainZ - posZ) < 1) {
+                    posY = vertices[j + 2];
+                    break;
+                }
+            }
+            
+            resource.position.set(posX, posY, posZ);
+            resource.userData = { type, resources: resourceTypes[type].resources };
+            scene.add(resource);
+            resources.push(resource);
+        }
+
+        // Add some clouds to enhance the sunny sky
+        function createCloud() {
+            const cloudGroup = new THREE.Group();
+            const cloudMaterial = new THREE.MeshStandardMaterial({
+                color: 0xFFFFFF,
+                transparent: true,
+                opacity: 0.9,
+                roughness: 1
+            });
+            
+            // Create several spheres to form a cloud
+            for (let i = 0; i < 8; i++) {
+                const size = Math.random() * 3 + 2;
+                const cloudPiece = new THREE.Mesh(
+                    new THREE.SphereGeometry(size, 7, 7),
+                    cloudMaterial
+                );
+                cloudPiece.position.set(
+                    Math.random() * 10 - 5,
+                    Math.random() * 2,
+                    Math.random() * 10 - 5
+                );
+                cloudGroup.add(cloudPiece);
+            }
+            
+            return cloudGroup;
+        }
+        
+        // Add clouds to the scene - number scales with world size
+        const cloudDensity = 0.0002; // Clouds per square unit
+        const numClouds = Math.floor(WORLD_SIZE * WORLD_SIZE * cloudDensity);
+        
+        for (let i = 0; i < numClouds; i++) {
+            const cloud = createCloud();
+            cloud.position.set(
+                (Math.random() - 0.5) * WORLD_SIZE * 1.5, // Clouds can go a bit beyond the world edge
+                30 + Math.random() * 10,
+                (Math.random() - 0.5) * WORLD_SIZE * 1.5
+            );
+            scene.add(cloud);
+        }
+
+        // Inventory
+        let inventory = { wood: 0, stone: 0 };
+
+        // Raycaster for clicking resources
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Player movement with completely revised key handling
+        const moveSpeed = 0.1;
+        const keys = {
+            KeyW: false,
+            KeyS: false,
+            KeyA: false,
+            KeyD: false
+        };
+        
+        let mouseDown = false;
+        let playerRotation = 0;
+        let lastMouseX = 0;
+        const rotationSpeed = 0.005;
+        
+        // Create a failsafe to automatically reset keys if they're stuck
+        let lastKeyDownTime = 0;
+        const KEY_TIMEOUT = 1000; // 1 second timeout for keys
+        
+        // Add a reset keys button for testing
+        const resetButton = document.createElement('button');
+        resetButton.textContent = "Reset Keys";
+        resetButton.style.position = 'absolute';
+        resetButton.style.bottom = '10px';
+        resetButton.style.right = '10px';
+        resetButton.style.padding = '10px';
+        resetButton.style.backgroundColor = 'red';
+        resetButton.style.color = 'white';
+        resetButton.style.border = 'none';
+        resetButton.style.borderRadius = '5px';
+        resetButton.style.cursor = 'pointer';
+        resetButton.onclick = function() {
+            resetAllKeys();
+            debugLog("Keys manually reset");
+        };
+        document.body.appendChild(resetButton);
+        
+        // Force direct keyboard event registration on document
+        document.onkeydown = function(e) {
+            // Only handle WASD keys to avoid cluttering
+            if (['KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
+                e.preventDefault(); // Prevent browser scrolling with arrow keys
+                keys[e.code] = true;
+                lastKeyDownTime = Date.now();
+                updateKeyIndicators(keys);
+                debugLog(`Key down: ${e.code}, Keys: ${JSON.stringify(keys)}`);
+            }
+        };
+        
+        document.onkeyup = function(e) {
+            // Only handle WASD keys
+            if (['KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
+                e.preventDefault(); // Prevent browser scrolling with arrow keys
+                keys[e.code] = false;
+                updateKeyIndicators(keys);
+                debugLog(`Key up: ${e.code}, Keys: ${JSON.stringify(keys)}`);
+            }
+        };
+        
+        // Multiple safety mechanisms to ensure keys are reset
+        
+        // 1. Handle window blur
+        window.addEventListener('blur', function() {
+            resetAllKeys();
+            debugLog('Window blur - reset all keys');
+        }, false);
+        
+        // 2. Handle document visibility change
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                resetAllKeys();
+                debugLog('Document hidden - reset all keys');
+            }
+        }, false);
+        
+        // 3. Handle mouse leave
+        document.addEventListener('mouseleave', function() {
+            resetAllKeys();
+            debugLog('Mouse left document - reset all keys');
+        }, false);
+        
+        // Function to reset all keys
+        function resetAllKeys() {
+            keys.KeyW = false;
+            keys.KeyS = false;
+            keys.KeyA = false;
+            keys.KeyD = false;
+        }
+        
+        // Mouse control for camera rotation
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 0) return; // Skip left click as it's used for gathering
+            mouseDown = true;
+            lastMouseX = e.clientX;
+        });
+        
+        document.addEventListener('mouseup', () => {
+            mouseDown = false;
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (mouseDown) {
+                // Calculate the difference in mouse position
+                const deltaX = e.clientX - lastMouseX;
+                playerRotation -= deltaX * rotationSpeed;
+                lastMouseX = e.clientX;
+            }
+        });
+        
+        // Mouse click for gathering
+        document.addEventListener('click', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(resources, true); // 'true' for recursive checking of groups
+
+            if (intersects.length > 0) {
+                // Find the root object (the one in our resources array)
+                let resourceObj = intersects[0].object;
+                while(resourceObj.parent && !resources.includes(resourceObj)) {
+                    resourceObj = resourceObj.parent;
+                }
+                
+                if (resources.includes(resourceObj)) {
+                    for (let [item, amount] of Object.entries(resourceObj.userData.resources)) {
+                        inventory[item] += amount;
+                        document.getElementById(item).textContent = inventory[item];
+                    }
+                    scene.remove(resourceObj);
+                    resources.splice(resources.indexOf(resourceObj), 1);
+                }
+            }
+        });
+
+        // Crafting system
+        function craftItem(item) {
+            if (item === 'wall' && inventory.wood >= 10 && inventory.stone >= 5) {
+                inventory.wood -= 10;
+                inventory.stone -= 5;
+                document.getElementById('wood').textContent = inventory.wood;
+                document.getElementById('stone').textContent = inventory.stone;
+
+                // Create wall with better appearance for sunny lighting
+                const wallGeometry = new THREE.BoxGeometry(2, 2, 0.2);
+                const wallMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xA0522D, 
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall.position.set(player.position.x, 1, player.position.z - 2);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                scene.add(wall);
+            } else {
+                alert('Not enough resources!');
+            }
+        }
+
+        // Set world size in UI
+        document.getElementById('world-size').textContent = `${WORLD_SIZE}x${WORLD_SIZE}`;
+        
+        // Completely revised animation loop with key timeout checks
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Auto-reset keys if they've been pressed for too long without a keyup event
+            if (lastKeyDownTime > 0 && Date.now() - lastKeyDownTime > KEY_TIMEOUT) {
+                resetAllKeys();
+                lastKeyDownTime = 0;
+                debugLog('Key timeout - reset all keys');
+            }
+            
+            // Always display key state in debug
+            if (DEBUG) {
+                debugLog({
+                    W: keys.KeyW,
+                    S: keys.KeyS,
+                    A: keys.KeyA,
+                    D: keys.KeyD,
+                    pos: {
+                        x: player.position.x.toFixed(2),
+                        z: player.position.z.toFixed(2)
+                    }
+                });
+            }
+
+            // Calculate forward direction based on player rotation
+            const forwardX = Math.sin(playerRotation);
+            const forwardZ = Math.cos(playerRotation);
+            
+            // Calculate right direction (perpendicular to forward)
+            const rightX = Math.sin(playerRotation + Math.PI/2);
+            const rightZ = Math.cos(playerRotation + Math.PI/2);
+            
+            // Player movement with dot notation access instead of bracket notation
+            if (keys.KeyW === true) {
+                player.position.x += forwardX * moveSpeed;
+                player.position.z += forwardZ * moveSpeed;
+            }
+            if (keys.KeyS === true) {
+                player.position.x -= forwardX * moveSpeed;
+                player.position.z -= forwardZ * moveSpeed;
+            }
+            if (keys.KeyA === true) {
+                player.position.x += rightX * moveSpeed;
+                player.position.z += rightZ * moveSpeed;
+            }
+            if (keys.KeyD === true) {
+                player.position.x -= rightX * moveSpeed;
+                player.position.z -= rightZ * moveSpeed;
+            }
+            
+            // Boundary check
+            const worldBound = WORLD_SIZE / 2 - 5;
+            if (Math.abs(player.position.x) > worldBound || Math.abs(player.position.z) > worldBound) {
+                // Move player back into bounds
+                player.position.x = Math.max(-worldBound, Math.min(worldBound, player.position.x));
+                player.position.z = Math.max(-worldBound, Math.min(worldBound, player.position.z));
+            }
+            
+            // Update player's visual rotation
+            player.rotation.y = playerRotation;
+
+            // Position camera behind player based on rotation
+            const cameraDistance = 5;
+            camera.position.set(
+                player.position.x - (forwardX * cameraDistance),
+                player.position.y + 2,
+                player.position.z - (forwardZ * cameraDistance)
+            );
+            camera.lookAt(player.position);
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

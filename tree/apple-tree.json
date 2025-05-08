@@ -1,0 +1,166 @@
+{
+  "metadata": {
+    "version": 4.5,
+    "type": "Object",
+    "generator": "Apple Tree Model"
+  },
+  "geometries": [
+    {
+      "uuid": "trunk-geo",
+      "type": "CylinderGeometry",
+      "radiusTop": 0.5,
+      "radiusBottom": 0.8,
+      "height": 5,
+      "radialSegments": 8
+    },
+    {
+      "uuid": "foliage-geo-1",
+      "type": "SphereGeometry",
+      "radius": 3,
+      "widthSegments": 16,
+      "heightSegments": 16
+    },
+    {
+      "uuid": "foliage-geo-2",
+      "type": "SphereGeometry",
+      "radius": 2.5,
+      "widthSegments": 16,
+      "heightSegments": 16
+    },
+    {
+      "uuid": "apple-geo",
+      "type": "SphereGeometry",
+      "radius": 0.3,
+      "widthSegments": 16,
+      "heightSegments": 16
+    },
+    {
+      "uuid": "ground-geo",
+      "type": "PlaneGeometry",
+      "width": 30,
+      "height": 30
+    }
+  ],
+  "materials": [
+    {
+      "uuid": "trunk-mat",
+      "type": "MeshStandardMaterial",
+      "color": 9127699,
+      "roughness": 0.8,
+      "metalness": 0.1
+    },
+    {
+      "uuid": "foliage-mat",
+      "type": "MeshStandardMaterial",
+      "color": 2263842,
+      "roughness": 0.7,
+      "metalness": 0.0
+    },
+    {
+      "uuid": "apple-mat",
+      "type": "MeshStandardMaterial",
+      "color": 16711680,
+      "roughness": 0.5,
+      "metalness": 0.1,
+      "emissive": 2097152
+    },
+    {
+      "uuid": "ground-mat",
+      "type": "MeshStandardMaterial",
+      "color": 5666118,
+      "roughness": 0.9,
+      "metalness": 0.0,
+      "side": 2
+    }
+  ],
+  "object": {
+    "uuid": "apple-tree",
+    "type": "Group",
+    "name": "AppleTree",
+    "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+    "children": [
+      {
+        "uuid": "trunk",
+        "type": "Mesh",
+        "name": "Trunk",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,2.5,0,1],
+        "castShadow": true,
+        "receiveShadow": true,
+        "geometry": "trunk-geo",
+        "material": "trunk-mat"
+      },
+      {
+        "uuid": "foliage-1",
+        "type": "Mesh",
+        "name": "Foliage1",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,6,0,1],
+        "castShadow": true,
+        "receiveShadow": true,
+        "geometry": "foliage-geo-1",
+        "material": "foliage-mat"
+      },
+      {
+        "uuid": "foliage-2",
+        "type": "Mesh",
+        "name": "Foliage2",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 1.5,5,1.5,1],
+        "castShadow": true,
+        "receiveShadow": true,
+        "geometry": "foliage-geo-2",
+        "material": "foliage-mat"
+      },
+      {
+        "uuid": "foliage-3",
+        "type": "Mesh",
+        "name": "Foliage3",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -1.5,5.5,-1,1],
+        "castShadow": true,
+        "receiveShadow": true,
+        "geometry": "foliage-geo-2",
+        "material": "foliage-mat"
+      },
+      {
+        "uuid": "ground",
+        "type": "Mesh",
+        "name": "Ground",
+        "matrix": [1,0,0,0, 0,0,-1,0, 0,1,0,0, 0,0,0,1],
+        "receiveShadow": true,
+        "geometry": "ground-geo",
+        "material": "ground-mat"
+      },
+      {
+        "uuid": "apples",
+        "type": "Group",
+        "name": "Apples",
+        "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+        "children": [
+          {"uuid": "apple-1", "type": "Mesh", "name": "apple-1", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 3.0,6.0,0.0,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-2", "type": "Mesh", "name": "apple-2", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.9,7.0,1.1,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-3", "type": "Mesh", "name": "apple-3", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 1.5,5.7,-3.0,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-4", "type": "Mesh", "name": "apple-4", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -0.9,6.5,2.9,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-5", "type": "Mesh", "name": "apple-5", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 3.2,5.3,1.5,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-6", "type": "Mesh", "name": "apple-6", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.9,5.8,-1.5,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-7", "type": "Mesh", "name": "apple-7", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0.7,8.1,2.0,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-8", "type": "Mesh", "name": "apple-8", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.6,7.2,-1.4,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-9", "type": "Mesh", "name": "apple-9", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.8,6.9,0.8,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-10", "type": "Mesh", "name": "apple-10", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.9,6.2,-0.9,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-11", "type": "Mesh", "name": "apple-11", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0.3,8.0,-2.1,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-12", "type": "Mesh", "name": "apple-12", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.1,7.1,0.5,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-13", "type": "Mesh", "name": "apple-13", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.0,4.8,2.8,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-14", "type": "Mesh", "name": "apple-14", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.7,5.3,-2.3,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-15", "type": "Mesh", "name": "apple-15", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0.2,6.0,3.2,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-16", "type": "Mesh", "name": "apple-16", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.3,7.5,1.9,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-17", "type": "Mesh", "name": "apple-17", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.0,6.4,-1.8,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-18", "type": "Mesh", "name": "apple-18", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.0,6.2,2.7,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-19", "type": "Mesh", "name": "apple-19", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -0.6,7.8,-2.9,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-20", "type": "Mesh", "name": "apple-20", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 3.1,5.5,0.7,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-21", "type": "Mesh", "name": "apple-21", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -2.9,4.9,1.7,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-22", "type": "Mesh", "name": "apple-22", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 1.2,8.2,-1.0,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-23", "type": "Mesh", "name": "apple-23", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -3.0,6.8,0.2,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-24", "type": "Mesh", "name": "apple-24", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, 2.5,5.0,-2.7,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"},
+          {"uuid": "apple-25", "type": "Mesh", "name": "apple-25", "matrix": [1,0,0,0, 0,1,0,0, 0,0,1,0, -1.0,5.4,3.0,1], "castShadow": true, "geometry": "apple-geo", "material": "apple-mat"}
+        ]
+      }
+    ]
+  }
+}

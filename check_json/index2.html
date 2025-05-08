@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Custom JSON Model Viewer</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            background-color: #202020;
+            color: #e0e0e0;
+        }
+        canvas { 
+            display: block; 
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #modelSelector {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        #animationControls {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        button {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #666;
+        }
+        #loadedModels {
+            padding-left: 20px;
+        }
+        .model-anim-controls {
+            margin-top: 10px;
+            padding: 5px;
+            border-top: 1px solid #444;
+        }
+        #modelFile {
+            display: none;
+        }
+        .file-upload-btn {
+            display: inline-block;
+            padding: 6px 12px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        .file-upload-btn:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Three.js Custom JSON Model Viewer</div>
+    
+    <div id="modelSelector">
+        <h3>Model Controls</h3>
+        <div>
+            <label for="modelFile" class="file-upload-btn">Upload JSON Model</label>
+            <input type="file" id="modelFile" accept=".json" multiple>
+        </div>
+        <div id="modelList">
+            <h4>Loaded Models:</h4>
+            <ul id="loadedModels"></ul>
+        </div>
+    </div>
+    
+    <div id="animationControls">
+        <h3>Animation Controls</h3>
+        <div id="animationList">
+            <!-- Animation controls will be added here dynamically -->
+        </div>
+    </div>
+    
+    <div id="controls">
+        <h3>Navigation Controls</h3>
+        <p>Left Click + Drag: Rotate camera</p>
+        <p>Right Click + Drag: Pan camera</p>
+        <p>Scroll: Zoom in/out</p>
+    </div>
+
+    <!-- Import maps polyfill -->
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/es-module-shims/1.5.1/es-module-shims.min.js"></script>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.150.1/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        // Initialize Three.js scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x202020);
+        
+        // Create camera
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+        
+        // Create renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Add orbit controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.25;
+        
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0x505050);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight2.position.set(-1, -1, -1);
+        scene.add(directionalLight2);
+        
+        // Add grid helper
+        const gridHelper = new THREE.GridHelper(10, 10);
+        scene.add(gridHelper);
+        
+        // Add axes helper
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Model management
+        const loadedObjects = [];
+        const modelListElement = document.getElementById('loadedModels');
+        const animationListElement = document.getElementById('animationList');
+        
+        // Animation mixer
+        const clock = new THREE.Clock();
+        
+        // Handle file input change event
+        document.getElementById('modelFile').addEventListener('change', function(event) {
+            const files = event.target.files;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const jsonContent = JSON.parse(e.target.result);
+                        parseAndLoadCustomModel(jsonContent, file.name);
+                    } catch (error) {
+                        console.error("Error parsing JSON:", error);
+                        alert(`Failed to parse ${file.name}: ${error.message}`);
+                    }
+                };
+                
+                reader.readAsText(file);
+            }
+        });
+        
+        // Custom JSON parser for the specific format
+        function parseAndLoadCustomModel(json, fileName) {
+            try {
+                // Create a group to hold the entire model
+                const rootGroup = new THREE.Group();
+                rootGroup.name = json.name || 'Model';
+                
+                // Set position, rotation, scale if available
+                if (json.position) rootGroup.position.set(...json.position);
+                if (json.rotation) rootGroup.rotation.set(...json.rotation);
+                if (json.scale) rootGroup.scale.set(...json.scale);
+                
+                // Object mapping to keep track of created objects by name
+                const objectsByName = {
+                    [rootGroup.name]: rootGroup
+                };
+                
+                // Process geometry helper function
+                function createGeometry(geomData) {
+                    const params = geomData.parameters || {};
+                    
+                    switch (geomData.type) {
+                        case 'BoxGeometry':
+                            return new THREE.BoxGeometry(
+                                params.width || 1, 
+                                params.height || 1, 
+                                params.depth || 1
+                            );
+                        case 'SphereGeometry':
+                            return new THREE.SphereGeometry(
+                                params.radius || 1,
+                                params.widthSegments || 32,
+                                params.heightSegments || 16
+                            );
+                        case 'CylinderGeometry':
+                            return new THREE.CylinderGeometry(
+                                params.radiusTop || 1,
+                                params.radiusBottom || 1,
+                                params.height || 1,
+                                params.radialSegments || 32
+                            );
+                        // Add more geometry types as needed
+                        default:
+                            console.warn(`Geometry type ${geomData.type} not supported, using BoxGeometry`);
+                            return new THREE.BoxGeometry(1, 1, 1);
+                    }
+                }
+                
+                // Process material helper function
+                function createMaterial(matData) {
+                    const params = matData || {};
+                    
+                    switch (params.type) {
+                        case 'MeshStandardMaterial':
+                            return new THREE.MeshStandardMaterial({
+                                color: params.color || 0xcccccc,
+                                roughness: params.roughness !== undefined ? params.roughness : 0.7,
+                                metalness: params.metalness !== undefined ? params.metalness : 0.2
+                            });
+                        case 'MeshBasicMaterial':
+                            return new THREE.MeshBasicMaterial({
+                                color: params.color || 0xcccccc
+                            });
+                        // Add more material types as needed
+                        default:
+                            return new THREE.MeshStandardMaterial({
+                                color: params.color || 0xcccccc
+                            });
+                    }
+                }
+                
+                // Recursive function to process the node hierarchy
+                function processNode(nodeData, parent) {
+                    let object;
+                    
+                    // Create the appropriate object based on type
+                    switch (nodeData.type) {
+                        case 'Mesh':
+                            const geometry = createGeometry(nodeData.geometry);
+                            const material = createMaterial(nodeData.material);
+                            object = new THREE.Mesh(geometry, material);
+                            break;
+                        case 'Group':
+                        default:
+                            object = new THREE.Group();
+                            break;
+                    }
+                    
+                    // Set name and add to parent
+                    object.name = nodeData.name || 'Object';
+                    objectsByName[object.name] = object;
+                    
+                    // Set transform properties
+                    if (nodeData.position) object.position.set(...nodeData.position);
+                    if (nodeData.rotation) object.rotation.set(...nodeData.rotation);
+                    if (nodeData.scale) object.scale.set(...nodeData.scale);
+                    
+                    // Add to parent
+                    parent.add(object);
+                    
+                    // Process children recursively
+                    if (Array.isArray(nodeData.children)) {
+                        nodeData.children.forEach(childData => {
+                            processNode(childData, object);
+                        });
+                    }
+                    
+                    return object;
+                }
+                
+                // Process all the children of the root
+                if (Array.isArray(json.children)) {
+                    json.children.forEach(childData => {
+                        processNode(childData, rootGroup);
+                    });
+                }
+                
+                // Create animation mixer
+                const mixer = new THREE.AnimationMixer(rootGroup);
+                const modelAnimations = {};
+                
+                // Process animations if present
+                if (Array.isArray(json.animations)) {
+                    json.animations.forEach(animData => {
+                        const tracks = [];
+                        
+                        if (Array.isArray(animData.tracks)) {
+                            animData.tracks.forEach(trackData => {
+                                // Parse the track name (e.g., "Zombie.position" -> object "Zombie", property "position")
+                                const parts = trackData.name.split('.');
+                                const objectName = parts[0];
+                                const propertyName = parts[1];
+                                
+                                // Find the target object by name
+                                const targetObject = objectsByName[objectName];
+                                if (!targetObject) {
+                                    console.warn(`Target object "${objectName}" not found for animation track`);
+                                    return;
+                                }
+                                
+                                // Process keyframes
+                                if (trackData.type === 'vector' && Array.isArray(trackData.keys)) {
+                                    // Create arrays for times and values
+                                    const times = [];
+                                    const values = [];
+                                    
+                                    // Extract times and values from keys
+                                    trackData.keys.forEach(key => {
+                                        times.push(key.time);
+                                        values.push(...key.value);
+                                    });
+                                    
+                                    // Create track based on property name
+                                    let track;
+                                    
+                                    switch (propertyName) {
+                                        case 'position':
+                                            track = new THREE.VectorKeyframeTrack(
+                                                `${targetObject.name}.position`,
+                                                times,
+                                                values
+                                            );
+                                            break;
+                                        case 'rotation':
+                                            track = new THREE.VectorKeyframeTrack(
+                                                `${targetObject.name}.rotation`,
+                                                times,
+                                                values
+                                            );
+                                            break;
+                                        case 'scale':
+                                            track = new THREE.VectorKeyframeTrack(
+                                                `${targetObject.name}.scale`,
+                                                times,
+                                                values
+                                            );
+                                            break;
+                                        default:
+                                            console.warn(`Unknown property "${propertyName}" for animation track`);
+                                            return;
+                                    }
+                                    
+                                    if (track) {
+                                        tracks.push(track);
+                                    }
+                                }
+                            });
+                        }
+                        
+                        // Create animation clip if we have tracks
+                        if (tracks.length > 0) {
+                            const clip = new THREE.AnimationClip(
+                                animData.name || 'Animation',
+                                animData.duration || -1,
+                                tracks
+                            );
+                            
+                            // Create action for this clip
+                            const action = mixer.clipAction(clip);
+                            
+                            // Store animation data
+                            modelAnimations[clip.name] = {
+                                action: action,
+                                playing: false
+                            };
+                        }
+                    });
+                }
+                
+                // Position the model in the scene
+                const modelIndex = loadedObjects.length;
+                rootGroup.position.x = (modelIndex % 3) * 3 - 3;
+                rootGroup.position.z = Math.floor(modelIndex / 3) * 3 - 3;
+                
+                // Add model to scene
+                scene.add(rootGroup);
+                
+                // Store object data
+                loadedObjects.push({
+                    name: fileName,
+                    object: rootGroup,
+                    visible: true,
+                    mixer: mixer,
+                    animations: modelAnimations
+                });
+                
+                // Add to model list UI
+                const listItem = document.createElement('li');
+                
+                const visibilityCheckbox = document.createElement('input');
+                visibilityCheckbox.type = 'checkbox';
+                visibilityCheckbox.checked = true;
+                visibilityCheckbox.addEventListener('change', function() {
+                    loadedObjects[modelIndex].visible = this.checked;
+                    loadedObjects[modelIndex].object.visible = this.checked;
+                });
+                
+                const modelNameSpan = document.createElement('span');
+                modelNameSpan.textContent = ` ${fileName}`;
+                
+                listItem.appendChild(visibilityCheckbox);
+                listItem.appendChild(modelNameSpan);
+                modelListElement.appendChild(listItem);
+                
+                // Add animation controls if available
+                if (Object.keys(modelAnimations).length > 0) {
+                    const animSection = document.createElement('div');
+                    animSection.className = 'model-anim-controls';
+                    
+                    const animTitle = document.createElement('h4');
+                    animTitle.textContent = `${fileName} Animations:`;
+                    animSection.appendChild(animTitle);
+                    
+                    // Create controls for each animation
+                    Object.entries(modelAnimations).forEach(([animName, animData]) => {
+                        const animControl = document.createElement('div');
+                        
+                        const playButton = document.createElement('button');
+                        playButton.textContent = 'Play';
+                        playButton.addEventListener('click', function() {
+                            // Toggle animation
+                            const isPlaying = !animData.playing;
+                            animData.playing = isPlaying;
+                            
+                            if (isPlaying) {
+                                animData.action.reset();
+                                animData.action.play();
+                                playButton.textContent = 'Stop';
+                            } else {
+                                animData.action.stop();
+                                playButton.textContent = 'Play';
+                            }
+                        });
+                        
+                        const animLabel = document.createElement('span');
+                        animLabel.textContent = ` ${animName}`;
+                        
+                        animControl.appendChild(playButton);
+                        animControl.appendChild(animLabel);
+                        animSection.appendChild(animControl);
+                    });
+                    
+                    animationListElement.appendChild(animSection);
+                }
+                
+                // Update camera position to view all models
+                updateCameraPosition();
+                
+                console.log(`Successfully loaded model: ${fileName}`);
+                
+            } catch (error) {
+                console.error("Error loading model:", error);
+                alert(`Failed to load model ${fileName}: ${error.message}`);
+            }
+        }
+        
+        function updateCameraPosition() {
+            if (loadedObjects.length > 0) {
+                // Calculate bounding box of all objects
+                const boundingBox = new THREE.Box3();
+                
+                for (const obj of loadedObjects) {
+                    if (obj.visible) {
+                        const objectBox = new THREE.Box3().setFromObject(obj.object);
+                        boundingBox.union(objectBox);
+                    }
+                }
+                
+                // Calculate center and size
+                const center = boundingBox.getCenter(new THREE.Vector3());
+                const size = boundingBox.getSize(new THREE.Vector3());
+                
+                // Position camera to view all objects
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                let distance = maxDim / (2 * Math.tan(fov / 2));
+                
+                // Add some padding
+                distance *= 1.5;
+                
+                // Update camera
+                camera.position.copy(center);
+                camera.position.z += distance;
+                camera.lookAt(center);
+                controls.target.copy(center);
+            }
+        }
+        
+        // Load default zombie model
+        const defaultZombieModel = {
+            "name": "Zombie",
+            "type": "Group",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0],
+            "scale": [1, 1, 1],
+            "children": [
+                {
+                    "name": "Torso",
+                    "type": "Mesh",
+                    "geometry": {
+                        "type
