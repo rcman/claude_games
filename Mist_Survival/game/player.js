@@ -41,6 +41,7 @@ const playerRadius = 0.4;
 
 // --- Initialization ---
 export function init(scene, gameCamera, loadData = null) {
+    console.log("Player module init started..."); // Test log
     console.log("Initializing Player...");
     camera = gameCamera;
     sceneRef = scene; // Store scene reference for raycasting
